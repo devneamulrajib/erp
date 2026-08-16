@@ -1,15 +1,17 @@
-const mongoose = require('mongoose');
-const expenseSchema = new mongoose.Schema({
-  project: String,
-  category: String,     // e.g. Materials Carrying
-  drAccount: String,     // Dr side
-  crAccount: String,     // Cr side
-  amount: Number,
-  status: { type: String, default: 'pending' }, // pending/approved/rejected
-  reference: String,     // e.g. EXP00030
-  addedBy: String,
-  approvals: [{ name: String, approved: Boolean }],
-  date: { type: Date, default: Date.now },
-  attachment: { type: String, default: '' },
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
+
+const Expense = sequelize.define('Expense', {
+  project: DataTypes.STRING,
+  category: DataTypes.STRING,
+  drAccount: DataTypes.STRING,
+  crAccount: DataTypes.STRING,
+  amount: DataTypes.FLOAT,
+  status: { type: DataTypes.STRING, defaultValue: 'pending' },
+  reference: DataTypes.STRING,
+  addedBy: DataTypes.STRING,
+  date: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+  attachment: { type: DataTypes.STRING, defaultValue: '' },
 }, { timestamps: true });
-module.exports = mongoose.model('Expense', expenseSchema);
+
+module.exports = Expense;

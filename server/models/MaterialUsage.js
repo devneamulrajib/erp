@@ -1,50 +1,28 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const usageItemSchema = new mongoose.Schema({
-  item: { type: mongoose.Schema.Types.ObjectId, ref: 'Item' },
-  itemCode: String,
-  itemName: String,
-  details: String,
-  unit: String,
-  useQty: { type: Number, default: 0 },
-  budgetQty: { type: Number, default: 0 },
-  purchaseQty: { type: Number, default: 0 },
-  stockQty: { type: Number, default: 0 },
-  rate: { type: Number, default: 0 }, // snapshot of Item.purchasePrice at time of use
-  amount: { type: Number, default: 0 },
-}, { _id: false });
+const MaterialUsage = sequelize.define('MaterialUsage', {
+  code: { type: DataTypes.STRING, unique: true },
+  date: DataTypes.STRING,
+  employee: DataTypes.STRING,
 
-const approvalSchema = new mongoose.Schema({
-  name: String,
-  approved: { type: Boolean, default: false },
-}, { _id: false });
+  creditLedger: { type: DataTypes.STRING, defaultValue: 'Closing Stock' },
+  debitLedger: { type: DataTypes.STRING, defaultValue: 'Cost of Goods Sold (COGS)' },
 
-const materialUsageSchema = new mongoose.Schema({
-  code: { type: String, unique: true },
-  date: String,
-  employee: String,
+  projectType: DataTypes.STRING,
+  projectId: DataTypes.INTEGER,
+  titleOfWork: DataTypes.STRING,
+  task: DataTypes.STRING,
+  siteId: DataTypes.INTEGER,
+  categoryId: DataTypes.INTEGER,
 
-  creditLedger: { type: String, default: 'Closing Stock' },
-  debitLedger: { type: String, default: 'Cost of Goods Sold (COGS)' },
+  purchaseRef: DataTypes.STRING,
 
-  projectType: String,
-  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
-  titleOfWork: String,
-  task: String,
-  site: { type: mongoose.Schema.Types.ObjectId, ref: 'Site' },
-  category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
+  subtotal: { type: DataTypes.FLOAT, defaultValue: 0 },
+  grandTotal: { type: DataTypes.FLOAT, defaultValue: 0 },
+  attachment: DataTypes.STRING,
 
-  // Freeform reference to originating Purchase/PO codes, e.g. "PUR452867, PO-007"
-  purchaseRef: String,
-
-  items: [usageItemSchema],
-
-  subtotal: { type: Number, default: 0 },
-  grandTotal: { type: Number, default: 0 },
-  attachment: String,
-
-  approvals: [approvalSchema],
-  addedBy: String,
+  addedBy: DataTypes.STRING,
 }, { timestamps: true });
 
-module.exports = mongoose.model('MaterialUsage', materialUsageSchema);
+module.exports = MaterialUsage;

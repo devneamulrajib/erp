@@ -1,17 +1,15 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const billItemSchema = new mongoose.Schema(
-  {
-    code: { type: String, required: true, unique: true },
-    category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
-    brand: { type: mongoose.Schema.Types.ObjectId, ref: 'Brand' },
-    name: { type: String, required: true },
-    unit: { type: mongoose.Schema.Types.ObjectId, ref: 'Unit' },
-    purchasePrice: { type: Number, default: 0 },
-    salePrice: { type: Number, default: 0 },
-    description: { type: String, default: '' },
-  },
-  { timestamps: true },
-);
+const BillItem = sequelize.define('BillItem', {
+  code: { type: DataTypes.STRING, allowNull: false, unique: true },
+  categoryId: DataTypes.INTEGER,
+  brandId: DataTypes.INTEGER,
+  name: { type: DataTypes.STRING, allowNull: false },
+  unitId: DataTypes.INTEGER,
+  purchasePrice: { type: DataTypes.FLOAT, defaultValue: 0 },
+  salePrice: { type: DataTypes.FLOAT, defaultValue: 0 },
+  description: { type: DataTypes.STRING, defaultValue: '' },
+}, { timestamps: true });
 
-module.exports = mongoose.model('BillItem', billItemSchema);
+module.exports = BillItem;

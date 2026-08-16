@@ -1,12 +1,13 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const communicationStatusSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
-  description: { type: String },
-  isDefault: { type: Boolean, default: false },
-  leadStage: { type: String }, // e.g. Follow Up, New Call, Query, Negotiation, Hold, Priority
-  addedBy: { type: String },
+const CommunicationStatus = sequelize.define('CommunicationStatus', {
+  name: { type: DataTypes.STRING, allowNull: false },
+  status: { type: DataTypes.ENUM('Active', 'Inactive'), defaultValue: 'Active' },
+  description: DataTypes.STRING,
+  isDefault: { type: DataTypes.BOOLEAN, defaultValue: false },
+  leadStage: DataTypes.STRING,
+  addedBy: DataTypes.STRING,
 }, { timestamps: true });
 
-module.exports = mongoose.model('CommunicationStatus', communicationStatusSchema);
+module.exports = CommunicationStatus;

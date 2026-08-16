@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
-const Workorder = require('../models/Workorder');
+const { Op } = require('sequelize');
+const { Workorder, WorkorderItem, Customer, Project, Site } = require('../models/associations');
 
 function generateCode() {
   return 'CW/' + Math.floor(1000000 + Math.random() * 9000000);
@@ -16,19 +17,20 @@ function cleanItems(items) {
 
 function computeTotals(body, items) {
   const subtotal = items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
-
   const vatIncluded = !!body.vatIncluded;
   const vatPercent = Number(body.vatPercent) || 0;
   const vatAmount = vatIncluded ? subtotal * (vatPercent / 100) : 0;
-
   const aitIncluded = !!body.aitIncluded;
   const aitPercent = Number(body.aitPercent) || 0;
   const aitAmount = aitIncluded ? subtotal * (aitPercent / 100) : 0;
-
   const grandTotal = subtotal + vatAmount + aitAmount;
-
   return { subtotal, vatIncluded, vatPercent, vatAmount, aitIncluded, aitPercent, aitAmount, grandTotal };
 }
+
+const includeList = [
+  { model: Customer, attributes: ['name'] },
+  { model: Project, attributes: ['name'] },
+];
 
 router.get('/next-code', auth, async (req, res) => {
   res.json({ code: generateCode() });
@@ -37,20 +39,15 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { from, to, customer, project } = req.query;
-    const filter = {};
-    if (customer) filter.customer = customer;
-    if (project) filter.project = project;
+    const where = {};
+    if (customer) where.customerId = customer;
+    if (project) where.projectId = project;
     if (from || to) {
-      filter.date = {};
-      if (from) filter.date.$gte = from;
-      if (to) filter.date.$lte = to;
+      where.date = {};
+      if (from) where.date[Op.gte] = from;
+      if (to) where.date[Op.lte] = to;
     }
-
-    const orders = await Workorder.find(filter)
-      .populate('customer', 'name')
-      .populate('project', 'name')
-      .sort({ createdAt: -1 });
-
+    const orders = await Workorder.findAll({ where, include: includeList, order: [['createdAt', 'DESC']] });
     res.json(orders);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -59,10 +56,14 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const order = await Workorder.findById(req.params.id)
-      .populate('customer', 'name')
-      .populate('project', 'name')
-      .populate('site', 'name');
+    const order = await Workorder.findByPk(req.params.id, {
+      include: [
+        { model: Customer, attributes: ['name'] },
+        { model: Project, attributes: ['name'] },
+        { model: Site, attributes: ['name'] },
+        { model: WorkorderItem },
+      ],
+    });
     if (!order) return res.status(404).json({ message: 'Not found' });
     res.json(order);
   } catch (err) {
@@ -79,18 +80,23 @@ router.post('/', auth, async (req, res) => {
     const totals = computeTotals(req.body, items);
 
     const order = await Workorder.create({
-      ...req.body,
       code: req.body.code || generateCode(),
-      items,
+      date: req.body.date,
+      customerId: customer,
+      projectType: req.body.projectType,
+      projectId: req.body.project,
+      siteId: req.body.site,
+      clientOrderNo: req.body.clientOrderNo,
+      attachment: req.body.attachment,
       ...totals,
       addedBy: req.user?.name || 'Admin',
     });
 
-    const populated = await order.populate([
-      { path: 'customer', select: 'name' },
-      { path: 'project', select: 'name' },
-    ]);
+    for (const it of items) {
+      await WorkorderItem.create({ ...it, itemId: it.item, workorderId: order.id });
+    }
 
+    const populated = await Workorder.findByPk(order.id, { include: includeList });
     res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -99,26 +105,31 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const order = await Workorder.findById(req.params.id);
+    const order = await Workorder.findByPk(req.params.id);
     if (!order) return res.status(404).json({ message: 'Not found' });
 
+    const map = { customer: 'customerId', project: 'projectId', site: 'siteId' };
     const fields = ['date', 'customer', 'projectType', 'project', 'site', 'clientOrderNo', 'attachment', 'vatIncluded', 'vatPercent', 'aitIncluded', 'aitPercent'];
     fields.forEach((key) => {
-      if (req.body[key] !== undefined) order[key] = req.body[key];
+      if (req.body[key] !== undefined) order[map[key] || key] = req.body[key];
     });
 
-    const items = req.body.items !== undefined ? cleanItems(req.body.items) : order.items;
-    if (req.body.items !== undefined) order.items = items;
+    let items;
+    if (req.body.items !== undefined) {
+      items = cleanItems(req.body.items);
+      await WorkorderItem.destroy({ where: { workorderId: order.id } });
+      for (const it of items) {
+        await WorkorderItem.create({ ...it, itemId: it.item, workorderId: order.id });
+      }
+    } else {
+      items = await WorkorderItem.findAll({ where: { workorderId: order.id } });
+    }
 
-    const totals = computeTotals({ ...order.toObject(), ...req.body }, items);
+    const totals = computeTotals(req.body, items);
     Object.assign(order, totals);
 
     await order.save();
-    const populated = await order.populate([
-      { path: 'customer', select: 'name' },
-      { path: 'project', select: 'name' },
-    ]);
-
+    const populated = await Workorder.findByPk(order.id, { include: includeList });
     res.json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -127,7 +138,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Workorder.findByIdAndDelete(req.params.id);
+    const deleted = await Workorder.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

@@ -1,49 +1,28 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const orderItemSchema = new mongoose.Schema({
-  item: { type: mongoose.Schema.Types.ObjectId, ref: 'Item' },
-  itemCode: String,
-  itemName: String,
-  details: String,
-  unit: String,
-  quantity: { type: Number, default: 0 },
-  rate: { type: Number, default: 0 },
-  budgetQty: { type: Number, default: 0 },
-  purchaseQty: { type: Number, default: 0 },
-  stockQty: { type: Number, default: 0 },
-  amount: { type: Number, default: 0 },
-}, { _id: false });
+const PurchaseOrder = sequelize.define('PurchaseOrder', {
+  code: { type: DataTypes.STRING, unique: true },
+  date: DataTypes.STRING,
 
-const approvalSchema = new mongoose.Schema({
-  name: String,
-  approved: { type: Boolean, default: false },
-}, { _id: false });
+  supplierId: DataTypes.INTEGER,
 
-const purchaseOrderSchema = new mongoose.Schema({
-  code: { type: String, unique: true },
-  date: String,
+  projectType: DataTypes.STRING,
+  projectId: DataTypes.INTEGER,
+  titleOfWork: DataTypes.STRING,
+  task: DataTypes.STRING,
+  siteId: DataTypes.INTEGER,
+  categoryId: DataTypes.INTEGER,
+  reference: DataTypes.STRING,
 
-  supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
+  subtotal: { type: DataTypes.DECIMAL(14, 2), defaultValue: 0 },
+  grandTotal: { type: DataTypes.DECIMAL(14, 2), defaultValue: 0 },
+  attachment: DataTypes.STRING,
 
-  projectType: String,
-  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
-  titleOfWork: String,
-  task: String,
-  site: { type: mongoose.Schema.Types.ObjectId, ref: 'Site' },
-  category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
-  reference: String,
+  addedBy: DataTypes.STRING,
+}, {
+  tableName: 'purchase_orders',
+  timestamps: true,
+});
 
-  // Freeform BOQ line labels shown in the left panel — no dedicated BOQ
-  // model exists yet, so this is just a list of strings for now.
-  boqItems: [String],
-  items: [orderItemSchema],
-
-  subtotal: { type: Number, default: 0 },
-  grandTotal: { type: Number, default: 0 },
-  attachment: String,
-
-  approvals: [approvalSchema],
-  addedBy: String,
-}, { timestamps: true });
-
-module.exports = mongoose.model('PurchaseOrder', purchaseOrderSchema);
+module.exports = PurchaseOrder;

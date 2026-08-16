@@ -1,53 +1,35 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const requisitionItemSchema = new mongoose.Schema({
-  item: { type: mongoose.Schema.Types.ObjectId, ref: 'Item' },
-  itemCode: String,
-  itemName: String,
-  details: String,
-  unit: String,
-  budgetQty: { type: Number, default: 0 },
-  demandQty: { type: Number, default: 0 },
-  stockQty: { type: Number, default: 0 },
-  rate: { type: Number, default: 0 },
-  amount: { type: Number, default: 0 },
-}, { _id: false });
+const MaterialRequisition = sequelize.define('MaterialRequisition', {
+  code: { type: DataTypes.STRING, unique: true },
+  date: DataTypes.STRING,
+  demandDate: DataTypes.STRING,
 
-const approvalSchema = new mongoose.Schema({
-  name: String,
-  approved: { type: Boolean, default: false },
-}, { _id: false });
+  company: DataTypes.STRING,
+  supplierId: DataTypes.INTEGER,
 
-const materialRequisitionSchema = new mongoose.Schema({
-  code: { type: String, unique: true },
-  date: String,
-  demandDate: String,
+  projectType: DataTypes.STRING,
+  projectId: DataTypes.INTEGER,
+  titleOfWork: DataTypes.STRING,
+  task: DataTypes.STRING,
+  siteId: DataTypes.INTEGER,
+  categoryId: DataTypes.INTEGER,
+  reference: DataTypes.STRING,
 
-  company: String,
-  supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
+  subtotal: { type: DataTypes.FLOAT, defaultValue: 0 },
 
-  projectType: String,
-  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
-  titleOfWork: String,
-  task: String,
-  site: { type: mongoose.Schema.Types.ObjectId, ref: 'Site' },
-  category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
-  reference: String,
+  attachment: DataTypes.STRING,
+  note: DataTypes.TEXT,
 
-  items: [requisitionItemSchema],
-  subtotal: { type: Number, default: 0 },
+  status: { type: DataTypes.ENUM('Open', 'PartiallyConverted', 'Converted'), defaultValue: 'Open' },
 
-  attachment: String,
-  note: String,
+  // convertedTo was a single embedded subdoc in Mongoose ({ purchase, purchaseOrder })
+  // — flattened into two FK columns per the "embedded subdoc -> columns" rule.
+  convertedToPurchaseId: DataTypes.INTEGER,
+  convertedToPurchaseOrderId: DataTypes.INTEGER,
 
-  status: { type: String, enum: ['Open', 'PartiallyConverted', 'Converted'], default: 'Open' },
-  convertedTo: {
-    purchase: { type: mongoose.Schema.Types.ObjectId, ref: 'Purchase' },
-    purchaseOrder: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder' },
-  },
-
-  approvals: [approvalSchema],
-  addedBy: String,
+  addedBy: DataTypes.STRING,
 }, { timestamps: true });
 
-module.exports = mongoose.model('MaterialRequisition', materialRequisitionSchema);
+module.exports = MaterialRequisition;

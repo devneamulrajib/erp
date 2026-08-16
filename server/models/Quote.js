@@ -1,38 +1,28 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const quoteItemSchema = new mongoose.Schema({
-  itemName: String,
-  unit: String,
-  quantity: { type: Number, default: 0 },
-  rate: { type: Number, default: 0 },
-  details: String,
-  image: String,
-  amount: { type: Number, default: 0 },
-}, { _id: false });
+const Quote = sequelize.define('Quote', {
+  code: { type: DataTypes.STRING, unique: true },
+  date: DataTypes.STRING,
 
-const quoteSchema = new mongoose.Schema({
-  code: { type: String, unique: true },
-  date: String,
+  customerId: DataTypes.INTEGER,
+  projectType: DataTypes.STRING,
+  projectId: DataTypes.INTEGER,
+  siteId: DataTypes.INTEGER,
+  attachment: DataTypes.STRING,
 
-  customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
-  projectType: String,
-  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
-  site: { type: mongoose.Schema.Types.ObjectId, ref: 'Site' },
-  attachment: String,
+  contentBody: DataTypes.TEXT,
+  contentFooter: DataTypes.TEXT,
 
-  contentBody: String,
-  contentFooter: String,
-  items: [quoteItemSchema],
+  subtotal: { type: DataTypes.FLOAT, defaultValue: 0 },
+  vatPercent: { type: DataTypes.FLOAT, defaultValue: 0 },
+  vatAmount: { type: DataTypes.FLOAT, defaultValue: 0 },
+  deliveryCharge: { type: DataTypes.FLOAT, defaultValue: 0 },
+  discountPercent: { type: DataTypes.FLOAT, defaultValue: 0 },
+  discountAmount: { type: DataTypes.FLOAT, defaultValue: 0 },
+  grandTotal: { type: DataTypes.FLOAT, defaultValue: 0 },
 
-  subtotal: { type: Number, default: 0 },
-  vatPercent: { type: Number, default: 0 },
-  vatAmount: { type: Number, default: 0 },
-  deliveryCharge: { type: Number, default: 0 },
-  discountPercent: { type: Number, default: 0 },
-  discountAmount: { type: Number, default: 0 },
-  grandTotal: { type: Number, default: 0 },
-
-  addedBy: String,
+  addedBy: DataTypes.STRING,
 }, { timestamps: true });
 
-module.exports = mongoose.model('Quote', quoteSchema);
+module.exports = Quote;

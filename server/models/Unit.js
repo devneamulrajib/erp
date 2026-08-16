@@ -1,10 +1,31 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const unitSchema = new mongoose.Schema({
-  code: { type: String, unique: true },
-  name: { type: String, required: true },
-  conversionUnit: { type: String, default: '' },
-  rate: { type: Number, default: 0 },
-}, { timestamps: true });
+const Unit = sequelize.define('Unit', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  code: {
+    type: DataTypes.STRING,
+    unique: true,
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  conversionUnit: {
+    type: DataTypes.STRING,
+    defaultValue: '',
+  },
+  rate: {
+    type: DataTypes.FLOAT,
+    defaultValue: 0,
+  },
+}, {
+  tableName: 'units',
+  timestamps: true,
+});
 
-module.exports = mongoose.model('Unit', unitSchema);
+module.exports = Unit;

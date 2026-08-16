@@ -1,14 +1,15 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
+const { Op } = require('sequelize');
 const CommunicationStatus = require('../models/CommunicationStatus');
 
 router.get('/', auth, async (req, res) => {
   try {
     const { search } = req.query;
-    const filter = {};
-    if (search) filter.name = { $regex: search, $options: 'i' };
+    const where = {};
+    if (search) where.name = { [Op.like]: `%${search}%` };
 
-    const items = await CommunicationStatus.find(filter).sort({ createdAt: -1 });
+    const items = await CommunicationStatus.findAll({ where, order: [['createdAt', 'DESC']] });
     res.json(items);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -17,17 +18,13 @@ router.get('/', auth, async (req, res) => {
 
 router.post('/', auth, async (req, res) => {
   try {
-    const {
-      name, status, description, isDefault, leadStage,
-    } = req.body;
+    const { name, status, description, isDefault, leadStage } = req.body;
     if (!name) {
       return res.status(400).json({ message: 'Name is required' });
     }
 
     const item = await CommunicationStatus.create({
-      name,
-      status,
-      description,
+      name, status, description,
       isDefault: !!isDefault,
       leadStage,
       addedBy: req.user?.name || 'Admin',
@@ -41,7 +38,7 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const item = await CommunicationStatus.findById(req.params.id);
+    const item = await CommunicationStatus.findByPk(req.params.id);
     if (!item) return res.status(404).json({ message: 'Not found' });
 
     const fields = ['name', 'status', 'description', 'isDefault', 'leadStage'];
@@ -58,7 +55,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await CommunicationStatus.findByIdAndDelete(req.params.id);
+    const deleted = await CommunicationStatus.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

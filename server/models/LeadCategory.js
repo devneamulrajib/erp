@@ -1,10 +1,29 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const leadCategorySchema = new mongoose.Schema({
-  code: { type: String, unique: true },
-  name: { type: String, required: true },
-  description: { type: String },
-  addedBy: { type: String },
-}, { timestamps: true });
+const LeadCategory = sequelize.define('LeadCategory', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  code: {
+    type: DataTypes.STRING,
+    unique: true,
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  description: {
+    type: DataTypes.STRING,
+  },
+  addedBy: {
+    type: DataTypes.STRING,
+  },
+}, {
+  tableName: 'lead_categories',
+  timestamps: true,
+});
 
-module.exports = mongoose.model('LeadCategory', leadCategorySchema);
+module.exports = LeadCategory;

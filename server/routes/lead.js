@@ -1,9 +1,12 @@
 const router = require('express').Router();
 const multer = require('multer');
 const XLSX = require('xlsx');
+const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
-const Lead = require('../models/Lead');
-const Customer = require('../models/Customer');
+const {
+  Lead, LeadRequirement, LeadDealNegotiation, LeadFollowUp, LeadVisit, LeadNote,
+  LeadActivityLog, Flat, Area, Project, LeadCategory, Customer,
+} = require('../models/associations');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -17,10 +20,18 @@ function todayPrefix() {
 
 async function generateLeadId() {
   const prefix = todayPrefix();
-  const count = await Lead.countDocuments({ leadId: { $regex: `^${prefix}` } });
+  const count = await Lead.count({ where: { leadId: { [Op.like]: `${prefix}%` } } });
   const seq = String(count + 1).padStart(4, '0');
   return `${prefix}-${seq}`;
 }
+
+const detailInclude = [
+  { model: Flat, as: 'assignedFlats' },
+  { model: LeadRequirement, as: 'requirements', include: [{ model: Area, attributes: ['name'] }] },
+  { model: LeadDealNegotiation, as: 'dealNegotiations', include: [{ model: Flat }] },
+  { model: Project, as: 'interestedProject', attributes: ['name'] },
+  { model: LeadCategory, as: 'leadCategory', attributes: ['name'] },
+];
 
 router.get('/next-code', auth, async (req, res) => {
   try {
@@ -30,32 +41,27 @@ router.get('/next-code', auth, async (req, res) => {
   }
 });
 
-// --- Flattened follow-up list across all leads (for the Call Center > Follow Up page) ---
+// --- Flattened follow-up list across all leads ---
 router.get('/follow-ups/all', auth, async (req, res) => {
   try {
-    const leads = await Lead.find({ 'followUps.0': { $exists: true } })
-      .select('leadId name address mobile followUps')
-      .sort({ createdAt: -1 });
-    const rows = [];
-    leads.forEach((lead) => {
-      lead.followUps.forEach((f) => {
-        rows.push({
-          _id: f._id,
-          leadObjectId: lead._id,
-          leadCode: lead.leadId,
-          name: lead.name,
-          address: lead.address,
-          mobile: lead.mobile,
-          date: f.createdAt,
-          followUpDate: f.followUpDate,
-          note: f.note,
-          comment: f.comment,
-          assignUserName: f.assignUserName,
-          status: f.status,
-        });
-      });
+    const followUps = await LeadFollowUp.findAll({
+      include: [{ model: Lead, attributes: ['leadId', 'name', 'address', 'mobile'] }],
+      order: [['createdAt', 'DESC']],
     });
-    rows.sort((a, b) => new Date(b.date) - new Date(a.date));
+    const rows = followUps.map((f) => ({
+      id: f.id,
+      leadObjectId: f.leadId,
+      leadCode: f.Lead?.leadId,
+      name: f.Lead?.name,
+      address: f.Lead?.address,
+      mobile: f.Lead?.mobile,
+      date: f.createdAt,
+      followUpDate: f.followUpDate,
+      note: f.note,
+      comment: f.comment,
+      assignUserName: f.assignUserName,
+      status: f.status,
+    }));
     res.json(rows);
   } catch (err) {
     console.error('GET /api/leads/follow-ups/all failed:', err);
@@ -65,7 +71,7 @@ router.get('/follow-ups/all', auth, async (req, res) => {
 
 router.get('/', auth, async (req, res) => {
   try {
-    const items = await Lead.find().sort({ createdAt: -1 });
+    const items = await Lead.findAll({ order: [['createdAt', 'DESC']] });
     res.json(items);
   } catch (err) {
     console.error('GET /api/leads failed:', err);
@@ -73,16 +79,10 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// IMPORTANT: this must stay after '/next-code' and '/follow-ups/all' (literal
-// paths) or it will intercept those requests and try to treat them as a lead _id.
+// IMPORTANT: must stay after '/next-code' and '/follow-ups/all'
 router.get('/:id', auth, async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id)
-      .populate('assignedFlats')
-      .populate('requirements.area', 'name')
-      .populate('dealNegotiations.flat')
-      .populate('interestedProjectId', 'name')
-      .populate('leadCategoryId', 'name');
+    const lead = await Lead.findByPk(req.params.id, { include: detailInclude });
     if (!lead) return res.status(404).json({ message: 'Not found' });
     res.json(lead);
   } catch (err) {
@@ -108,7 +108,7 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const item = await Lead.findById(req.params.id);
+    const item = await Lead.findByPk(req.params.id);
     if (!item) return res.status(404).json({ message: 'Not found' });
 
     const fields = [
@@ -134,7 +134,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Lead.findByIdAndDelete(req.params.id);
+    const deleted = await Lead.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {
@@ -149,32 +149,35 @@ router.post('/bulk-delete', auth, async (req, res) => {
     if (!Array.isArray(ids) || !ids.length) {
       return res.status(400).json({ message: 'ids array required' });
     }
-    await Lead.deleteMany({ _id: { $in: ids } });
-    res.json({ deleted: ids.length });
+    const count = await Lead.destroy({ where: { id: { [Op.in]: ids } } });
+    res.json({ deleted: count });
   } catch (err) {
     console.error('POST /api/leads/bulk-delete failed:', err);
     res.status(500).json({ message: err.message });
   }
 });
 
-// --- Call Assign: logs a note against each selected lead, doesn't reassign owner ---
+// --- Call Assign ---
 router.post('/call-assign', auth, async (req, res) => {
   try {
     const { ids, date, userType, note } = req.body;
     if (!Array.isArray(ids) || !ids.length) {
       return res.status(400).json({ message: 'ids are required' });
     }
-    const activity = {
-      type: 'Call Assign',
-      date: date ? new Date(date) : new Date(),
-      status: userType || '',
-      comment: note || '',
-      addedBy: req.user?.name || 'Admin',
-    };
-    await Lead.updateMany(
-      { _id: { $in: ids } },
-      { $set: { lastActivity: activity }, $push: { activityLog: activity } },
-    );
+    const activityDate = date ? new Date(date) : new Date();
+    for (const id of ids) {
+      await Lead.update({
+        lastActivityType: 'Call Assign',
+        lastActivityDate: activityDate,
+        lastActivityStatus: userType || '',
+        lastActivityComment: note || '',
+        lastActivityAddedBy: req.user?.name || 'Admin',
+      }, { where: { id } });
+      await LeadActivityLog.create({
+        type: 'Call Assign', date: activityDate, status: userType || '', comment: note || '',
+        addedBy: req.user?.name || 'Admin', leadId: id,
+      });
+    }
     res.json({ updated: ids.length });
   } catch (err) {
     console.error('POST /api/leads/call-assign failed:', err);
@@ -182,12 +185,10 @@ router.post('/call-assign', auth, async (req, res) => {
   }
 });
 
-// --- Transfer: supports splitting selected leads across multiple users by quantity ---
+// --- Transfer ---
 router.post('/transfer', auth, async (req, res) => {
   try {
-    const {
-      ids, assignType, followup, manualSet, transfers, totalTransfer,
-    } = req.body;
+    const { ids, assignType, followup, manualSet, transfers } = req.body;
 
     if (!Array.isArray(ids) || !ids.length) {
       return res.status(400).json({ message: 'ids are required' });
@@ -196,64 +197,37 @@ router.post('/transfer', auth, async (req, res) => {
       return res.status(400).json({ message: 'At least one assign user row is required' });
     }
 
-    const activity = {
-      type: 'Transfer',
-      date: new Date(),
-      status: assignType || '',
-      comment: followup ? 'Followup' : (manualSet ? 'Manual Set' : ''),
-      addedBy: req.user?.name || 'Admin',
-    };
+    const activityDate = new Date();
+    const activityStatus = assignType || '';
+    const activityComment = followup ? 'Followup' : (manualSet ? 'Manual Set' : '');
+    const addedBy = req.user?.name || 'Admin';
 
-    let cursor = 0;
-    const remainingIds = [...ids];
+    async function assignAndLog(leadIds, userRow) {
+      for (const id of leadIds) {
+        await Lead.update({
+          assignUserId: userRow.userId || null,
+          assignUserName: userRow.userName,
+          srOfficer: userRow.userName,
+        }, { where: { id } });
+        await LeadActivityLog.create({
+          type: 'Transfer', date: activityDate, status: activityStatus, comment: activityComment, addedBy, leadId: id,
+        });
+      }
+    }
 
     if (manualSet) {
-      // Distribute ids across users according to each row's quantity
+      const remainingIds = [...ids];
       for (const row of transfers) {
         const qty = Math.max(0, Number(row.quantity) || 0);
         const slice = remainingIds.splice(0, qty);
         if (!slice.length) continue;
-        await Lead.updateMany(
-          { _id: { $in: slice } },
-          {
-            $set: {
-              assignUserId: row.userId || null,
-              assignUserName: row.userName,
-              srOfficer: row.userName,
-            },
-            $push: { activityLog: activity },
-          },
-        );
+        await assignAndLog(slice, row);
       }
       if (remainingIds.length) {
-        // Leftover (quantities didn't cover everyone) goes to the first user
-        const first = transfers[0];
-        await Lead.updateMany(
-          { _id: { $in: remainingIds } },
-          {
-            $set: {
-              assignUserId: first.userId || null,
-              assignUserName: first.userName,
-              srOfficer: first.userName,
-            },
-            $push: { activityLog: activity },
-          },
-        );
+        await assignAndLog(remainingIds, transfers[0]);
       }
     } else {
-      // No manual split — everyone selected goes to the first (only) user row
-      const target = transfers[0];
-      await Lead.updateMany(
-        { _id: { $in: ids } },
-        {
-          $set: {
-            assignUserId: target.userId || null,
-            assignUserName: target.userName,
-            srOfficer: target.userName,
-          },
-          $push: { activityLog: activity },
-        },
-      );
+      await assignAndLog(ids, transfers[0]);
     }
 
     res.json({ transferred: ids.length });
@@ -264,33 +238,24 @@ router.post('/transfer', auth, async (req, res) => {
 });
 
 router.post('/send-sms', auth, async (req, res) => {
-  // NOTE: no SMS gateway wired up yet — plug your provider in here.
-  try {
-    const { ids, message } = req.body;
-    if (!Array.isArray(ids) || !ids.length || !message) {
-      return res.status(400).json({ message: 'ids and message are required' });
-    }
-    res.json({ queued: ids.length, note: 'SMS gateway not configured — logged only' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+  const { ids, message } = req.body;
+  if (!Array.isArray(ids) || !ids.length || !message) {
+    return res.status(400).json({ message: 'ids and message are required' });
   }
+  res.json({ queued: ids.length, note: 'SMS gateway not configured — logged only' });
 });
 
 router.post('/wish-sms', auth, async (req, res) => {
-  try {
-    const { ids } = req.body;
-    if (!Array.isArray(ids) || !ids.length) {
-      return res.status(400).json({ message: 'ids are required' });
-    }
-    res.json({ queued: ids.length, note: 'SMS gateway not configured — logged only' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || !ids.length) {
+    return res.status(400).json({ message: 'ids are required' });
   }
+  res.json({ queued: ids.length, note: 'SMS gateway not configured — logged only' });
 });
 
 router.post('/:id/convert-to-customer', auth, async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findByPk(req.params.id);
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
     if (lead.isConverted) return res.status(400).json({ message: 'Lead already converted' });
 
@@ -302,7 +267,7 @@ router.post('/:id/convert-to-customer', auth, async (req, res) => {
     });
 
     lead.isConverted = true;
-    lead.convertedCustomerId = customer._id;
+    lead.convertedCustomerId = customer.id;
     await lead.save();
 
     res.json({ lead, customer });
@@ -312,7 +277,6 @@ router.post('/:id/convert-to-customer', auth, async (req, res) => {
   }
 });
 
-// --- Bulk Import: real .xlsx/.csv parsing with fallback fields ---
 router.post('/bulk-import', auth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'File is required' });
@@ -359,12 +323,9 @@ router.post('/bulk-import', auth, upload.single('file'), async (req, res) => {
   }
 });
 
-// ============ Detail Modal Sub-resources ============
-
-// --- Stage / Junk / Sold / Possibility ---
 router.put('/:id/stage', auth, async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findByPk(req.params.id);
     if (!lead) return res.status(404).json({ message: 'Not found' });
 
     const { leadStage, isJunk, isSold, possibility } = req.body;
@@ -381,15 +342,14 @@ router.put('/:id/stage', auth, async (req, res) => {
   }
 });
 
-// --- Requirements ---
 router.post('/:id/requirements', auth, async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findByPk(req.params.id);
     if (!lead) return res.status(404).json({ message: 'Not found' });
-    lead.requirements.push(req.body);
-    await lead.save();
-    await lead.populate('requirements.area', 'name');
-    res.status(201).json(lead.requirements[lead.requirements.length - 1]);
+    const { area, ...rest } = req.body;
+    const created = await LeadRequirement.create({ ...rest, areaId: area, leadId: lead.id });
+    const populated = await LeadRequirement.findByPk(created.id, { include: [{ model: Area, attributes: ['name'] }] });
+    res.status(201).json(populated);
   } catch (err) {
     console.error('POST /api/leads/:id/requirements failed:', err);
     res.status(500).json({ message: err.message });
@@ -398,10 +358,7 @@ router.post('/:id/requirements', auth, async (req, res) => {
 
 router.delete('/:id/requirements/:reqId', auth, async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
-    if (!lead) return res.status(404).json({ message: 'Not found' });
-    lead.requirements.id(req.params.reqId)?.deleteOne();
-    await lead.save();
+    await LeadRequirement.destroy({ where: { id: req.params.reqId, leadId: req.params.id } });
     res.json({ deleted: true });
   } catch (err) {
     console.error('DELETE /api/leads/:id/requirements/:reqId failed:', err);
@@ -409,15 +366,14 @@ router.delete('/:id/requirements/:reqId', auth, async (req, res) => {
   }
 });
 
-// --- Deal Negotiation ---
 router.post('/:id/deal-negotiations', auth, async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findByPk(req.params.id);
     if (!lead) return res.status(404).json({ message: 'Not found' });
-    lead.dealNegotiations.push({ ...req.body, createdBy: req.user?.name || 'Admin' });
-    await lead.save();
-    await lead.populate('dealNegotiations.flat');
-    res.status(201).json(lead.dealNegotiations[lead.dealNegotiations.length - 1]);
+    const { flat, ...rest } = req.body;
+    const created = await LeadDealNegotiation.create({ ...rest, flatId: flat, leadId: lead.id, createdBy: req.user?.name || 'Admin' });
+    const populated = await LeadDealNegotiation.findByPk(created.id, { include: [{ model: Flat }] });
+    res.status(201).json(populated);
   } catch (err) {
     console.error('POST /api/leads/:id/deal-negotiations failed:', err);
     res.status(500).json({ message: err.message });
@@ -426,12 +382,12 @@ router.post('/:id/deal-negotiations', auth, async (req, res) => {
 
 router.put('/:id/deal-negotiations/:dealId', auth, async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
-    if (!lead) return res.status(404).json({ message: 'Not found' });
-    const deal = lead.dealNegotiations.id(req.params.dealId);
+    const deal = await LeadDealNegotiation.findOne({ where: { id: req.params.dealId, leadId: req.params.id } });
     if (!deal) return res.status(404).json({ message: 'Not found' });
-    Object.assign(deal, req.body);
-    await lead.save();
+    const { flat, ...rest } = req.body;
+    Object.assign(deal, rest);
+    if (flat !== undefined) deal.flatId = flat;
+    await deal.save();
     res.json(deal);
   } catch (err) {
     console.error('PUT /api/leads/:id/deal-negotiations/:dealId failed:', err);
@@ -441,10 +397,7 @@ router.put('/:id/deal-negotiations/:dealId', auth, async (req, res) => {
 
 router.delete('/:id/deal-negotiations/:dealId', auth, async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
-    if (!lead) return res.status(404).json({ message: 'Not found' });
-    lead.dealNegotiations.id(req.params.dealId)?.deleteOne();
-    await lead.save();
+    await LeadDealNegotiation.destroy({ where: { id: req.params.dealId, leadId: req.params.id } });
     res.json({ deleted: true });
   } catch (err) {
     console.error('DELETE /api/leads/:id/deal-negotiations/:dealId failed:', err);
@@ -452,19 +405,16 @@ router.delete('/:id/deal-negotiations/:dealId', auth, async (req, res) => {
   }
 });
 
-// --- Property (assign existing Flat docs to this lead) ---
 router.post('/:id/assign-flat', auth, async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findByPk(req.params.id);
     if (!lead) return res.status(404).json({ message: 'Not found' });
     const { flatId } = req.body;
     if (!flatId) return res.status(400).json({ message: 'flatId is required' });
-    if (!lead.assignedFlats.some((f) => f.toString() === flatId)) {
-      lead.assignedFlats.push(flatId);
-      await lead.save();
-    }
-    await lead.populate('assignedFlats');
-    res.status(201).json(lead.assignedFlats);
+
+    await lead.addAssignedFlat(flatId);
+    const flats = await lead.getAssignedFlats();
+    res.status(201).json(flats);
   } catch (err) {
     console.error('POST /api/leads/:id/assign-flat failed:', err);
     res.status(500).json({ message: err.message });
@@ -473,10 +423,9 @@ router.post('/:id/assign-flat', auth, async (req, res) => {
 
 router.delete('/:id/assign-flat/:flatId', auth, async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findByPk(req.params.id);
     if (!lead) return res.status(404).json({ message: 'Not found' });
-    lead.assignedFlats = lead.assignedFlats.filter((f) => f.toString() !== req.params.flatId);
-    await lead.save();
+    await lead.removeAssignedFlat(req.params.flatId);
     res.json({ deleted: true });
   } catch (err) {
     console.error('DELETE /api/leads/:id/assign-flat/:flatId failed:', err);
@@ -484,31 +433,27 @@ router.delete('/:id/assign-flat/:flatId', auth, async (req, res) => {
   }
 });
 
-// --- Follow-up (also updates lastActivity/nextActivity for the list view) ---
 router.post('/:id/follow-ups', auth, async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findByPk(req.params.id);
     if (!lead) return res.status(404).json({ message: 'Not found' });
 
-    const {
-      status, comment, followUpDate, note, assignUserId, assignUserName,
-    } = req.body;
-    lead.followUps.push({
-      status, comment, followUpDate, note, assignUserId, assignUserName,
-    });
+    const { status, comment, followUpDate, note, assignUserId, assignUserName } = req.body;
+    const created = await LeadFollowUp.create({ status, comment, followUpDate, note, assignUserId, assignUserName, leadId: lead.id });
 
-    lead.lastActivity = {
-      type: 'Followup',
-      date: new Date(),
-      status: status || '',
-      comment: comment || '',
-      addedBy: req.user?.name || 'Admin',
-    };
-    lead.activityLog.push(lead.lastActivity);
+    lead.lastActivityType = 'Followup';
+    lead.lastActivityDate = new Date();
+    lead.lastActivityStatus = status || '';
+    lead.lastActivityComment = comment || '';
+    lead.lastActivityAddedBy = req.user?.name || 'Admin';
+    await LeadActivityLog.create({
+      type: 'Followup', date: lead.lastActivityDate, status: lead.lastActivityStatus,
+      comment: lead.lastActivityComment, addedBy: lead.lastActivityAddedBy, leadId: lead.id,
+    });
     if (followUpDate) lead.nextActivity = followUpDate;
 
     await lead.save();
-    res.status(201).json(lead.followUps[lead.followUps.length - 1]);
+    res.status(201).json(created);
   } catch (err) {
     console.error('POST /api/leads/:id/follow-ups failed:', err);
     res.status(500).json({ message: err.message });
@@ -517,10 +462,7 @@ router.post('/:id/follow-ups', auth, async (req, res) => {
 
 router.delete('/:id/follow-ups/:followUpId', auth, async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
-    if (!lead) return res.status(404).json({ message: 'Not found' });
-    lead.followUps.id(req.params.followUpId)?.deleteOne();
-    await lead.save();
+    await LeadFollowUp.destroy({ where: { id: req.params.followUpId, leadId: req.params.id } });
     res.json({ deleted: true });
   } catch (err) {
     console.error('DELETE /api/leads/:id/follow-ups/:followUpId failed:', err);
@@ -528,39 +470,37 @@ router.delete('/:id/follow-ups/:followUpId', auth, async (req, res) => {
   }
 });
 
-// --- Visits ---
 router.post('/:id/visits', auth, async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findByPk(req.params.id);
     if (!lead) return res.status(404).json({ message: 'Not found' });
-    lead.visits.push(req.body);
+    const created = await LeadVisit.create({ ...req.body, leadId: lead.id });
 
-    lead.lastActivity = {
-      type: 'Visit/Task',
-      date: new Date(),
-      status: req.body.status || '',
-      comment: req.body.comment || '',
-      addedBy: req.user?.name || 'Admin',
-    };
-    lead.activityLog.push(lead.lastActivity);
+    lead.lastActivityType = 'Visit/Task';
+    lead.lastActivityDate = new Date();
+    lead.lastActivityStatus = req.body.status || '';
+    lead.lastActivityComment = req.body.comment || '';
+    lead.lastActivityAddedBy = req.user?.name || 'Admin';
+    await LeadActivityLog.create({
+      type: 'Visit/Task', date: lead.lastActivityDate, status: lead.lastActivityStatus,
+      comment: lead.lastActivityComment, addedBy: lead.lastActivityAddedBy, leadId: lead.id,
+    });
     if (req.body.date) lead.nextActivity = req.body.date;
 
     await lead.save();
-    res.status(201).json(lead.visits[lead.visits.length - 1]);
+    res.status(201).json(created);
   } catch (err) {
     console.error('POST /api/leads/:id/visits failed:', err);
     res.status(500).json({ message: err.message });
   }
 });
 
-// --- Notes ---
 router.post('/:id/notes', auth, async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findByPk(req.params.id);
     if (!lead) return res.status(404).json({ message: 'Not found' });
-    lead.notes.push({ note: req.body.note, addedBy: req.user?.name || 'Admin' });
-    await lead.save();
-    res.status(201).json(lead.notes[lead.notes.length - 1]);
+    const created = await LeadNote.create({ note: req.body.note, addedBy: req.user?.name || 'Admin', leadId: lead.id });
+    res.status(201).json(created);
   } catch (err) {
     console.error('POST /api/leads/:id/notes failed:', err);
     res.status(500).json({ message: err.message });
@@ -569,10 +509,7 @@ router.post('/:id/notes', auth, async (req, res) => {
 
 router.delete('/:id/notes/:noteId', auth, async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
-    if (!lead) return res.status(404).json({ message: 'Not found' });
-    lead.notes.id(req.params.noteId)?.deleteOne();
-    await lead.save();
+    await LeadNote.destroy({ where: { id: req.params.noteId, leadId: req.params.id } });
     res.json({ deleted: true });
   } catch (err) {
     console.error('DELETE /api/leads/:id/notes/:noteId failed:', err);

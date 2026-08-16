@@ -1,27 +1,20 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const nomineeSchema = new mongoose.Schema({
-  name: String,
-  nid: String,
-  relation: String,
-  percentage: Number,
-}, { _id: false });
-
-const customerSchema = new mongoose.Schema({
-  code: { type: String, unique: true },
-  name: { type: String, required: true },
-  mobile: { type: String, required: true },
-  email: String,
-  nid: { type: String, required: true },
-  address: String,
-  buyerReference: String,
-  creditLimit: { type: Number, default: 0 },
-  dueDate: Date,
-  openingBalance: { type: Number, default: 0 },
-  image: String,
-  chartOfGroup: String,
-  createUser: { type: Boolean, default: false },
-  nominees: [nomineeSchema],
+const Customer = sequelize.define('Customer', {
+  code: { type: DataTypes.STRING, unique: true },
+  name: { type: DataTypes.STRING, allowNull: false },
+  mobile: { type: DataTypes.STRING, allowNull: false },
+  email: DataTypes.STRING,
+  nid: { type: DataTypes.STRING, allowNull: false },
+  address: DataTypes.STRING,
+  buyerReference: DataTypes.STRING,
+  creditLimit: { type: DataTypes.FLOAT, defaultValue: 0 },
+  dueDate: DataTypes.DATE,
+  openingBalance: { type: DataTypes.FLOAT, defaultValue: 0 },
+  image: DataTypes.STRING,
+  chartOfGroupId: DataTypes.INTEGER,
+  createUser: { type: DataTypes.BOOLEAN, defaultValue: false },
 }, { timestamps: true });
 
-module.exports = mongoose.model('Customer', customerSchema);
+module.exports = Customer;

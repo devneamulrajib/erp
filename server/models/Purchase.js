@@ -1,64 +1,32 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const purchaseItemSchema = new mongoose.Schema({
-  item: { type: mongoose.Schema.Types.ObjectId, ref: 'Item' },
-  itemCode: String,
-  itemName: String,
-  details: String,
-  unit: String,
-  quantity: { type: Number, default: 0 },
-  rate: { type: Number, default: 0 },
-  budgetQty: { type: Number, default: 0 },
-  purchaseQty: { type: Number, default: 0 },
-  stockQty: { type: Number, default: 0 },
-  amount: { type: Number, default: 0 },
-}, { _id: false });
+const Purchase = sequelize.define('Purchase', {
+  code: { type: DataTypes.STRING, unique: true },
+  date: DataTypes.STRING,
 
-const paymentEntrySchema = new mongoose.Schema({
-  transactionId: String,
-  method: { type: String, enum: ['Cash', 'Cheque'], default: 'Cash' },
-  chequeReceiptNo: String,
-  amount: { type: Number, default: 0 },
-  date: String,
-}, { _id: false });
+  supplierId: DataTypes.INTEGER, // reuses Customer table as Supplier
+  ledger: { type: DataTypes.STRING, defaultValue: 'Closing Stock' },
 
-const approvalSchema = new mongoose.Schema({
-  name: String,
-  approved: { type: Boolean, default: false },
-}, { _id: false });
+  projectType: DataTypes.STRING,
+  projectId: DataTypes.INTEGER,
+  titleOfWork: DataTypes.STRING,
+  task: DataTypes.STRING,
+  siteId: DataTypes.INTEGER,
+  categoryId: DataTypes.INTEGER,
+  reference: DataTypes.STRING,
 
-const purchaseSchema = new mongoose.Schema({
-  code: { type: String, unique: true },
-  date: String,
+  subtotal: { type: DataTypes.FLOAT, defaultValue: 0 },
+  discount: { type: DataTypes.FLOAT, defaultValue: 0 },
+  deliveryCharge: { type: DataTypes.FLOAT, defaultValue: 0 },
+  grandTotal: { type: DataTypes.FLOAT, defaultValue: 0 },
+  paid: { type: DataTypes.FLOAT, defaultValue: 0 },
+  due: { type: DataTypes.FLOAT, defaultValue: 0 },
 
-  // NOTE: reuses Customer as Supplier — no separate Supplier model exists yet.
-  supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
-  ledger: { type: String, default: 'Closing Stock' },
+  note: DataTypes.TEXT,
+  attachment: DataTypes.STRING,
 
-  projectType: String,
-  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
-  titleOfWork: String,
-  task: String,
-  site: { type: mongoose.Schema.Types.ObjectId, ref: 'Site' },
-  category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
-  reference: String,
-
-  items: [purchaseItemSchema],
-
-  subtotal: { type: Number, default: 0 },
-  discount: { type: Number, default: 0 },
-  deliveryCharge: { type: Number, default: 0 },
-  grandTotal: { type: Number, default: 0 },
-  paid: { type: Number, default: 0 },
-  due: { type: Number, default: 0 },
-
-  note: String,
-  attachment: String,
-
-  payments: [paymentEntrySchema],
-  approvals: [approvalSchema],
-
-  addedBy: String,
+  addedBy: DataTypes.STRING,
 }, { timestamps: true });
 
-module.exports = mongoose.model('Purchase', purchaseSchema);
+module.exports = Purchase;

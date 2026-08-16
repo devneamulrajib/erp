@@ -1,4 +1,5 @@
 const router = require('express').Router();
+const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
 const Unit = require('../models/Unit');
 
@@ -13,10 +14,10 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { search } = req.query;
-    const filter = {};
-    if (search) filter.name = { $regex: search, $options: 'i' };
+    const where = {};
+    if (search) where.name = { [Op.like]: `%${search}%` };
 
-    const units = await Unit.find(filter).sort({ createdAt: -1 });
+    const units = await Unit.findAll({ where, order: [['createdAt', 'DESC']] });
     res.json(units);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -45,7 +46,7 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const unit = await Unit.findById(req.params.id);
+    const unit = await Unit.findByPk(req.params.id);
     if (!unit) return res.status(404).json({ message: 'Not found' });
 
     const fields = ['name', 'code', 'conversionUnit', 'rate'];
@@ -62,7 +63,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Unit.findByIdAndDelete(req.params.id);
+    const deleted = await Unit.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

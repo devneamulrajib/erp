@@ -1,10 +1,33 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const chartOfGroupSchema = new mongoose.Schema({
-  code: { type: String, required: true, unique: true, trim: true },
-  name: { type: String, required: true, trim: true },
-  under: { type: mongoose.Schema.Types.ObjectId, ref: 'ChartOfGroup', default: null },
-  section: { type: String, required: true }, // computed: Assets / Liability / Income / Expense / Owner's Equity
-}, { timestamps: true });
+const ChartOfGroup = sequelize.define('ChartOfGroup', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  code: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  underId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: null,
+  },
+  section: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+}, {
+  tableName: 'chart_of_groups',
+  timestamps: true,
+});
 
-module.exports = mongoose.model('ChartOfGroup', chartOfGroupSchema);
+module.exports = ChartOfGroup;

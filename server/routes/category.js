@@ -1,4 +1,5 @@
 const router = require('express').Router();
+const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
 const Category = require('../models/Category');
 
@@ -13,11 +14,11 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { type, search } = req.query;
-    const filter = {};
-    if (type) filter.type = type;
-    if (search) filter.name = { $regex: search, $options: 'i' };
+    const where = {};
+    if (type) where.type = type;
+    if (search) where.name = { [Op.like]: `%${search}%` };
 
-    const categories = await Category.find(filter).sort({ createdAt: -1 });
+    const categories = await Category.findAll({ where, order: [['createdAt', 'DESC']] });
     res.json(categories);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -45,7 +46,7 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const category = await Category.findById(req.params.id);
+    const category = await Category.findByPk(req.params.id);
     if (!category) return res.status(404).json({ message: 'Not found' });
 
     const fields = ['type', 'name', 'code'];
@@ -62,7 +63,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Category.findByIdAndDelete(req.params.id);
+    const deleted = await Category.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

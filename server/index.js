@@ -1,19 +1,21 @@
 require('dotenv').config();
+require('./models/associations');
 const express = require('express');
 const cors = require('cors');
-const mongoose = require('mongoose');
+const sequelize = require('./config/db');
 const createSuperAdmin = require('./seed/createSuperAdmin');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URI)
+sequelize.authenticate()
   .then(async () => {
-    console.log('MongoDB connected');
+    console.log('MySQL connected');
+    await sequelize.sync(); // creates tables that don't exist yet
     await createSuperAdmin();
   })
-  .catch((err) => console.error('MongoDB connection error:', err));
+  .catch((err) => console.error('MySQL connection error:', err));
 
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/dashboard', require('./routes/dashboard'));
@@ -54,7 +56,6 @@ app.use('/api/service-requisitions', require('./routes/serviceRequisition'));
 app.use('/api/fund-requisitions', require('./routes/fundRequisition'));
 app.use('/uploads', require('express').static(require('path').join(__dirname, 'uploads')));
 app.use('/api/bill', require('./routes/bill'));
-app.use('/api/chart-of-group', require('./routes/chartOfGroup')); 
 app.use('/api/party', require('./routes/party'));
 app.use('/api/labour-bill', require('./routes/labourBill'));
 app.use('/api/workorder', require('./routes/workorder'));
@@ -63,15 +64,11 @@ app.use('/api/period-bill', require('./routes/periodBill'));
 app.use('/api/adjustment-bill', require('./routes/adjustmentBill'));
 app.use('/api/expenses', require('./routes/expense'));
 app.use('/api/receipt-vouchers', require('./routes/receiptVoucher'));
-app.use('/api/receipt-vouchers', require('./routes/receiptVoucher'));
 app.use('/api/accounting-reports', require('./routes/accountingReports'));
 app.use('/api/sales', require('./routes/sale'));
 app.use('/api/quote', require('./routes/quote'));
 app.use('/api/payment-vouchers', require('./routes/paymentVoucher'));
 app.use('/api/journal-vouchers', require('./routes/journalVoucher'));
-app.use('/api/payment-vouchers', require('./routes/paymentVoucher'));
-app.use('/api/journal-vouchers', require('./routes/journalVoucher'));
-app.use('/api/contra-vouchers', require('./routes/contraVoucher'));
 app.use('/api/contra-vouchers', require('./routes/contraVoucher'));
 app.use('/api/contractor-bill-report', require('./routes/contractorBillReport'));
 app.use('/api/contractor-bill', require('./routes/contractorBill'));

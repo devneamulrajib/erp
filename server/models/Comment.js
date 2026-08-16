@@ -1,8 +1,10 @@
-const mongoose = require('mongoose');
-const commentSchema = new mongoose.Schema({
-  user: String,
-  title: String,
-  comment: String,
-  attachments: [String],
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
+
+const Comment = sequelize.define('Comment', {
+  user: DataTypes.STRING,
+  title: DataTypes.STRING,
+  comment: DataTypes.TEXT,
 }, { timestamps: true });
-module.exports = mongoose.model('Comment', commentSchema);
+
+module.exports = Comment;

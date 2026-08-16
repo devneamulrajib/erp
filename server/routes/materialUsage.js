@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
-const MaterialUsage = require('../models/MaterialUsage');
+const { Op } = require('sequelize');
+const { MaterialUsage, MaterialUsageItem, MaterialUsageApproval, Project, Site } = require('../models/associations');
 
 function generateCode() {
   return 'MU' + Math.floor(1000000 + Math.random() * 9000000);
@@ -26,6 +27,13 @@ function computeTotal(items) {
   return items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
 }
 
+const includeAll = [
+  { model: MaterialUsageItem },
+  { model: MaterialUsageApproval },
+  { model: Project, attributes: ['name'] },
+  { model: Site, attributes: ['name'] },
+];
+
 router.get('/next-code', auth, async (req, res) => {
   res.json({ code: generateCode() });
 });
@@ -33,20 +41,25 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { from, to, project, site, titleOfWork } = req.query;
-    const filter = {};
-    if (project) filter.project = project;
-    if (site) filter.site = site;
-    if (titleOfWork) filter.titleOfWork = titleOfWork;
+    const where = {};
+    if (project) where.projectId = project;
+    if (site) where.siteId = site;
+    if (titleOfWork) where.titleOfWork = titleOfWork;
     if (from || to) {
-      filter.date = {};
-      if (from) filter.date.$gte = from;
-      if (to) filter.date.$lte = to;
+      where.date = {};
+      if (from) where.date[Op.gte] = from;
+      if (to) where.date[Op.lte] = to;
     }
 
-    const usages = await MaterialUsage.find(filter)
-      .populate('project', 'name')
-      .populate('site', 'name')
-      .sort({ createdAt: -1 });
+    const usages = await MaterialUsage.findAll({
+      where,
+      include: [
+        { model: MaterialUsageItem },
+        { model: Project, attributes: ['name'] },
+        { model: Site, attributes: ['name'] },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
 
     res.json(usages);
   } catch (err) {
@@ -56,10 +69,7 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const usage = await MaterialUsage.findById(req.params.id)
-      .populate('project', 'name')
-      .populate('site', 'name')
-      .populate('category', 'name');
+    const usage = await MaterialUsage.findByPk(req.params.id, { include: includeAll });
     if (!usage) return res.status(404).json({ message: 'Not found' });
     res.json(usage);
   } catch (err) {
@@ -83,21 +93,24 @@ router.post('/', auth, async (req, res) => {
 
     const usage = await MaterialUsage.create({
       code: code || generateCode(),
-      date, employee, creditLedger, debitLedger, projectType, project,
-      titleOfWork, task, site, category, purchaseRef,
-      items: usageItems,
+      date, employee, creditLedger, debitLedger, projectType,
+      projectId: project,
+      titleOfWork, task,
+      siteId: site,
+      categoryId: category,
+      purchaseRef,
       subtotal: total,
       grandTotal: total,
       attachment,
-      approvals: [{ name: 'Admin', approved: false }],
       addedBy: req.user?.name || 'Admin',
     });
 
-    const populated = await usage.populate([
-      { path: 'project', select: 'name' },
-      { path: 'site', select: 'name' },
-    ]);
+    for (const it of usageItems) {
+      await MaterialUsageItem.create({ ...it, itemId: it.item, materialUsageId: usage.id });
+    }
+    await MaterialUsageApproval.create({ name: 'Admin', approved: false, materialUsageId: usage.id });
 
+    const populated = await MaterialUsage.findByPk(usage.id, { include: includeAll });
     res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -106,30 +119,30 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const usage = await MaterialUsage.findById(req.params.id);
+    const usage = await MaterialUsage.findByPk(req.params.id);
     if (!usage) return res.status(404).json({ message: 'Not found' });
 
-    const fields = [
-      'date', 'employee', 'creditLedger', 'debitLedger', 'projectType', 'project',
-      'titleOfWork', 'task', 'site', 'category', 'purchaseRef', 'attachment',
-    ];
+    const fields = ['date', 'employee', 'creditLedger', 'debitLedger', 'projectType', 'titleOfWork', 'task', 'purchaseRef', 'attachment'];
     fields.forEach((key) => {
       if (req.body[key] !== undefined) usage[key] = req.body[key];
     });
+    if (req.body.project !== undefined) usage.projectId = req.body.project;
+    if (req.body.site !== undefined) usage.siteId = req.body.site;
+    if (req.body.category !== undefined) usage.categoryId = req.body.category;
 
     if (req.body.items !== undefined) {
-      usage.items = cleanItems(req.body.items);
-      const total = computeTotal(usage.items);
+      const items = cleanItems(req.body.items);
+      await MaterialUsageItem.destroy({ where: { materialUsageId: usage.id } });
+      for (const it of items) {
+        await MaterialUsageItem.create({ ...it, itemId: it.item, materialUsageId: usage.id });
+      }
+      const total = computeTotal(items);
       usage.subtotal = total;
       usage.grandTotal = total;
     }
 
     await usage.save();
-    const populated = await usage.populate([
-      { path: 'project', select: 'name' },
-      { path: 'site', select: 'name' },
-    ]);
-
+    const populated = await MaterialUsage.findByPk(usage.id, { include: includeAll });
     res.json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -138,7 +151,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await MaterialUsage.findByIdAndDelete(req.params.id);
+    const deleted = await MaterialUsage.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

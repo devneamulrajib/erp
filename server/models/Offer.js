@@ -1,10 +1,11 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const offerSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
-  description: { type: String },
-  addedBy: { type: String },
+const Offer = sequelize.define('Offer', {
+  name: { type: DataTypes.STRING, allowNull: false },
+  status: { type: DataTypes.ENUM('Active', 'Inactive'), defaultValue: 'Active' },
+  description: DataTypes.TEXT,
+  addedBy: DataTypes.STRING,
 }, { timestamps: true });
 
-module.exports = mongoose.model('Offer', offerSchema);
+module.exports = Offer;

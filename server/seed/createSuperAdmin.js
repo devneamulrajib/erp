@@ -9,7 +9,7 @@ async function createSuperAdmin() {
     return;
   }
 
-  const existing = await User.findOne({ email: SUPERADMIN_EMAIL });
+  const existing = await User.findOne({ where: { email: SUPERADMIN_EMAIL } });
 
   if (existing) {
     console.log(`Superadmin already exists: ${SUPERADMIN_EMAIL}`);

@@ -1,4 +1,5 @@
 const router = require('express').Router();
+const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
 const Brand = require('../models/Brand');
 
@@ -13,10 +14,10 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { search } = req.query;
-    const filter = {};
-    if (search) filter.name = { $regex: search, $options: 'i' };
+    const where = {};
+    if (search) where.name = { [Op.like]: `%${search}%` };
 
-    const brands = await Brand.find(filter).sort({ createdAt: -1 });
+    const brands = await Brand.findAll({ where, order: [['createdAt', 'DESC']] });
     res.json(brands);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -43,7 +44,7 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const brand = await Brand.findById(req.params.id);
+    const brand = await Brand.findByPk(req.params.id);
     if (!brand) return res.status(404).json({ message: 'Not found' });
 
     const fields = ['name', 'code'];
@@ -60,7 +61,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Brand.findByIdAndDelete(req.params.id);
+    const deleted = await Brand.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

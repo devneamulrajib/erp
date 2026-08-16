@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
-const ContractorWorkorder = require('../models/ContractorWorkorder');
+const { Op } = require('sequelize');
+const { ContractorWorkorder, ContractorWorkorderItem, Party, Project } = require('../models/associations');
 
 function generateCode() {
   return 'W/O' + Math.floor(1000000 + Math.random() * 9000000);
@@ -38,19 +39,23 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { from, to, supplier, project } = req.query;
-    const filter = {};
-    if (supplier) filter.supplier = supplier;
-    if (project) filter.project = project;
+    const where = {};
+    if (supplier) where.supplierId = supplier;
+    if (project) where.projectId = project;
     if (from || to) {
-      filter.date = {};
-      if (from) filter.date.$gte = from;
-      if (to) filter.date.$lte = to;
+      where.date = {};
+      if (from) where.date[Op.gte] = from;
+      if (to) where.date[Op.lte] = to;
     }
 
-    const orders = await ContractorWorkorder.find(filter)
-      .populate('supplier', 'name')
-      .populate('project', 'name')
-      .sort({ createdAt: -1 });
+    const orders = await ContractorWorkorder.findAll({
+      where,
+      include: [
+        { model: Party, attributes: ['name'] },
+        { model: Project, attributes: ['name'] },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
 
     res.json(orders);
   } catch (err) {
@@ -60,11 +65,13 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const order = await ContractorWorkorder.findById(req.params.id)
-      .populate('supplier', 'name')
-      .populate('project', 'name')
-      .populate('site', 'name')
-      .populate('category', 'name');
+    const order = await ContractorWorkorder.findByPk(req.params.id, {
+      include: [
+        { model: Party, attributes: ['name'] },
+        { model: Project, attributes: ['name'] },
+        { model: ContractorWorkorderItem },
+      ],
+    });
     if (!order) return res.status(404).json({ message: 'Not found' });
     res.json(order);
   } catch (err) {
@@ -81,17 +88,31 @@ router.post('/', auth, async (req, res) => {
     const totals = computeTotals(req.body, items);
 
     const order = await ContractorWorkorder.create({
-      ...req.body,
       code: req.body.code || generateCode(),
-      items,
+      date: req.body.date,
+      supplierId: req.body.supplier,
+      projectType: req.body.projectType,
+      projectId: req.body.project,
+      siteId: req.body.site,
+      categoryId: req.body.category,
+      refInvoiceNo: req.body.refInvoiceNo,
+      contentBody: req.body.contentBody,
+      attachment: req.body.attachment,
       ...totals,
       addedBy: req.user?.name || 'Admin',
     });
 
-    const populated = await order.populate([
-      { path: 'supplier', select: 'name' },
-      { path: 'project', select: 'name' },
-    ]);
+    for (const it of items) {
+      await ContractorWorkorderItem.create({ ...it, itemId: it.item, contractorWorkorderId: order.id });
+    }
+
+    const populated = await ContractorWorkorder.findByPk(order.id, {
+      include: [
+        { model: Party, attributes: ['name'] },
+        { model: Project, attributes: ['name'] },
+        { model: ContractorWorkorderItem },
+      ],
+    });
 
     res.status(201).json(populated);
   } catch (err) {
@@ -101,29 +122,51 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const order = await ContractorWorkorder.findById(req.params.id);
+    const order = await ContractorWorkorder.findByPk(req.params.id);
     if (!order) return res.status(404).json({ message: 'Not found' });
 
-    const fields = [
-      'date', 'supplier', 'projectType', 'project', 'site', 'category',
-      'refInvoiceNo', 'contentBody', 'attachment',
-      'vatIncluded', 'vatPercent', 'aitIncluded', 'aitPercent', 'discount',
-    ];
-    fields.forEach((key) => {
-      if (req.body[key] !== undefined) order[key] = req.body[key];
+    const directFields = {
+      date: req.body.date,
+      supplierId: req.body.supplier,
+      projectType: req.body.projectType,
+      projectId: req.body.project,
+      siteId: req.body.site,
+      categoryId: req.body.category,
+      refInvoiceNo: req.body.refInvoiceNo,
+      contentBody: req.body.contentBody,
+      attachment: req.body.attachment,
+      vatIncluded: req.body.vatIncluded,
+      vatPercent: req.body.vatPercent,
+      aitIncluded: req.body.aitIncluded,
+      aitPercent: req.body.aitPercent,
+      discount: req.body.discount,
+    };
+    Object.keys(directFields).forEach((key) => {
+      if (directFields[key] !== undefined) order[key] = directFields[key];
     });
 
-    const items = req.body.items !== undefined ? cleanItems(req.body.items) : order.items;
-    if (req.body.items !== undefined) order.items = items;
+    let items;
+    if (req.body.items !== undefined) {
+      items = cleanItems(req.body.items);
+      await ContractorWorkorderItem.destroy({ where: { contractorWorkorderId: order.id } });
+      for (const it of items) {
+        await ContractorWorkorderItem.create({ ...it, itemId: it.item, contractorWorkorderId: order.id });
+      }
+    } else {
+      items = await ContractorWorkorderItem.findAll({ where: { contractorWorkorderId: order.id } });
+    }
 
-    const totals = computeTotals({ ...order.toObject(), ...req.body }, items);
+    const totals = computeTotals(req.body, items);
     Object.assign(order, totals);
 
     await order.save();
-    const populated = await order.populate([
-      { path: 'supplier', select: 'name' },
-      { path: 'project', select: 'name' },
-    ]);
+    const populated = await ContractorWorkorder.findByPk(order.id, {
+      include: [
+        { model: Party, attributes: ['name'] },
+        { model: Project, attributes: ['name'] },
+        { model: ContractorWorkorderItem },
+      ],
+    });
 
     res.json(populated);
   } catch (err) {
@@ -133,7 +176,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await ContractorWorkorder.findByIdAndDelete(req.params.id);
+    const deleted = await ContractorWorkorder.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

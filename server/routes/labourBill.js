@@ -1,6 +1,9 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
-const LabourBill = require('../models/LabourBill');
+const { Op } = require('sequelize');
+const {
+  LabourBill, LabourBillItem, LabourBillApproval, Party, ChartOfAccount, Project,
+} = require('../models/associations');
 
 function generateCode() {
   return 'L/WB' + Math.floor(1000000 + Math.random() * 9000000);
@@ -31,11 +34,14 @@ function computeTotals(body, items) {
   const paid = Number(body.paid) || 0;
   const due = totalPayable - paid;
 
-  return {
-    subtotal, totalQuantity, vatIncluded, vatPercent, vatAmount,
-    grandTotal, totalSecurity, totalPayable, paid, due,
-  };
+  return { subtotal, totalQuantity, vatIncluded, vatPercent, vatAmount, grandTotal, totalSecurity, totalPayable, paid, due };
 }
+
+const includeList = [
+  { model: Party, attributes: ['name'] },
+  { model: ChartOfAccount, as: 'Ledger', attributes: ['name', 'code'] },
+  { model: Project, attributes: ['name'] },
+];
 
 router.get('/next-code', auth, async (req, res) => {
   res.json({ code: generateCode() });
@@ -44,23 +50,17 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { from, to, party, ledger, project, titleOfWork } = req.query;
-    const filter = {};
-    if (party) filter.party = party;
-    if (ledger) filter.ledger = ledger;
-    if (project) filter.project = project;
-    if (titleOfWork) filter.titleOfWork = titleOfWork;
+    const where = {};
+    if (party) where.partyId = party;
+    if (ledger) where.ledgerId = ledger;
+    if (project) where.projectId = project;
+    if (titleOfWork) where.titleOfWork = titleOfWork;
     if (from || to) {
-      filter.date = {};
-      if (from) filter.date.$gte = from;
-      if (to) filter.date.$lte = to;
+      where.date = {};
+      if (from) where.date[Op.gte] = from;
+      if (to) where.date[Op.lte] = to;
     }
-
-    const bills = await LabourBill.find(filter)
-      .populate('party', 'name')
-      .populate('ledger', 'name code')
-      .populate('project', 'name')
-      .sort({ createdAt: -1 });
-
+    const bills = await LabourBill.findAll({ where, include: includeList, order: [['createdAt', 'DESC']] });
     res.json(bills);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -69,12 +69,14 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const bill = await LabourBill.findById(req.params.id)
-      .populate('party', 'name')
-      .populate('ledger', 'name code')
-      .populate('project', 'name')
-      .populate('site', 'name')
-      .populate('category', 'name');
+    const bill = await LabourBill.findByPk(req.params.id, {
+      include: [
+        { model: Party, attributes: ['name'] },
+        { model: ChartOfAccount, as: 'Ledger', attributes: ['name', 'code'] },
+        { model: Project, attributes: ['name'] },
+        { model: LabourBillItem },
+      ],
+    });
     if (!bill) return res.status(404).json({ message: 'Not found' });
     res.json(bill);
   } catch (err) {
@@ -91,20 +93,30 @@ router.post('/', auth, async (req, res) => {
     const totals = computeTotals(req.body, items);
 
     const bill = await LabourBill.create({
-      ...req.body,
       code: req.body.code || generateCode(),
-      items,
+      date: req.body.date,
+      partyId: party,
+      ledgerId: req.body.ledger,
+      creditLedgerLabel: req.body.creditLedgerLabel,
+      projectType: req.body.projectType,
+      projectId: req.body.project,
+      titleOfWork: req.body.titleOfWork,
+      task: req.body.task,
+      siteId: req.body.site,
+      categoryId: req.body.category,
+      refWoNo: req.body.refWoNo,
+      attachment: req.body.attachment,
+      paymentMethod: req.body.paymentMethod,
       ...totals,
-      approvals: [{ name: 'Admin', approved: false }],
       addedBy: req.user?.name || 'Admin',
     });
 
-    const populated = await bill.populate([
-      { path: 'party', select: 'name' },
-      { path: 'ledger', select: 'name code' },
-      { path: 'project', select: 'name' },
-    ]);
+    for (const it of items) {
+      await LabourBillItem.create({ ...it, itemId: it.item, labourBillId: bill.id });
+    }
+    await LabourBillApproval.create({ name: 'Admin', approved: false, labourBillId: bill.id });
 
+    const populated = await LabourBill.findByPk(bill.id, { include: includeList });
     res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -113,31 +125,31 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const bill = await LabourBill.findById(req.params.id);
+    const bill = await LabourBill.findByPk(req.params.id);
     if (!bill) return res.status(404).json({ message: 'Not found' });
 
-    const fields = [
-      'date', 'party', 'ledger', 'creditLedgerLabel', 'projectType', 'project',
-      'titleOfWork', 'task', 'site', 'category', 'refWoNo', 'attachment',
-      'vatIncluded', 'vatPercent', 'paymentMethod', 'paid',
-    ];
+    const map = { party: 'partyId', ledger: 'ledgerId', project: 'projectId', site: 'siteId', category: 'categoryId' };
+    const fields = ['date', 'party', 'ledger', 'creditLedgerLabel', 'projectType', 'project', 'titleOfWork', 'task', 'site', 'category', 'refWoNo', 'attachment', 'vatIncluded', 'vatPercent', 'paymentMethod', 'paid'];
     fields.forEach((key) => {
-      if (req.body[key] !== undefined) bill[key] = req.body[key];
+      if (req.body[key] !== undefined) bill[map[key] || key] = req.body[key];
     });
 
-    const items = req.body.items !== undefined ? cleanItems(req.body.items) : bill.items;
-    if (req.body.items !== undefined) bill.items = items;
+    let items;
+    if (req.body.items !== undefined) {
+      items = cleanItems(req.body.items);
+      await LabourBillItem.destroy({ where: { labourBillId: bill.id } });
+      for (const it of items) {
+        await LabourBillItem.create({ ...it, itemId: it.item, labourBillId: bill.id });
+      }
+    } else {
+      items = await LabourBillItem.findAll({ where: { labourBillId: bill.id } });
+    }
 
-    const totals = computeTotals({ ...bill.toObject(), ...req.body }, items);
+    const totals = computeTotals(req.body, items);
     Object.assign(bill, totals);
 
     await bill.save();
-    const populated = await bill.populate([
-      { path: 'party', select: 'name' },
-      { path: 'ledger', select: 'name code' },
-      { path: 'project', select: 'name' },
-    ]);
-
+    const populated = await LabourBill.findByPk(bill.id, { include: includeList });
     res.json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -146,7 +158,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await LabourBill.findByIdAndDelete(req.params.id);
+    const deleted = await LabourBill.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

@@ -1,15 +1,13 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const serviceItemSchema = new mongoose.Schema(
-  {
-    code: { type: String, required: true, unique: true },
-    category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
-    name: { type: String, required: true },
-    unit: { type: mongoose.Schema.Types.ObjectId, ref: 'Unit' },
-    cost: { type: Number, default: 0 },
-    salePrice: { type: Number, default: 0 },
-  },
-  { timestamps: true },
-);
+const ServiceItem = sequelize.define('ServiceItem', {
+  code: { type: DataTypes.STRING, allowNull: false, unique: true },
+  categoryId: DataTypes.INTEGER,
+  name: { type: DataTypes.STRING, allowNull: false },
+  unitId: DataTypes.INTEGER,
+  cost: { type: DataTypes.FLOAT, defaultValue: 0 },
+  salePrice: { type: DataTypes.FLOAT, defaultValue: 0 },
+}, { timestamps: true });
 
-module.exports = mongoose.model('ServiceItem', serviceItemSchema);
+module.exports = ServiceItem;

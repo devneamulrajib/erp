@@ -1,9 +1,9 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
-const ServiceItem = require('../models/ServiceItem');
+const { ServiceItem, Category, Unit } = require('../models/associations');
 
 async function generateCode() {
-  const count = await ServiceItem.countDocuments();
+  const count = await ServiceItem.count();
   return `S${String(count + 1).padStart(4, '0')}`;
 }
 
@@ -17,10 +17,13 @@ router.get('/next-code', auth, async (req, res) => {
 
 router.get('/', auth, async (req, res) => {
   try {
-    const items = await ServiceItem.find()
-      .populate('category', 'name')
-      .populate('unit', 'name')
-      .sort({ createdAt: -1 });
+    const items = await ServiceItem.findAll({
+      include: [
+        { model: Category, as: 'category', attributes: ['name'] },
+        { model: Unit, as: 'unit', attributes: ['name'] },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
     res.json(items);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -34,9 +37,9 @@ router.post('/', auth, async (req, res) => {
 
     const item = await ServiceItem.create({
       code: await generateCode(),
-      category: category || null,
+      categoryId: category || null,
       name,
-      unit: unit || null,
+      unitId: unit || null,
       cost: cost || 0,
       salePrice: salePrice || 0,
     });
@@ -49,11 +52,12 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const item = await ServiceItem.findById(req.params.id);
+    const item = await ServiceItem.findByPk(req.params.id);
     if (!item) return res.status(404).json({ message: 'Not found' });
 
-    const fields = ['category', 'name', 'unit', 'cost', 'salePrice'];
-    fields.forEach((key) => {
+    if (req.body.category !== undefined) item.categoryId = req.body.category;
+    if (req.body.unit !== undefined) item.unitId = req.body.unit;
+    ['name', 'cost', 'salePrice'].forEach((key) => {
       if (req.body[key] !== undefined) item[key] = req.body[key];
     });
 
@@ -66,7 +70,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await ServiceItem.findByIdAndDelete(req.params.id);
+    const deleted = await ServiceItem.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

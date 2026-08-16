@@ -1,34 +1,21 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const journalLineSchema = new mongoose.Schema({
-  account: { type: String, required: true },
-  debit: { type: Number, default: 0 },
-  credit: { type: Number, default: 0 },
-  chequeReceiptNo: { type: String, default: '' },
-  note: { type: String, default: '' },
-}, { _id: false });
-
-const journalVoucherSchema = new mongoose.Schema({
-  voucherNo: String,
-  date: { type: Date, default: Date.now },
-  projectType: String,
-  project: String,
-  titleOfWork: String,
-  site: String,
-  task: String,
-
-  lines: [journalLineSchema],
-
-  totalDebit: { type: Number, default: 0 },
-  totalCredit: { type: Number, default: 0 },
-
-  comment: String,
-  attachment: { type: String, default: '' },
-
-  addedBy: String,
-  editedBy: String,
-  approvals: [{ name: String, approved: Boolean }],
-  status: { type: String, default: 'pending' },
+const JournalVoucher = sequelize.define('JournalVoucher', {
+  voucherNo: DataTypes.STRING,
+  date: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+  projectType: DataTypes.STRING,
+  project: DataTypes.STRING,
+  titleOfWork: DataTypes.STRING,
+  site: DataTypes.STRING,
+  task: DataTypes.STRING,
+  totalDebit: { type: DataTypes.FLOAT, defaultValue: 0 },
+  totalCredit: { type: DataTypes.FLOAT, defaultValue: 0 },
+  comment: DataTypes.TEXT,
+  attachment: { type: DataTypes.STRING, defaultValue: '' },
+  addedBy: DataTypes.STRING,
+  editedBy: DataTypes.STRING,
+  status: { type: DataTypes.STRING, defaultValue: 'pending' },
 }, { timestamps: true });
 
-module.exports = mongoose.model('JournalVoucher', journalVoucherSchema);
+module.exports = JournalVoucher;

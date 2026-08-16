@@ -1,39 +1,24 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const woItemSchema = new mongoose.Schema({
-  item: { type: mongoose.Schema.Types.ObjectId, ref: 'Item' },
-  itemName: String,
-  description: String,
-  unit: String,
-  quantity: { type: Number, default: 0 },
-  rate: { type: Number, default: 0 },
-  image: String,
-  amount: { type: Number, default: 0 },
-}, { _id: false });
-
-const workorderSchema = new mongoose.Schema({
-  code: { type: String, unique: true },
-  date: String,
-
-  customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
-  projectType: String,
-  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
-  site: { type: mongoose.Schema.Types.ObjectId, ref: 'Site' },
-  clientOrderNo: String,
-  attachment: String,
-
-  items: [woItemSchema],
-
-  subtotal: { type: Number, default: 0 },
-  vatIncluded: { type: Boolean, default: false },
-  vatPercent: { type: Number, default: 0 },
-  vatAmount: { type: Number, default: 0 },
-  aitIncluded: { type: Boolean, default: false },
-  aitPercent: { type: Number, default: 0 },
-  aitAmount: { type: Number, default: 0 },
-  grandTotal: { type: Number, default: 0 },
-
-  addedBy: String,
+const Workorder = sequelize.define('Workorder', {
+  code: { type: DataTypes.STRING, unique: true },
+  date: DataTypes.STRING,
+  customerId: DataTypes.INTEGER,
+  projectType: DataTypes.STRING,
+  projectId: DataTypes.INTEGER,
+  siteId: DataTypes.INTEGER,
+  clientOrderNo: DataTypes.STRING,
+  attachment: DataTypes.STRING,
+  subtotal: { type: DataTypes.FLOAT, defaultValue: 0 },
+  vatIncluded: { type: DataTypes.BOOLEAN, defaultValue: false },
+  vatPercent: { type: DataTypes.FLOAT, defaultValue: 0 },
+  vatAmount: { type: DataTypes.FLOAT, defaultValue: 0 },
+  aitIncluded: { type: DataTypes.BOOLEAN, defaultValue: false },
+  aitPercent: { type: DataTypes.FLOAT, defaultValue: 0 },
+  aitAmount: { type: DataTypes.FLOAT, defaultValue: 0 },
+  grandTotal: { type: DataTypes.FLOAT, defaultValue: 0 },
+  addedBy: DataTypes.STRING,
 }, { timestamps: true });
 
-module.exports = mongoose.model('Workorder', workorderSchema);
+module.exports = Workorder;
