@@ -1,11 +1,26 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const boqTitleSchema = new mongoose.Schema(
-  {
-    projectType: { type: mongoose.Schema.Types.ObjectId, ref: 'ProjectType', required: true },
-    title: { type: String, required: true },
+const BoqTitle = sequelize.define('BoqTitle', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
   },
-  { timestamps: true },
-);
+  // NOTE: no FK constraint yet — ProjectType has no Sequelize model/table
+  // (projectType.js route currently has no matching model, likely in-memory
+  // like Site.js was). Revisit once ProjectType is confirmed/converted.
+  projectTypeId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
+  title: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+}, {
+  tableName: 'boq_titles',
+  timestamps: true,
+});
 
-module.exports = mongoose.model('BoqTitle', boqTitleSchema);
+module.exports = BoqTitle;

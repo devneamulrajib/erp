@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
-const Flat = require('../models/Flat');
+const { Flat, Project, Site } = require('../models/associations');
 
 function generateCode() {
   return 'F' + Math.floor(1000000 + Math.random() * 9000000);
@@ -13,15 +13,19 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { project, site, status } = req.query;
-    const filter = {};
-    if (project) filter.project = project;
-    if (site) filter.site = site;
-    if (status) filter.status = status;
+    const where = {};
+    if (project) where.projectId = project;
+    if (site) where.siteId = site;
+    if (status) where.status = status;
 
-    const flats = await Flat.find(filter)
-      .populate('project', 'name')
-      .populate('site', 'name')
-      .sort({ createdAt: -1 });
+    const flats = await Flat.findAll({
+      where,
+      include: [
+        { model: Project, attributes: ['name'] },
+        { model: Site, attributes: ['name'] },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
 
     res.json(flats);
   } catch (err) {
@@ -51,7 +55,9 @@ router.post('/', auth, async (req, res) => {
 
     const flat = await Flat.create({
       code: code || generateCode(),
-      project, site, flatLandNo, unit,
+      projectId: project,
+      siteId: site,
+      flatLandNo, unit,
       bedroom: Number(bedroom) || 0,
       bathroom: Number(bathroom) || 0,
       size: numSize,
@@ -65,10 +71,12 @@ router.post('/', auth, async (req, res) => {
       drawing, dining, kitchen, balcony, parking, basement, facing, amenities,
     });
 
-    const populated = await flat.populate([
-      { path: 'project', select: 'name' },
-      { path: 'site', select: 'name' },
-    ]);
+    const populated = await Flat.findByPk(flat.id, {
+      include: [
+        { model: Project, attributes: ['name'] },
+        { model: Site, attributes: ['name'] },
+      ],
+    });
 
     res.status(201).json(populated);
   } catch (err) {
@@ -78,11 +86,14 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const flat = await Flat.findById(req.params.id);
+    const flat = await Flat.findByPk(req.params.id);
     if (!flat) return res.status(404).json({ message: 'Not found' });
 
+    if (req.body.project !== undefined) flat.projectId = req.body.project;
+    if (req.body.site !== undefined) flat.siteId = req.body.site;
+
     const fields = [
-      'project', 'site', 'flatLandNo', 'unit', 'bedroom', 'bathroom', 'size',
+      'flatLandNo', 'unit', 'bedroom', 'bathroom', 'size',
       'price', 'parkingCost', 'utilityCharge', 'customer', 'status',
       'drawing', 'dining', 'kitchen', 'balcony', 'parking', 'basement',
       'facing', 'amenities',
@@ -91,15 +102,16 @@ router.put('/:id', auth, async (req, res) => {
       if (req.body[key] !== undefined) flat[key] = req.body[key];
     });
 
-    // Recompute totals server-side so client can't spoof them
     flat.subtotal = (Number(flat.price) || 0) * (Number(flat.size) || 0);
     flat.grandTotal = flat.subtotal + (Number(flat.parkingCost) || 0) + (Number(flat.utilityCharge) || 0);
 
     await flat.save();
-    const populated = await flat.populate([
-      { path: 'project', select: 'name' },
-      { path: 'site', select: 'name' },
-    ]);
+    const populated = await Flat.findByPk(flat.id, {
+      include: [
+        { model: Project, attributes: ['name'] },
+        { model: Site, attributes: ['name'] },
+      ],
+    });
 
     res.json(populated);
   } catch (err) {
@@ -109,7 +121,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Flat.findByIdAndDelete(req.params.id);
+    const deleted = await Flat.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

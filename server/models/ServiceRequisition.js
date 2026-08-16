@@ -1,41 +1,21 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const requisitionItemSchema = new mongoose.Schema({
-  serviceItem: { type: mongoose.Schema.Types.ObjectId, ref: 'ServiceItem' },
-  boqItem: String,
-  date: String,
-  code: String,
-  name: String,
-  unit: String,
-  qtyDays: { type: Number, default: 0 },
-  rate: { type: Number, default: 0 },
-  details: String,
-  amount: { type: Number, default: 0 },
-}, { _id: false });
+const ServiceRequisition = sequelize.define('ServiceRequisition', {
+  code: { type: DataTypes.STRING, unique: true },
+  date: DataTypes.STRING,
 
-const approvalSchema = new mongoose.Schema({
-  name: String,
-  approved: { type: Boolean, default: false },
-}, { _id: false });
+  projectType: DataTypes.STRING,
+  projectId: DataTypes.INTEGER,
+  titleOfWork: DataTypes.STRING,
+  task: DataTypes.STRING,
+  siteId: DataTypes.INTEGER,
 
-const serviceRequisitionSchema = new mongoose.Schema({
-  code: { type: String, unique: true },
-  date: String,
+  subtotal: { type: DataTypes.FLOAT, defaultValue: 0 },
+  grandTotal: { type: DataTypes.FLOAT, defaultValue: 0 },
 
-  projectType: String,
-  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
-  titleOfWork: String,
-  task: String,
-  site: { type: mongoose.Schema.Types.ObjectId, ref: 'Site' },
-
-  items: [requisitionItemSchema],
-  subtotal: { type: Number, default: 0 },
-  grandTotal: { type: Number, default: 0 },
-
-  attachment: String,
-
-  approvals: [approvalSchema],
-  addedBy: String,
+  attachment: DataTypes.STRING,
+  addedBy: DataTypes.STRING,
 }, { timestamps: true });
 
-module.exports = mongoose.model('ServiceRequisition', serviceRequisitionSchema);
+module.exports = ServiceRequisition;

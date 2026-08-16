@@ -1,9 +1,9 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
-const BillItem = require('../models/BillItem');
+const { BillItem, Category, Brand, Unit } = require('../models/associations');
 
 async function generateCode() {
-  const count = await BillItem.countDocuments();
+  const count = await BillItem.count();
   return `P${String(count + 1).padStart(4, '0')}`;
 }
 
@@ -17,11 +17,14 @@ router.get('/next-code', auth, async (req, res) => {
 
 router.get('/', auth, async (req, res) => {
   try {
-    const items = await BillItem.find()
-      .populate('category', 'name')
-      .populate('brand', 'name')
-      .populate('unit', 'name')
-      .sort({ createdAt: -1 });
+    const items = await BillItem.findAll({
+      include: [
+        { model: Category, attributes: ['name'] },
+        { model: Brand, attributes: ['name'] },
+        { model: Unit, attributes: ['name'] },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
     res.json(items);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -35,10 +38,10 @@ router.post('/', auth, async (req, res) => {
 
     const item = await BillItem.create({
       code: await generateCode(),
-      category: category || null,
-      brand: brand || null,
+      categoryId: category || null,
+      brandId: brand || null,
       name,
-      unit: unit || null,
+      unitId: unit || null,
       purchasePrice: purchasePrice || 0,
       salePrice: salePrice || 0,
       description: description || '',
@@ -52,10 +55,13 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const item = await BillItem.findById(req.params.id);
+    const item = await BillItem.findByPk(req.params.id);
     if (!item) return res.status(404).json({ message: 'Not found' });
 
-    const fields = ['category', 'brand', 'name', 'unit', 'purchasePrice', 'salePrice', 'description'];
+    if (req.body.category !== undefined) item.categoryId = req.body.category;
+    if (req.body.brand !== undefined) item.brandId = req.body.brand;
+    if (req.body.unit !== undefined) item.unitId = req.body.unit;
+    const fields = ['name', 'purchasePrice', 'salePrice', 'description'];
     fields.forEach((key) => {
       if (req.body[key] !== undefined) item[key] = req.body[key];
     });
@@ -69,7 +75,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await BillItem.findByIdAndDelete(req.params.id);
+    const deleted = await BillItem.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

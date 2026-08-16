@@ -1,32 +1,35 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const receiptVoucherSchema = new mongoose.Schema({
-  projectType: String,
-  project: String,
-  titleOfWork: String,
-  task: String,
-  site: String,
+const ReceiptVoucher = sequelize.define('ReceiptVoucher', {
+  projectType: DataTypes.STRING,
+  project: DataTypes.STRING,
+  titleOfWork: DataTypes.STRING,
+  task: DataTypes.STRING,
+  site: DataTypes.STRING,
 
-  date: { type: Date, default: Date.now },
-  voucherNo: String,
+  date: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+  voucherNo: DataTypes.STRING,
 
-  creditAccount: String,   // contact/party (Select Accounts)
-  debitAccount: String,    // Cash/Bank (Payment Method)
-  ifCheque: { type: Boolean, default: false },
-  chequeReceiptNo: String,
+  creditAccount: DataTypes.STRING,
+  debitAccount: DataTypes.STRING,
+  ifCheque: { type: DataTypes.BOOLEAN, defaultValue: false },
+  chequeReceiptNo: DataTypes.STRING,
 
-  amount: Number,
-  comment: String,
-  attachment: { type: String, default: '' },
+  amount: DataTypes.DECIMAL(14, 2),
+  comment: DataTypes.TEXT,
+  attachment: { type: DataTypes.STRING, defaultValue: '' },
 
-  invoiceBill: String,
-  paymentType: String,
-  installment: String,
+  invoiceBill: DataTypes.STRING,
+  paymentType: DataTypes.STRING,
+  installment: DataTypes.STRING,
 
-  addedBy: String,
-  editedBy: String,
-  approvals: [{ name: String, approved: Boolean }],
-  status: { type: String, default: 'pending' },
-}, { timestamps: true });
+  addedBy: DataTypes.STRING,
+  editedBy: DataTypes.STRING,
+  status: { type: DataTypes.STRING, defaultValue: 'pending' },
+}, {
+  tableName: 'receipt_vouchers',
+  timestamps: true,
+});
 
-module.exports = mongoose.model('ReceiptVoucher', receiptVoucherSchema);
+module.exports = ReceiptVoucher;

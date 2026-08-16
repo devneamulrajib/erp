@@ -3,7 +3,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const auth = require('../middleware/auth');
-const Expense = require('../models/Expense');
+const { Op } = require('sequelize');
+const { Expense, ExpenseApproval } = require('../models/associations');
 
 const uploadDir = path.join(__dirname, '..', 'uploads', 'expenses');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -18,7 +19,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 async function generateReference() {
-  const count = await Expense.countDocuments();
+  const count = await Expense.count();
   return `EXP${String(count + 1).padStart(5, '0')}`;
 }
 
@@ -33,17 +34,21 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { project, drAccount, crAccount, from, to } = req.query;
-    const filter = {};
-    if (project) filter.project = project;
-    if (drAccount) filter.drAccount = drAccount;
-    if (crAccount) filter.crAccount = crAccount;
+    const where = {};
+    if (project) where.project = project;
+    if (drAccount) where.drAccount = drAccount;
+    if (crAccount) where.crAccount = crAccount;
     if (from || to) {
-      filter.date = {};
-      if (from) filter.date.$gte = new Date(from);
-      if (to) filter.date.$lte = new Date(to);
+      where.date = {};
+      if (from) where.date[Op.gte] = new Date(from);
+      if (to) where.date[Op.lte] = new Date(to);
     }
 
-    const expenses = await Expense.find(filter).sort({ createdAt: -1 });
+    const expenses = await Expense.findAll({
+      where,
+      include: [{ model: ExpenseApproval }],
+      order: [['createdAt', 'DESC']],
+    });
     res.json(expenses);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -52,7 +57,9 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const expense = await Expense.findById(req.params.id);
+    const expense = await Expense.findByPk(req.params.id, {
+      include: [{ model: ExpenseApproval }],
+    });
     if (!expense) return res.status(404).json({ message: 'Not found' });
     res.json(expense);
   } catch (err) {
@@ -77,7 +84,7 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
       reference: reference || await generateReference(),
       date: date || Date.now(),
       addedBy: req.user?.name || 'Admin',
-      attachment: req.file ? `/uploads/expenses/${req.file.filename}` : undefined,
+      attachment: req.file ? `/uploads/expenses/${req.file.filename}` : '',
     });
 
     res.status(201).json(expense);
@@ -88,7 +95,7 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
 
 router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
   try {
-    const expense = await Expense.findById(req.params.id);
+    const expense = await Expense.findByPk(req.params.id);
     if (!expense) return res.status(404).json({ message: 'Not found' });
 
     const fields = ['project', 'category', 'drAccount', 'crAccount', 'amount', 'reference', 'date', 'status'];
@@ -106,7 +113,7 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Expense.findByIdAndDelete(req.params.id);
+    const deleted = await Expense.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {
@@ -116,19 +123,19 @@ router.delete('/:id', auth, async (req, res) => {
 
 router.post('/:id/duplicate', auth, async (req, res) => {
   try {
-    const original = await Expense.findById(req.params.id);
+    const original = await Expense.findByPk(req.params.id);
     if (!original) return res.status(404).json({ message: 'Not found' });
 
-    const copy = original.toObject();
-    delete copy._id;
+    const copy = original.toJSON();
+    delete copy.id;
     delete copy.createdAt;
     delete copy.updatedAt;
     copy.reference = await generateReference();
     copy.date = Date.now();
     copy.status = 'pending';
-    copy.approvals = [];
 
     const created = await Expense.create(copy);
+    // Note: approvals are intentionally not duplicated (matches original behavior of resetting to [])
     res.status(201).json(created);
   } catch (err) {
     res.status(500).json({ message: err.message });

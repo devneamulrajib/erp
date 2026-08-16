@@ -1,60 +1,34 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const billItemSchema = new mongoose.Schema({
-  item: { type: mongoose.Schema.Types.ObjectId, ref: 'Item' },
-  itemName: String,
-  description: String,
-  unit: String,
-  quantity: { type: Number, default: 0 },
-  rate: { type: Number, default: 0 },
-  amount: { type: Number, default: 0 },
-}, { _id: false });
+const ContractorBill = sequelize.define('ContractorBill', {
+  code: { type: DataTypes.STRING, unique: true },
+  date: DataTypes.STRING,
 
-const paymentSchema = new mongoose.Schema({
-  transactionId: String,
-  paymentMethod: String,
-  isCheque: { type: Boolean, default: false },
-  chequeReceiptNo: String,
-  amount: { type: Number, default: 0 },
-  date: String,
-}, { _id: false });
+  partyId: DataTypes.INTEGER,
+  ledgerId: DataTypes.INTEGER,
 
-const approvalSchema = new mongoose.Schema({
-  name: String,
-  approved: { type: Boolean, default: false },
-}, { _id: false });
+  projectType: DataTypes.STRING,
+  projectId: DataTypes.INTEGER,
+  titleOfWork: DataTypes.STRING,
+  task: DataTypes.STRING,
+  siteId: DataTypes.INTEGER,
+  categoryId: DataTypes.INTEGER,
+  refWoNo: DataTypes.STRING,
 
-const contractorBillSchema = new mongoose.Schema({
-  code: { type: String, unique: true },
-  date: String,
+  attachment: DataTypes.STRING,
 
-  party: { type: mongoose.Schema.Types.ObjectId, ref: 'Party' },
-  ledger: { type: mongoose.Schema.Types.ObjectId, ref: 'ChartOfAccount' },
+  subtotal: { type: DataTypes.FLOAT, defaultValue: 0 },
+  vatIncluded: { type: DataTypes.BOOLEAN, defaultValue: false },
+  vatPercent: { type: DataTypes.FLOAT, defaultValue: 0 },
+  vatAmount: { type: DataTypes.FLOAT, defaultValue: 0 },
+  securityDeposit: { type: DataTypes.FLOAT, defaultValue: 0 },
+  totalQuantity: { type: DataTypes.FLOAT, defaultValue: 0 },
+  grandTotal: { type: DataTypes.FLOAT, defaultValue: 0 },
+  paid: { type: DataTypes.FLOAT, defaultValue: 0 },
+  due: { type: DataTypes.FLOAT, defaultValue: 0 },
 
-  projectType: String,
-  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
-  titleOfWork: String,
-  task: String,
-  site: { type: mongoose.Schema.Types.ObjectId, ref: 'Site' },
-  category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
-  refWoNo: String,
-
-  items: [billItemSchema],
-  attachment: String,
-
-  subtotal: { type: Number, default: 0 },
-  vatIncluded: { type: Boolean, default: false },
-  vatPercent: { type: Number, default: 0 },
-  vatAmount: { type: Number, default: 0 },
-  securityDeposit: { type: Number, default: 0 },
-  totalQuantity: { type: Number, default: 0 },
-  grandTotal: { type: Number, default: 0 },
-  paid: { type: Number, default: 0 },
-  due: { type: Number, default: 0 },
-
-  payments: [paymentSchema],
-  approvals: [approvalSchema],
-  addedBy: String,
+  addedBy: DataTypes.STRING,
 }, { timestamps: true });
 
-module.exports = mongoose.model('ContractorBill', contractorBillSchema);
+module.exports = ContractorBill;

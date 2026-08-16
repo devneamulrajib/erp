@@ -1,13 +1,22 @@
-const mongoose = require('mongoose');
-const projectSchema = new mongoose.Schema({
-  name: String,
-  status: { type: String, default: 'ON TRACK' }, // ON TRACK / DELAYED / DONE
-  percentComplete: { type: Number, default: 0 },
-  budget: { type: Number, default: 0 },
-  budgetUsed: { type: Number, default: 0 },
-  months: { type: Number, default: 0 },
-  members: { type: Number, default: 0 },
-  totalTasks: { type: Number, default: 0 },
-  completedTasks: { type: Number, default: 0 },
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
+
+const Project = sequelize.define('Project', {
+  code: { type: DataTypes.STRING, unique: true },
+  name: { type: DataTypes.STRING, allowNull: false },
+  projectType: DataTypes.STRING,
+  projectManager: DataTypes.STRING,
+  description: DataTypes.TEXT,
+  budget: DataTypes.FLOAT,
+  location: DataTypes.STRING,
+  status: { type: DataTypes.STRING, defaultValue: 'Active' },
+  area: DataTypes.STRING,
+  assignUser: DataTypes.STRING,
+  startDate: DataTypes.STRING,
+  endDate: DataTypes.STRING,
+  totalTask: { type: DataTypes.INTEGER, defaultValue: 0 },
+  completeTask: { type: DataTypes.INTEGER, defaultValue: 0 },
+  sales: { type: DataTypes.FLOAT, defaultValue: 0 },
 }, { timestamps: true });
-module.exports = mongoose.model('Project', projectSchema);
+
+module.exports = Project;

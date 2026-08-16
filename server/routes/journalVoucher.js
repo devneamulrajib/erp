@@ -3,7 +3,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const auth = require('../middleware/auth');
-const JournalVoucher = require('../models/JournalVoucher');
+const { Op } = require('sequelize');
+const { JournalVoucher, JournalVoucherLine, JournalVoucherApproval } = require('../models/associations');
 
 const uploadDir = path.join(__dirname, '..', 'uploads', 'journal-vouchers');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -18,7 +19,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 async function generateVoucherNo() {
-  const count = await JournalVoucher.countDocuments();
+  const count = await JournalVoucher.count();
   return `J${String(100 + count + 1)}`;
 }
 
@@ -32,6 +33,8 @@ function computeTotals(lines) {
   );
 }
 
+const includeAll = [{ model: JournalVoucherLine }, { model: JournalVoucherApproval }];
+
 router.get('/next-code', auth, async (req, res) => {
   try {
     res.json({ code: await generateVoucherNo() });
@@ -43,20 +46,26 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { project, debitAccount, creditAccount, titleOfWork, site, task, from, to } = req.query;
-    const filter = {};
-    if (project) filter.project = project;
-    if (titleOfWork) filter.titleOfWork = titleOfWork;
-    if (site) filter.site = site;
-    if (task) filter.task = task;
+    const where = {};
+    if (project) where.project = project;
+    if (titleOfWork) where.titleOfWork = titleOfWork;
+    if (site) where.site = site;
+    if (task) where.task = task;
     if (from || to) {
-      filter.date = {};
-      if (from) filter.date.$gte = new Date(from);
-      if (to) filter.date.$lte = new Date(to);
+      where.date = {};
+      if (from) where.date[Op.gte] = new Date(from);
+      if (to) where.date[Op.lte] = new Date(to);
     }
-    if (debitAccount) filter['lines'] = { $elemMatch: { account: debitAccount, debit: { $gt: 0 } } };
-    if (creditAccount) filter['lines'] = { ...(filter['lines'] || {}), $elemMatch: { account: creditAccount, credit: { $gt: 0 } } };
 
-    const vouchers = await JournalVoucher.find(filter).sort({ createdAt: -1 });
+    const lineWhere = [];
+    if (debitAccount) lineWhere.push({ account: debitAccount, debit: { [Op.gt]: 0 } });
+    if (creditAccount) lineWhere.push({ account: creditAccount, credit: { [Op.gt]: 0 } });
+
+    const include = lineWhere.length
+      ? [{ model: JournalVoucherLine, where: { [Op.or]: lineWhere } }]
+      : [{ model: JournalVoucherLine }];
+
+    const vouchers = await JournalVoucher.findAll({ where, include, order: [['createdAt', 'DESC']] });
     res.json(vouchers);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -65,7 +74,7 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const voucher = await JournalVoucher.findById(req.params.id);
+    const voucher = await JournalVoucher.findByPk(req.params.id, { include: includeAll });
     if (!voucher) return res.status(404).json({ message: 'Not found' });
     res.json(voucher);
   } catch (err) {
@@ -94,7 +103,6 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
       titleOfWork: body.titleOfWork || '',
       site: body.site || '',
       task: body.task || '',
-      lines,
       totalDebit,
       totalCredit,
       comment: body.comment || '',
@@ -102,7 +110,12 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
       attachment: req.file ? `/uploads/journal-vouchers/${req.file.filename}` : '',
     });
 
-    res.status(201).json(voucher);
+    for (const l of lines) {
+      await JournalVoucherLine.create({ ...l, journalVoucherId: voucher.id });
+    }
+
+    const populated = await JournalVoucher.findByPk(voucher.id, { include: includeAll });
+    res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -110,7 +123,7 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
 
 router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
   try {
-    const voucher = await JournalVoucher.findById(req.params.id);
+    const voucher = await JournalVoucher.findByPk(req.params.id);
     if (!voucher) return res.status(404).json({ message: 'Not found' });
 
     const body = req.body;
@@ -120,7 +133,10 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
       if (Math.abs(totalDebit - totalCredit) > 0.01) {
         return res.status(400).json({ message: `Voucher does not balance: Debit ${totalDebit} vs Credit ${totalCredit}` });
       }
-      voucher.lines = lines;
+      await JournalVoucherLine.destroy({ where: { journalVoucherId: voucher.id } });
+      for (const l of lines) {
+        await JournalVoucherLine.create({ ...l, journalVoucherId: voucher.id });
+      }
       voucher.totalDebit = totalDebit;
       voucher.totalCredit = totalCredit;
     }
@@ -133,7 +149,8 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
     voucher.editedBy = req.user?.name || voucher.editedBy;
 
     await voucher.save();
-    res.json(voucher);
+    const populated = await JournalVoucher.findByPk(voucher.id, { include: includeAll });
+    res.json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -141,7 +158,7 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await JournalVoucher.findByIdAndDelete(req.params.id);
+    const deleted = await JournalVoucher.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {
@@ -151,21 +168,29 @@ router.delete('/:id', auth, async (req, res) => {
 
 router.post('/:id/duplicate', auth, async (req, res) => {
   try {
-    const original = await JournalVoucher.findById(req.params.id);
+    const original = await JournalVoucher.findByPk(req.params.id);
     if (!original) return res.status(404).json({ message: 'Not found' });
+    const originalLines = await JournalVoucherLine.findAll({ where: { journalVoucherId: original.id } });
 
-    const copy = original.toObject();
-    delete copy._id;
+    const copy = original.toJSON();
+    delete copy.id;
     delete copy.createdAt;
     delete copy.updatedAt;
     copy.voucherNo = await generateVoucherNo();
     copy.date = Date.now();
     copy.status = 'pending';
-    copy.approvals = [];
     copy.editedBy = '';
 
     const created = await JournalVoucher.create(copy);
-    res.status(201).json(created);
+    for (const l of originalLines) {
+      const lineCopy = l.toJSON();
+      delete lineCopy.id;
+      delete lineCopy.journalVoucherId;
+      await JournalVoucherLine.create({ ...lineCopy, journalVoucherId: created.id });
+    }
+
+    const populated = await JournalVoucher.findByPk(created.id, { include: includeAll });
+    res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

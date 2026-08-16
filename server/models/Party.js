@@ -1,19 +1,19 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const partySchema = new mongoose.Schema({
-  code: { type: String, unique: true },
-  name: { type: String, required: true },
-  phone: String,
-  address: String,
-  openingBalance: { type: Number, default: 0 },
-  creditLimit: { type: Number, default: 0 },
-  dueDate: String,
-  chartGroup: { type: mongoose.Schema.Types.ObjectId, ref: 'ChartOfGroup' },
+const Party = sequelize.define('Party', {
+  code: { type: DataTypes.STRING, unique: true },
+  name: { type: DataTypes.STRING, allowNull: false },
+  phone: DataTypes.STRING,
+  address: DataTypes.STRING,
+  openingBalance: { type: DataTypes.FLOAT, defaultValue: 0 },
+  creditLimit: { type: DataTypes.FLOAT, defaultValue: 0 },
+  dueDate: DataTypes.STRING,
+  chartGroupId: DataTypes.INTEGER,
   type: {
-    type: String,
-    enum: ['contractor', 'supplier', 'labour', 'worker', 'other'],
-    default: 'contractor',
+    type: DataTypes.ENUM('contractor', 'supplier', 'labour', 'worker', 'other'),
+    defaultValue: 'contractor',
   },
 }, { timestamps: true });
 
-module.exports = mongoose.model('Party', partySchema);
+module.exports = Party;

@@ -1,6 +1,9 @@
 const router = require('express').Router();
+const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
-const Quote = require('../models/Quote');
+const {
+  Quote, QuoteItem, Customer, Project, Site,
+} = require('../models/associations');
 
 function generateCode() {
   return 'Quo' + Math.floor(1000000 + Math.random() * 9000000);
@@ -10,7 +13,15 @@ function cleanItems(items) {
   return (Array.isArray(items) ? items : []).map((it) => {
     const quantity = Number(it.quantity) || 0;
     const rate = Number(it.rate) || 0;
-    return { ...it, quantity, rate, amount: quantity * rate };
+    return {
+      itemName: it.itemName,
+      unit: it.unit,
+      quantity,
+      rate,
+      details: it.details,
+      image: it.image,
+      amount: quantity * rate,
+    };
   });
 }
 
@@ -30,6 +41,17 @@ function computeTotals(body, items) {
   return { subtotal, vatPercent, vatAmount, deliveryCharge, discountPercent, discountAmount, grandTotal };
 }
 
+const listInclude = [
+  { model: Customer, as: 'customer', attributes: ['name'] },
+  { model: Project, as: 'project', attributes: ['name'] },
+];
+
+const detailInclude = [
+  ...listInclude,
+  { model: Site, as: 'site', attributes: ['name'] },
+  { model: QuoteItem, as: 'items' },
+];
+
 router.get('/next-code', auth, async (req, res) => {
   res.json({ code: generateCode() });
 });
@@ -37,20 +59,16 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { from, to, customer, project } = req.query;
-    const filter = {};
-    if (customer) filter.customer = customer;
-    if (project) filter.project = project;
+    const where = {};
+    if (customer) where.customerId = customer;
+    if (project) where.projectId = project;
     if (from || to) {
-      filter.date = {};
-      if (from) filter.date.$gte = from;
-      if (to) filter.date.$lte = to;
+      where.date = {};
+      if (from) where.date[Op.gte] = from;
+      if (to) where.date[Op.lte] = to;
     }
 
-    const quotes = await Quote.find(filter)
-      .populate('customer', 'name')
-      .populate('project', 'name')
-      .sort({ createdAt: -1 });
-
+    const quotes = await Quote.findAll({ where, include: listInclude, order: [['createdAt', 'DESC']] });
     res.json(quotes);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -59,10 +77,7 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const quote = await Quote.findById(req.params.id)
-      .populate('customer', 'name')
-      .populate('project', 'name')
-      .populate('site', 'name');
+    const quote = await Quote.findByPk(req.params.id, { include: detailInclude });
     if (!quote) return res.status(404).json({ message: 'Not found' });
     res.json(quote);
   } catch (err) {
@@ -79,18 +94,24 @@ router.post('/', auth, async (req, res) => {
     const totals = computeTotals(req.body, items);
 
     const quote = await Quote.create({
-      ...req.body,
       code: req.body.code || generateCode(),
-      items,
+      date: req.body.date,
+      customerId: customer,
+      projectType: req.body.projectType,
+      projectId: req.body.project || null,
+      siteId: req.body.site || null,
+      attachment: req.body.attachment,
+      contentBody: req.body.contentBody,
+      contentFooter: req.body.contentFooter,
       ...totals,
       addedBy: req.user?.name || 'Admin',
     });
 
-    const populated = await quote.populate([
-      { path: 'customer', select: 'name' },
-      { path: 'project', select: 'name' },
-    ]);
+    if (items.length) {
+      await QuoteItem.bulkCreate(items.map((it) => ({ ...it, quoteId: quote.id })));
+    }
 
+    const populated = await Quote.findByPk(quote.id, { include: listInclude });
     res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -99,26 +120,32 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const quote = await Quote.findById(req.params.id);
+    const quote = await Quote.findByPk(req.params.id, { include: [{ model: QuoteItem, as: 'items' }] });
     if (!quote) return res.status(404).json({ message: 'Not found' });
 
-    const fields = ['date', 'customer', 'projectType', 'project', 'site', 'attachment', 'contentBody', 'contentFooter', 'vatPercent', 'deliveryCharge', 'discountPercent'];
+    const fkMap = { customer: 'customerId', project: 'projectId', site: 'siteId' };
+    const fields = ['date', 'projectType', 'attachment', 'contentBody', 'contentFooter', 'vatPercent', 'deliveryCharge', 'discountPercent'];
     fields.forEach((key) => {
       if (req.body[key] !== undefined) quote[key] = req.body[key];
     });
+    Object.entries(fkMap).forEach(([bodyKey, col]) => {
+      if (req.body[bodyKey] !== undefined) quote[col] = req.body[bodyKey];
+    });
 
-    const items = req.body.items !== undefined ? cleanItems(req.body.items) : quote.items;
-    if (req.body.items !== undefined) quote.items = items;
+    let items = (quote.items || []).map((it) => it.toJSON());
+    if (req.body.items !== undefined) {
+      items = cleanItems(req.body.items);
+      await QuoteItem.destroy({ where: { quoteId: quote.id } });
+      if (items.length) {
+        await QuoteItem.bulkCreate(items.map((it) => ({ ...it, quoteId: quote.id })));
+      }
+    }
 
-    const totals = computeTotals({ ...quote.toObject(), ...req.body }, items);
+    const totals = computeTotals({ ...quote.toJSON(), ...req.body }, items);
     Object.assign(quote, totals);
 
     await quote.save();
-    const populated = await quote.populate([
-      { path: 'customer', select: 'name' },
-      { path: 'project', select: 'name' },
-    ]);
-
+    const populated = await Quote.findByPk(quote.id, { include: listInclude });
     res.json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -127,7 +154,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Quote.findByIdAndDelete(req.params.id);
+    const deleted = await Quote.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

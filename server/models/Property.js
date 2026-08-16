@@ -1,7 +1,10 @@
-const mongoose = require('mongoose');
-const propertySchema = new mongoose.Schema({
-  name: String,
-  project: String,
-  sold: { type: Boolean, default: false },
-});
-module.exports = mongoose.model('Property', propertySchema);
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
+
+const Property = sequelize.define('Property', {
+  name: DataTypes.STRING,
+  project: DataTypes.STRING,
+  sold: { type: DataTypes.BOOLEAN, defaultValue: false },
+}, { timestamps: false });
+
+module.exports = Property;

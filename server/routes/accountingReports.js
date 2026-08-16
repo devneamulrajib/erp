@@ -1,39 +1,43 @@
-const mongoose = require('mongoose');
 const router = require('express').Router();
+const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
-const Voucher = require('../models/Voucher');
-const ChartOfAccount = require('../models/ChartOfAccount');
-const ChartOfGroup = require('../models/ChartOfGroup');
+const {
+  Voucher, VoucherEntry, ChartOfAccount, ChartOfGroup, Project, Party,
+} = require('../models/associations');
 
-// Day Book: every voucher entry (debit or credit line) across all vouchers,
-// flattened to one row per entry, for a date range.
+const voucherIncludes = [
+  { model: VoucherEntry, as: 'entries', include: [{ model: ChartOfAccount, as: 'account', attributes: ['id', 'name', 'code'] }] },
+  { model: Project, as: 'project', attributes: ['id', 'name'] },
+  { model: Party, as: 'contact', attributes: ['id', 'name'] },
+];
+
+// Day Book
 router.get('/day-book', auth, async (req, res) => {
   try {
-    const {
-      from, to, project, voucherType,
-    } = req.query;
-    const filter = {};
-    if (project) filter.project = project;
-    if (voucherType) filter.type = voucherType;
+    const { from, to, project, voucherType } = req.query;
+    const where = {};
+    if (project) where.projectId = project;
+    if (voucherType) where.type = voucherType;
 
     const start = from ? new Date(from) : new Date(new Date().setHours(0, 0, 0, 0));
     const end = to ? new Date(to) : new Date();
     end.setHours(23, 59, 59, 999);
-    filter.date = { $gte: start, $lte: end };
+    where.date = { [Op.gte]: start, [Op.lte]: end };
 
-    const vouchers = await Voucher.find(filter)
-      .populate('entries.account', 'name code')
-      .populate('project', 'name')
-      .sort({ date: 1, createdAt: 1 });
+    const vouchers = await Voucher.findAll({
+      where,
+      include: voucherIncludes,
+      order: [['date', 'ASC'], ['createdAt', 'ASC']],
+    });
 
     const rows = [];
     let runningDebit = 0;
     let runningCredit = 0;
 
     vouchers.forEach((v) => {
-      v.entries.forEach((e) => {
-        runningDebit += e.debit || 0;
-        runningCredit += e.credit || 0;
+      (v.entries || []).forEach((e) => {
+        runningDebit += Number(e.debit) || 0;
+        runningCredit += Number(e.credit) || 0;
         rows.push({
           date: v.date,
           voucherNo: v.voucherNo,
@@ -41,73 +45,67 @@ router.get('/day-book', auth, async (req, res) => {
           project: v.project?.name || '-',
           description: e.account?.name || '-',
           accountCode: e.account?.code || '-',
-          debit: e.debit || 0,
-          credit: e.credit || 0,
+          debit: Number(e.debit) || 0,
+          credit: Number(e.credit) || 0,
           note: e.note || v.narration || '',
         });
       });
     });
 
-    res.json({
-      rows,
-      totals: { debit: runningDebit, credit: runningCredit },
-    });
+    res.json({ rows, totals: { debit: runningDebit, credit: runningCredit } });
   } catch (err) {
     console.error('GET /api/accounting-reports/day-book failed:', err);
     res.status(500).json({ message: err.message });
   }
 });
 
-// Generic contact ledger summary — powers Payable Report (contactType=Supplier)
-// and Receivable Report (contactType=Customer) with the same logic.
+// Contact ledger summary (Payable / Receivable reports)
 router.get('/contact-ledger-summary', auth, async (req, res) => {
   try {
-    const {
-      contactType = 'Supplier', contactId, project, from, to,
-    } = req.query;
+    const { contactType = 'Supplier', contactId, project, from, to } = req.query;
 
     const start = from ? new Date(from) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     const end = to ? new Date(to) : new Date();
     end.setHours(23, 59, 59, 999);
 
-    const accountFilter = { contactType };
-    if (contactId) accountFilter._id = contactId;
-    const accounts = await ChartOfAccount.find(accountFilter).sort({ name: 1 });
+    const accountWhere = { contactType };
+    if (contactId) accountWhere.id = contactId;
+    const accounts = await ChartOfAccount.findAll({ where: accountWhere, order: [['name', 'ASC']] });
 
     if (!accounts.length) {
       return res.json({ rows: [], totals: { opening: 0, debit: 0, credit: 0, balance: 0 } });
     }
-    const accountIds = accounts.map((a) => a._id);
+    const accountIds = accounts.map((a) => a.id);
 
-    const voucherFilter = { 'entries.account': { $in: accountIds } };
-    if (project) voucherFilter.project = project;
+    const entryWhere = { accountId: { [Op.in]: accountIds } };
+    const voucherWhere = {};
+    if (project) voucherWhere.projectId = project;
 
-    const agg = await Voucher.aggregate([
-      { $match: voucherFilter },
-      { $unwind: '$entries' },
-      { $match: { 'entries.account': { $in: accountIds } } },
-      {
-        $group: {
-          _id: '$entries.account',
-          openingDebit: { $sum: { $cond: [{ $lt: ['$date', start] }, '$entries.debit', 0] } },
-          openingCredit: { $sum: { $cond: [{ $lt: ['$date', start] }, '$entries.credit', 0] } },
-          periodDebit: { $sum: { $cond: [{ $and: [{ $gte: ['$date', start] }, { $lte: ['$date', end] }] }, '$entries.debit', 0] } },
-          periodCredit: { $sum: { $cond: [{ $and: [{ $gte: ['$date', start] }, { $lte: ['$date', end] }] }, '$entries.credit', 0] } },
-        },
-      },
-    ]);
+    const entries = await VoucherEntry.findAll({
+      where: entryWhere,
+      include: [{ model: Voucher, attributes: ['id', 'date', 'projectId'], where: voucherWhere }],
+    });
 
     const aggMap = {};
-    agg.forEach((a) => { aggMap[a._id.toString()] = a; });
+    entries.forEach((e) => {
+      const accId = e.accountId;
+      if (!aggMap[accId]) aggMap[accId] = { openingDebit: 0, openingCredit: 0, periodDebit: 0, periodCredit: 0 };
+      const vDate = new Date(e.Voucher.date);
+      if (vDate < start) {
+        aggMap[accId].openingDebit += Number(e.debit) || 0;
+        aggMap[accId].openingCredit += Number(e.credit) || 0;
+      } else if (vDate >= start && vDate <= end) {
+        aggMap[accId].periodDebit += Number(e.debit) || 0;
+        aggMap[accId].periodCredit += Number(e.credit) || 0;
+      }
+    });
 
     const rows = accounts.map((acc) => {
-      const a = aggMap[acc._id.toString()] || {
-        openingDebit: 0, openingCredit: 0, periodDebit: 0, periodCredit: 0,
-      };
-      const openingBalance = (acc.openingBalance || 0) + (a.openingCredit - a.openingDebit);
+      const a = aggMap[acc.id] || { openingDebit: 0, openingCredit: 0, periodDebit: 0, periodCredit: 0 };
+      const openingBalance = (Number(acc.openingBalance) || 0) + (a.openingCredit - a.openingDebit);
       const balance = openingBalance + a.periodCredit - a.periodDebit;
       return {
-        _id: acc._id,
+        id: acc.id,
         name: acc.name,
         code: acc.code,
         openingBalance,
@@ -120,7 +118,7 @@ router.get('/contact-ledger-summary', auth, async (req, res) => {
     const totals = rows.reduce((t, r) => ({
       opening: t.opening + r.openingBalance,
       debit: t.debit + r.debit,
-      credit: t.debit + r.credit,
+      credit: t.credit + r.credit,
       balance: t.balance + r.balance,
     }), { opening: 0, debit: 0, credit: 0, balance: 0 });
 
@@ -131,8 +129,7 @@ router.get('/contact-ledger-summary', auth, async (req, res) => {
   }
 });
 
-// Expense Report: every voucher entry whose account belongs to a
-// ChartOfGroup with section === 'Expense', for a date range.
+// Expense Report
 router.get('/expense-report', auth, async (req, res) => {
   try {
     const { from, to, project } = req.query;
@@ -140,24 +137,26 @@ router.get('/expense-report', auth, async (req, res) => {
     const end = to ? new Date(to) : new Date();
     end.setHours(23, 59, 59, 999);
 
-    const expenseGroups = await ChartOfGroup.find({ section: 'Expense' }).select('_id');
-    const groupIds = expenseGroups.map((g) => g._id);
-    const expenseAccounts = await ChartOfAccount.find({ chartOfGroup: { $in: groupIds } }).select('_id');
-    const accountIds = expenseAccounts.map((a) => a._id);
+    const expenseGroups = await ChartOfGroup.findAll({ where: { section: 'Expense' }, attributes: ['id'] });
+    const groupIds = expenseGroups.map((g) => g.id);
+    const expenseAccounts = await ChartOfAccount.findAll({ where: { chartOfGroupId: { [Op.in]: groupIds } }, attributes: ['id'] });
+    const accountIds = expenseAccounts.map((a) => a.id);
 
-    const filter = { date: { $gte: start, $lte: end } };
-    if (project) filter.project = project;
+    const where = { date: { [Op.gte]: start, [Op.lte]: end } };
+    if (project) where.projectId = project;
 
-    const vouchers = await Voucher.find(filter)
-      .populate('entries.account', 'name')
-      .sort({ date: 1, createdAt: 1 });
+    const vouchers = await Voucher.findAll({
+      where,
+      include: [{ model: VoucherEntry, as: 'entries', include: [{ model: ChartOfAccount, as: 'account', attributes: ['id', 'name'] }] }],
+      order: [['date', 'ASC'], ['createdAt', 'ASC']],
+    });
 
     const rows = [];
     let total = 0;
     vouchers.forEach((v) => {
-      v.entries.forEach((e) => {
-        if (!e.account || !accountIds.some((id) => id.equals(e.account._id))) return;
-        const amount = e.debit || 0;
+      (v.entries || []).forEach((e) => {
+        if (!e.account || !accountIds.includes(e.account.id)) return;
+        const amount = Number(e.debit) || 0;
         if (!amount) return;
         total += amount;
         rows.push({
@@ -177,50 +176,42 @@ router.get('/expense-report', auth, async (req, res) => {
   }
 });
 
-// Receive Payment Statement: full ledger for ONE selected ChartOfAccount,
-// with running balance, opening balance (before `from`), and closing balance.
+// Receive Payment Statement — full ledger for ONE ChartOfAccount
 router.get('/receive-payment-statement', auth, async (req, res) => {
   try {
-    const {
-      account, from, to, project, voucherType, exceptContra,
-    } = req.query;
-
-    if (!account) {
-      return res.status(400).json({ message: 'account is required' });
-    }
+    const { account, from, to, project, voucherType, exceptContra } = req.query;
+    if (!account) return res.status(400).json({ message: 'account is required' });
 
     const start = from ? new Date(from) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     const end = to ? new Date(to) : new Date();
     end.setHours(23, 59, 59, 999);
 
-    const baseFilter = { 'entries.account': account };
-    if (project) baseFilter.project = project;
-    if (voucherType) baseFilter.type = voucherType;
-    if (exceptContra === 'true') {
-      baseFilter.type = { ...(voucherType ? { $eq: voucherType } : {}), $ne: 'Contra' };
-    }
-
-    const accountObjId = new mongoose.Types.ObjectId(account);
+    const voucherWhere = {};
+    if (project) voucherWhere.projectId = project;
+    if (voucherType) voucherWhere.type = voucherType;
+    if (exceptContra === 'true') voucherWhere.type = { ...(voucherType ? { [Op.eq]: voucherType } : {}), [Op.ne]: 'Contra' };
 
     // Opening balance: everything before `start`
-    const openingAgg = await Voucher.aggregate([
-      { $match: { ...baseFilter, date: { $lt: start } } },
-      { $unwind: '$entries' },
-      { $match: { 'entries.account': accountObjId } },
-      { $group: { _id: null, debit: { $sum: '$entries.debit' }, credit: { $sum: '$entries.credit' } } },
-    ]);
-    const openingDebit = openingAgg[0]?.debit || 0;
-    const openingCredit = openingAgg[0]?.credit || 0;
+    const openingEntries = await VoucherEntry.findAll({
+      where: { accountId: account },
+      include: [{ model: Voucher, where: { ...voucherWhere, date: { [Op.lt]: start } }, attributes: [] }],
+    });
+    const openingDebit = openingEntries.reduce((s, e) => s + (Number(e.debit) || 0), 0);
+    const openingCredit = openingEntries.reduce((s, e) => s + (Number(e.credit) || 0), 0);
 
-    const acc = await ChartOfAccount.findById(account);
-    const openingBalance = (acc?.openingBalance || 0) + openingCredit - openingDebit;
+    const acc = await ChartOfAccount.findByPk(account);
+    const openingBalance = (Number(acc?.openingBalance) || 0) + openingCredit - openingDebit;
 
     // Period rows
-    const vouchers = await Voucher.find({ ...baseFilter, date: { $gte: start, $lte: end } })
-      .populate('entries.account', 'name')
-      .populate('project', 'name')
-      .populate('contact', 'name')
-      .sort({ date: 1, createdAt: 1 });
+    const vouchers = await Voucher.findAll({
+      where: { ...voucherWhere, date: { [Op.gte]: start, [Op.lte]: end } },
+      include: [
+        { model: VoucherEntry, as: 'entries', where: { accountId: account }, include: [{ model: ChartOfAccount, as: 'account', attributes: ['id', 'name'] }] },
+        { model: Project, as: 'project', attributes: ['id', 'name'] },
+        { model: Party, as: 'contact', attributes: ['id', 'name'] },
+      ],
+      order: [['date', 'ASC'], ['createdAt', 'ASC']],
+    });
 
     const rows = [];
     let periodDebit = 0;
@@ -228,19 +219,18 @@ router.get('/receive-payment-statement', auth, async (req, res) => {
     let running = openingBalance;
 
     vouchers.forEach((v) => {
-      v.entries.forEach((e) => {
-        if (!e.account || e.account._id.toString() !== account) return;
-        periodDebit += e.debit || 0;
-        periodCredit += e.credit || 0;
-        running += (e.credit || 0) - (e.debit || 0);
+      (v.entries || []).forEach((e) => {
+        periodDebit += Number(e.debit) || 0;
+        periodCredit += Number(e.credit) || 0;
+        running += (Number(e.credit) || 0) - (Number(e.debit) || 0);
         rows.push({
           date: v.date,
           project: v.project?.name || '-',
           description: v.contact?.name || v.narration || v.type,
           voucherLabel: `${v.type}-${v.voucherNo}`,
-          voucherId: v._id,
-          debit: e.debit || 0,
-          credit: e.credit || 0,
+          voucherId: v.id,
+          debit: Number(e.debit) || 0,
+          credit: Number(e.credit) || 0,
           balance: running,
           note: e.note || v.narration || '',
         });
@@ -251,11 +241,7 @@ router.get('/receive-payment-statement', auth, async (req, res) => {
       rows,
       opening: { debit: openingDebit, credit: openingCredit, balance: openingBalance },
       current: { debit: periodDebit, credit: periodCredit },
-      closing: {
-        debit: openingDebit + periodDebit,
-        credit: openingCredit + periodCredit,
-        balance: running,
-      },
+      closing: { debit: openingDebit + periodDebit, credit: openingCredit + periodCredit, balance: running },
     });
   } catch (err) {
     console.error('GET /api/accounting-reports/receive-payment-statement failed:', err);

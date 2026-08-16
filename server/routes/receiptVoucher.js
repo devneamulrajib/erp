@@ -3,7 +3,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const auth = require('../middleware/auth');
-const ReceiptVoucher = require('../models/ReceiptVoucher');
+const { Op } = require('sequelize');
+const { ReceiptVoucher, ReceiptVoucherApproval } = require('../models/associations');
 
 const uploadDir = path.join(__dirname, '..', 'uploads', 'receipt-vouchers');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -18,7 +19,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 async function generateVoucherNo() {
-  const count = await ReceiptVoucher.countDocuments();
+  const count = await ReceiptVoucher.count();
   return `R${String(count + 1).padStart(5, '0')}`;
 }
 
@@ -33,20 +34,24 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { project, creditAccount, debitAccount, titleOfWork, site, task, from, to } = req.query;
-    const filter = {};
-    if (project) filter.project = project;
-    if (creditAccount) filter.creditAccount = creditAccount;
-    if (debitAccount) filter.debitAccount = debitAccount;
-    if (titleOfWork) filter.titleOfWork = titleOfWork;
-    if (site) filter.site = site;
-    if (task) filter.task = task;
+    const where = {};
+    if (project) where.project = project;
+    if (creditAccount) where.creditAccount = creditAccount;
+    if (debitAccount) where.debitAccount = debitAccount;
+    if (titleOfWork) where.titleOfWork = titleOfWork;
+    if (site) where.site = site;
+    if (task) where.task = task;
     if (from || to) {
-      filter.date = {};
-      if (from) filter.date.$gte = new Date(from);
-      if (to) filter.date.$lte = new Date(to);
+      where.date = {};
+      if (from) where.date[Op.gte] = new Date(from);
+      if (to) where.date[Op.lte] = new Date(to);
     }
 
-    const vouchers = await ReceiptVoucher.find(filter).sort({ createdAt: -1 });
+    const vouchers = await ReceiptVoucher.findAll({
+      where,
+      include: [{ model: ReceiptVoucherApproval, as: 'approvals' }],
+      order: [['createdAt', 'DESC']],
+    });
     res.json(vouchers);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -55,7 +60,9 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const voucher = await ReceiptVoucher.findById(req.params.id);
+    const voucher = await ReceiptVoucher.findByPk(req.params.id, {
+      include: [{ model: ReceiptVoucherApproval, as: 'approvals' }],
+    });
     if (!voucher) return res.status(404).json({ message: 'Not found' });
     res.json(voucher);
   } catch (err) {
@@ -104,7 +111,7 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
 
 router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
   try {
-    const voucher = await ReceiptVoucher.findById(req.params.id);
+    const voucher = await ReceiptVoucher.findByPk(req.params.id);
     if (!voucher) return res.status(404).json({ message: 'Not found' });
 
     const fields = [
@@ -130,7 +137,7 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await ReceiptVoucher.findByIdAndDelete(req.params.id);
+    const deleted = await ReceiptVoucher.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {
@@ -140,17 +147,16 @@ router.delete('/:id', auth, async (req, res) => {
 
 router.post('/:id/duplicate', auth, async (req, res) => {
   try {
-    const original = await ReceiptVoucher.findById(req.params.id);
+    const original = await ReceiptVoucher.findByPk(req.params.id);
     if (!original) return res.status(404).json({ message: 'Not found' });
 
-    const copy = original.toObject();
-    delete copy._id;
+    const copy = original.toJSON();
+    delete copy.id;
     delete copy.createdAt;
     delete copy.updatedAt;
     copy.voucherNo = await generateVoucherNo();
     copy.date = Date.now();
     copy.status = 'pending';
-    copy.approvals = [];
     copy.editedBy = '';
 
     const created = await ReceiptVoucher.create(copy);

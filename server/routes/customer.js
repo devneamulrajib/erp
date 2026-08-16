@@ -1,6 +1,8 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
+const { Op } = require('sequelize');
 const Customer = require('../models/Customer');
+const CustomerNominee = require('../models/CustomerNominee');
 
 function generateCode() {
   return 'CUS' + Math.floor(1000000 + Math.random() * 9000000);
@@ -13,15 +15,19 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { search } = req.query;
-    const filter = {};
+    const where = {};
     if (search) {
-      filter.$or = [
-        { name: new RegExp(search, 'i') },
-        { mobile: new RegExp(search, 'i') },
-        { code: new RegExp(search, 'i') },
+      where[Op.or] = [
+        { name: { [Op.like]: `%${search}%` } },
+        { mobile: { [Op.like]: `%${search}%` } },
+        { code: { [Op.like]: `%${search}%` } },
       ];
     }
-    const customers = await Customer.find(filter).sort({ createdAt: -1 });
+    const customers = await Customer.findAll({
+      where,
+      include: [{ model: CustomerNominee }],
+      order: [['createdAt', 'DESC']],
+    });
     res.json(customers);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -30,7 +36,9 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id);
+    const customer = await Customer.findByPk(req.params.id, {
+      include: [{ model: CustomerNominee }],
+    });
     if (!customer) return res.status(404).json({ message: 'Not found' });
     res.json(customer);
   } catch (err) {
@@ -54,14 +62,21 @@ router.post('/', auth, async (req, res) => {
       code: code || generateCode(),
       name, mobile, email, nid, address, buyerReference,
       creditLimit: Number(creditLimit) || 0,
-      dueDate: dueDate || undefined,
+      dueDate: dueDate || null,
       openingBalance: Number(openingBalance) || 0,
-      image, chartOfGroup,
+      image,
+      chartOfGroupId: chartOfGroup || null,
       createUser: !!createUser,
-      nominees: Array.isArray(nominees) ? nominees.filter((n) => n.name) : [],
     });
 
-    res.status(201).json(customer);
+    if (Array.isArray(nominees)) {
+      for (const n of nominees.filter((n) => n.name)) {
+        await CustomerNominee.create({ ...n, customerId: customer.id });
+      }
+    }
+
+    const populated = await Customer.findByPk(customer.id, { include: [{ model: CustomerNominee }] });
+    res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -69,20 +84,28 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id);
+    const customer = await Customer.findByPk(req.params.id);
     if (!customer) return res.status(404).json({ message: 'Not found' });
 
     const fields = [
       'name', 'mobile', 'email', 'nid', 'address', 'buyerReference',
-      'creditLimit', 'dueDate', 'openingBalance', 'image', 'chartOfGroup',
-      'createUser', 'nominees',
+      'creditLimit', 'dueDate', 'openingBalance', 'image', 'createUser',
     ];
     fields.forEach((key) => {
       if (req.body[key] !== undefined) customer[key] = req.body[key];
     });
+    if (req.body.chartOfGroup !== undefined) customer.chartOfGroupId = req.body.chartOfGroup;
+
+    if (req.body.nominees !== undefined) {
+      await CustomerNominee.destroy({ where: { customerId: customer.id } });
+      for (const n of req.body.nominees.filter((n) => n.name)) {
+        await CustomerNominee.create({ ...n, customerId: customer.id });
+      }
+    }
 
     await customer.save();
-    res.json(customer);
+    const populated = await Customer.findByPk(customer.id, { include: [{ model: CustomerNominee }] });
+    res.json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -90,7 +113,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Customer.findByIdAndDelete(req.params.id);
+    const deleted = await Customer.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

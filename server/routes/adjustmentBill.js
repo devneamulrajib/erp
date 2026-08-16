@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
-const AdjustmentBill = require('../models/AdjustmentBill');
+const { Op } = require('sequelize');
+const { AdjustmentBill, AdjustmentBillItem, AdjustmentBillPayment } = require('../models/associations');
 
 function generateCode() {
   return 'Bill' + Math.floor(1000000 + Math.random() * 9000000);
@@ -48,19 +49,23 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { from, to, customer, project } = req.query;
-    const filter = {};
-    if (customer) filter.customer = customer;
-    if (project) filter.project = project;
+    const where = {};
+    if (customer) where.customerId = customer;
+    if (project) where.projectId = project;
     if (from || to) {
-      filter.date = {};
-      if (from) filter.date.$gte = from;
-      if (to) filter.date.$lte = to;
+      where.date = {};
+      if (from) where.date[Op.gte] = from;
+      if (to) where.date[Op.lte] = to;
     }
 
-    const bills = await AdjustmentBill.find(filter)
-      .populate('customer', 'name')
-      .populate('project', 'name')
-      .sort({ createdAt: -1 });
+    const bills = await AdjustmentBill.findAll({
+      where,
+      include: [
+        { model: AdjustmentBillItem },
+        { model: AdjustmentBillPayment },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
 
     res.json(bills);
   } catch (err) {
@@ -70,11 +75,12 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const bill = await AdjustmentBill.findById(req.params.id)
-      .populate('customer', 'name')
-      .populate('ledger', 'name code')
-      .populate('project', 'name')
-      .populate('site', 'name');
+    const bill = await AdjustmentBill.findByPk(req.params.id, {
+      include: [
+        { model: AdjustmentBillItem },
+        { model: AdjustmentBillPayment },
+      ],
+    });
     if (!bill) return res.status(404).json({ message: 'Not found' });
     res.json(bill);
   } catch (err) {
@@ -92,17 +98,35 @@ router.post('/', auth, async (req, res) => {
     const totals = computeTotals(req.body, proposedItems, adjustmentItems);
 
     const bill = await AdjustmentBill.create({
-      ...req.body,
       code: req.body.code || generateCode(),
-      proposedItems, adjustmentItems,
+      date: req.body.date,
+      customerId: req.body.customer,
+      ledgerId: req.body.ledger,
+      projectType: req.body.projectType,
+      projectId: req.body.project,
+      siteId: req.body.site,
+      refWoNo: req.body.refWoNo,
+      contentBody: req.body.contentBody,
+      attachment: req.body.attachment,
       ...totals,
       addedBy: req.user?.name || 'Admin',
     });
 
-    const populated = await bill.populate([
-      { path: 'customer', select: 'name' },
-      { path: 'project', select: 'name' },
-    ]);
+    for (const item of proposedItems) {
+      await AdjustmentBillItem.create({ ...item, itemType: 'proposed', adjustmentBillId: bill.id });
+    }
+    for (const item of adjustmentItems) {
+      await AdjustmentBillItem.create({ ...item, itemType: 'adjustment', adjustmentBillId: bill.id });
+    }
+    if (Array.isArray(req.body.payments)) {
+      for (const p of req.body.payments) {
+        await AdjustmentBillPayment.create({ ...p, adjustmentBillId: bill.id });
+      }
+    }
+
+    const populated = await AdjustmentBill.findByPk(bill.id, {
+      include: [{ model: AdjustmentBillItem }, { model: AdjustmentBillPayment }],
+    });
 
     res.status(201).json(populated);
   } catch (err) {
@@ -112,31 +136,66 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const bill = await AdjustmentBill.findById(req.params.id);
+    const bill = await AdjustmentBill.findByPk(req.params.id);
     if (!bill) return res.status(404).json({ message: 'Not found' });
 
-    const fields = [
-      'date', 'customer', 'ledger', 'projectType', 'project', 'site',
-      'refWoNo', 'contentBody', 'attachment', 'payments',
-      'vatIncluded', 'vatPercent', 'aitIncluded', 'aitPercent', 'interestRate',
-    ];
-    fields.forEach((key) => {
-      if (req.body[key] !== undefined) bill[key] = req.body[key];
+    const directFields = {
+      date: req.body.date,
+      customerId: req.body.customer,
+      ledgerId: req.body.ledger,
+      projectType: req.body.projectType,
+      projectId: req.body.project,
+      siteId: req.body.site,
+      refWoNo: req.body.refWoNo,
+      contentBody: req.body.contentBody,
+      attachment: req.body.attachment,
+      vatIncluded: req.body.vatIncluded,
+      vatPercent: req.body.vatPercent,
+      aitIncluded: req.body.aitIncluded,
+      aitPercent: req.body.aitPercent,
+      interestRate: req.body.interestRate,
+    };
+    Object.keys(directFields).forEach((key) => {
+      if (directFields[key] !== undefined) bill[key] = directFields[key];
     });
 
-    const proposedItems = req.body.proposedItems !== undefined ? cleanItems(req.body.proposedItems) : bill.proposedItems;
-    const adjustmentItems = req.body.adjustmentItems !== undefined ? cleanItems(req.body.adjustmentItems) : bill.adjustmentItems;
-    if (req.body.proposedItems !== undefined) bill.proposedItems = proposedItems;
-    if (req.body.adjustmentItems !== undefined) bill.adjustmentItems = adjustmentItems;
+    let proposedItems, adjustmentItems;
 
-    const totals = computeTotals({ ...bill.toObject(), ...req.body }, proposedItems, adjustmentItems);
+    if (req.body.proposedItems !== undefined) {
+      proposedItems = cleanItems(req.body.proposedItems);
+      await AdjustmentBillItem.destroy({ where: { adjustmentBillId: bill.id, itemType: 'proposed' } });
+      for (const item of proposedItems) {
+        await AdjustmentBillItem.create({ ...item, itemType: 'proposed', adjustmentBillId: bill.id });
+      }
+    } else {
+      proposedItems = await AdjustmentBillItem.findAll({ where: { adjustmentBillId: bill.id, itemType: 'proposed' } });
+    }
+
+    if (req.body.adjustmentItems !== undefined) {
+      adjustmentItems = cleanItems(req.body.adjustmentItems);
+      await AdjustmentBillItem.destroy({ where: { adjustmentBillId: bill.id, itemType: 'adjustment' } });
+      for (const item of adjustmentItems) {
+        await AdjustmentBillItem.create({ ...item, itemType: 'adjustment', adjustmentBillId: bill.id });
+      }
+    } else {
+      adjustmentItems = await AdjustmentBillItem.findAll({ where: { adjustmentBillId: bill.id, itemType: 'adjustment' } });
+    }
+
+    if (req.body.payments !== undefined) {
+      await AdjustmentBillPayment.destroy({ where: { adjustmentBillId: bill.id } });
+      for (const p of req.body.payments) {
+        await AdjustmentBillPayment.create({ ...p, adjustmentBillId: bill.id });
+      }
+    }
+
+    const totals = computeTotals(req.body, proposedItems, adjustmentItems);
     Object.assign(bill, totals);
 
     await bill.save();
-    const populated = await bill.populate([
-      { path: 'customer', select: 'name' },
-      { path: 'project', select: 'name' },
-    ]);
+
+    const populated = await AdjustmentBill.findByPk(bill.id, {
+      include: [{ model: AdjustmentBillItem }, { model: AdjustmentBillPayment }],
+    });
 
     res.json(populated);
   } catch (err) {
@@ -146,7 +205,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await AdjustmentBill.findByIdAndDelete(req.params.id);
+    const deleted = await AdjustmentBill.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

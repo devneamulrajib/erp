@@ -1,7 +1,10 @@
-const mongoose = require('mongoose');
-const bankAccountSchema = new mongoose.Schema({
-  name: String,        // Cash, Dutch Bangla Bank, BRAC Bank...
-  balance: Number,
-  lastUpdated: { type: Date, default: Date.now },
-});
-module.exports = mongoose.model('BankAccount', bankAccountSchema);
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
+
+const BankAccount = sequelize.define('BankAccount', {
+  name: DataTypes.STRING,
+  balance: DataTypes.FLOAT,
+  lastUpdated: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+}, { timestamps: false });
+
+module.exports = BankAccount;

@@ -1,15 +1,11 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
-const Voucher = require('../models/Voucher');
+const { Op } = require('sequelize');
+const { Voucher, VoucherEntry, VoucherApproval } = require('../models/associations');
 
 const TYPE_PREFIX = {
-  Journal: 'JV',
-  Payment: 'PV',
-  Receipt: 'RV',
-  Contra: 'CV',
-  Expense: 'EV',
-  Purchase: 'PU',
-  Sales: 'SV',
+  Journal: 'JV', Payment: 'PV', Receipt: 'RV', Contra: 'CV',
+  Expense: 'EV', Purchase: 'PU', Sales: 'SV',
 };
 
 function todayPrefix() {
@@ -24,10 +20,12 @@ async function generateVoucherNo(type) {
   const prefix = TYPE_PREFIX[type] || 'JV';
   const datePart = todayPrefix();
   const fullPrefix = `${prefix}${datePart}`;
-  const count = await Voucher.countDocuments({ voucherNo: { $regex: `^${fullPrefix}` } });
+  const count = await Voucher.count({ where: { voucherNo: { [Op.like]: `${fullPrefix}%` } } });
   const seq = String(count + 1).padStart(4, '0');
   return `${fullPrefix}-${seq}`;
 }
+
+const includeAll = [{ model: VoucherEntry }, { model: VoucherApproval }];
 
 router.get('/next-code', auth, async (req, res) => {
   try {
@@ -38,32 +36,27 @@ router.get('/next-code', auth, async (req, res) => {
   }
 });
 
-// NOTE: this must stay ABOVE router.get('/:id', ...) or Express will treat
-// "bank-reconciliation" as an :id param and this route will never be hit.
 router.get('/bank-reconciliation', auth, async (req, res) => {
   try {
-    const {
-      from, to, account, type,
-    } = req.query;
-
-    const filter = { bank: { $exists: true, $ne: null } };
-    if (type) filter.type = type;
-    if (account) filter.bank = account;
+    const { from, to, account, type } = req.query;
+    const where = { bankId: { [Op.ne]: null } };
+    if (type) where.type = type;
+    if (account) where.bankId = account;
     if (from || to) {
-      filter.date = {};
-      if (from) filter.date.$gte = new Date(from);
+      where.date = {};
+      if (from) where.date[Op.gte] = new Date(from);
       if (to) {
         const end = new Date(to);
         end.setHours(23, 59, 59, 999);
-        filter.date.$lte = end;
+        where.date[Op.lte] = end;
       }
     }
 
-    const items = await Voucher.find(filter)
-      .populate('bank', 'name code')
-      .populate('contact', 'name')
-      .populate('project', 'name')
-      .sort({ date: -1, createdAt: -1 });
+    const items = await Voucher.findAll({
+      where,
+      include: includeAll,
+      order: [['date', 'DESC'], ['createdAt', 'DESC']],
+    });
     res.json(items);
   } catch (err) {
     console.error('GET /api/vouchers/bank-reconciliation failed:', err);
@@ -73,29 +66,31 @@ router.get('/bank-reconciliation', auth, async (req, res) => {
 
 router.get('/', auth, async (req, res) => {
   try {
-    const {
-      type, project, from, to, account, status,
-    } = req.query;
-    const filter = {};
-    if (type) filter.type = type;
-    if (project) filter.project = project;
-    if (status) filter.status = status;
-    if (account) filter['entries.account'] = account;
+    const { type, project, from, to, account, status } = req.query;
+    const where = {};
+    if (type) where.type = type;
+    if (project) where.projectId = project;
+    if (status) where.status = status;
     if (from || to) {
-      filter.date = {};
-      if (from) filter.date.$gte = new Date(from);
+      where.date = {};
+      if (from) where.date[Op.gte] = new Date(from);
       if (to) {
         const end = new Date(to);
         end.setHours(23, 59, 59, 999);
-        filter.date.$lte = end;
+        where.date[Op.lte] = end;
       }
     }
 
-    const items = await Voucher.find(filter)
-      .populate('entries.account', 'name code')
-      .populate('project', 'name')
-      .populate('contact', 'name')
-      .sort({ date: -1, createdAt: -1 });
+    const include = [
+      account ? { model: VoucherEntry, where: { accountId: account } } : { model: VoucherEntry },
+      { model: VoucherApproval },
+    ];
+
+    const items = await Voucher.findAll({
+      where,
+      include,
+      order: [['date', 'DESC'], ['createdAt', 'DESC']],
+    });
     res.json(items);
   } catch (err) {
     console.error('GET /api/vouchers failed:', err);
@@ -105,11 +100,7 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const item = await Voucher.findById(req.params.id)
-      .populate('entries.account', 'name code')
-      .populate('project', 'name')
-      .populate('contact', 'name')
-      .populate('bank', 'name code');
+    const item = await Voucher.findByPk(req.params.id, { include: includeAll });
     if (!item) return res.status(404).json({ message: 'Not found' });
     res.json(item);
   } catch (err) {
@@ -119,10 +110,7 @@ router.get('/:id', auth, async (req, res) => {
 
 router.post('/', auth, async (req, res) => {
   try {
-    const {
-      type, date, project, contact, entries, narration, reference,
-      bank, chequeDate,
-    } = req.body;
+    const { type, date, project, contact, entries, narration, reference, bank, chequeDate } = req.body;
 
     if (!type) return res.status(400).json({ message: 'Type is required' });
     if (!Array.isArray(entries) || entries.length < 2) {
@@ -140,23 +128,27 @@ router.post('/', auth, async (req, res) => {
       voucherNo,
       type,
       date: date || new Date(),
-      project: project || undefined,
-      contact: contact || undefined,
-      bank: bank || undefined,
-      chequeDate: chequeDate || undefined,
-      entries,
+      projectId: project || null,
+      contactId: contact || null,
+      bankId: bank || null,
+      chequeDate: chequeDate || null,
       narration,
       reference,
       amount: totalDebit,
       addedBy: req.user?.name || 'Admin',
     });
 
-    const populated = await item.populate([
-      { path: 'entries.account', select: 'name code' },
-      { path: 'project', select: 'name' },
-      { path: 'contact', select: 'name' },
-      { path: 'bank', select: 'name code' },
-    ]);
+    for (const e of entries) {
+      await VoucherEntry.create({
+        accountId: e.account,
+        debit: Number(e.debit) || 0,
+        credit: Number(e.credit) || 0,
+        note: e.note,
+        voucherId: item.id,
+      });
+    }
+
+    const populated = await Voucher.findByPk(item.id, { include: includeAll });
     res.status(201).json(populated);
   } catch (err) {
     console.error('POST /api/vouchers failed:', err);
@@ -166,7 +158,7 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const item = await Voucher.findById(req.params.id);
+    const item = await Voucher.findByPk(req.params.id);
     if (!item) return res.status(404).json({ message: 'Not found' });
 
     const {
@@ -183,28 +175,32 @@ router.put('/:id', auth, async (req, res) => {
       if (Math.abs(totalDebit - totalCredit) > 0.01) {
         return res.status(400).json({ message: `Debits (${totalDebit}) must equal credits (${totalCredit})` });
       }
-      item.entries = entries;
+      await VoucherEntry.destroy({ where: { voucherId: item.id } });
+      for (const e of entries) {
+        await VoucherEntry.create({
+          accountId: e.account,
+          debit: Number(e.debit) || 0,
+          credit: Number(e.credit) || 0,
+          note: e.note,
+          voucherId: item.id,
+        });
+      }
       item.amount = totalDebit;
     }
 
     if (type !== undefined) item.type = type;
     if (date !== undefined) item.date = date;
-    if (project !== undefined) item.project = project;
-    if (contact !== undefined) item.contact = contact;
+    if (project !== undefined) item.projectId = project;
+    if (contact !== undefined) item.contactId = contact;
     if (narration !== undefined) item.narration = narration;
     if (reference !== undefined) item.reference = reference;
     if (status !== undefined) item.status = status;
-    if (bank !== undefined) item.bank = bank;
+    if (bank !== undefined) item.bankId = bank;
     if (chequeDate !== undefined) item.chequeDate = chequeDate;
     if (reconciliationStatus !== undefined) item.reconciliationStatus = reconciliationStatus;
 
     await item.save();
-    const populated = await item.populate([
-      { path: 'entries.account', select: 'name code' },
-      { path: 'project', select: 'name' },
-      { path: 'contact', select: 'name' },
-      { path: 'bank', select: 'name code' },
-    ]);
+    const populated = await Voucher.findByPk(item.id, { include: includeAll });
     res.json(populated);
   } catch (err) {
     console.error('PUT /api/vouchers failed:', err);
@@ -218,16 +214,14 @@ router.patch('/:id/reconciliation-status', auth, async (req, res) => {
     if (!['Pending', 'Honour', 'DisHonour'].includes(status)) {
       return res.status(400).json({ message: 'Invalid status' });
     }
-    const item = await Voucher.findByIdAndUpdate(
-      req.params.id,
-      { reconciliationStatus: status },
-      { new: true },
-    )
-      .populate('bank', 'name code')
-      .populate('contact', 'name')
-      .populate('project', 'name');
+    const item = await Voucher.findByPk(req.params.id);
     if (!item) return res.status(404).json({ message: 'Not found' });
-    res.json(item);
+
+    item.reconciliationStatus = status;
+    await item.save();
+
+    const populated = await Voucher.findByPk(item.id, { include: includeAll });
+    res.json(populated);
   } catch (err) {
     console.error('PATCH /api/vouchers/:id/reconciliation-status failed:', err);
     res.status(500).json({ message: err.message });
@@ -236,7 +230,7 @@ router.patch('/:id/reconciliation-status', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Voucher.findByIdAndDelete(req.params.id);
+    const deleted = await Voucher.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

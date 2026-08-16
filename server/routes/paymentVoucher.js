@@ -3,7 +3,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const auth = require('../middleware/auth');
-const PaymentVoucher = require('../models/PaymentVoucher');
+const { Op } = require('sequelize');
+const { PaymentVoucher, PaymentVoucherApproval } = require('../models/associations');
 
 const uploadDir = path.join(__dirname, '..', 'uploads', 'payment-vouchers');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -18,7 +19,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 async function generateVoucherNo() {
-  const count = await PaymentVoucher.countDocuments();
+  const count = await PaymentVoucher.count();
   return `P${String(900000 + count + 1)}`;
 }
 
@@ -33,20 +34,24 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { project, debitAccount, creditAccount, titleOfWork, site, task, from, to } = req.query;
-    const filter = {};
-    if (project) filter.project = project;
-    if (debitAccount) filter.debitAccount = debitAccount;
-    if (creditAccount) filter.creditAccount = creditAccount;
-    if (titleOfWork) filter.titleOfWork = titleOfWork;
-    if (site) filter.site = site;
-    if (task) filter.task = task;
+    const where = {};
+    if (project) where.project = project;
+    if (debitAccount) where.debitAccount = debitAccount;
+    if (creditAccount) where.creditAccount = creditAccount;
+    if (titleOfWork) where.titleOfWork = titleOfWork;
+    if (site) where.site = site;
+    if (task) where.task = task;
     if (from || to) {
-      filter.date = {};
-      if (from) filter.date.$gte = new Date(from);
-      if (to) filter.date.$lte = new Date(to);
+      where.date = {};
+      if (from) where.date[Op.gte] = new Date(from);
+      if (to) where.date[Op.lte] = new Date(to);
     }
 
-    const vouchers = await PaymentVoucher.find(filter).sort({ createdAt: -1 });
+    const vouchers = await PaymentVoucher.findAll({
+      where,
+      include: [{ model: PaymentVoucherApproval, as: 'approvals' }],
+      order: [['createdAt', 'DESC']],
+    });
     res.json(vouchers);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -55,7 +60,9 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const voucher = await PaymentVoucher.findById(req.params.id);
+    const voucher = await PaymentVoucher.findByPk(req.params.id, {
+      include: [{ model: PaymentVoucherApproval, as: 'approvals' }],
+    });
     if (!voucher) return res.status(404).json({ message: 'Not found' });
     res.json(voucher);
   } catch (err) {
@@ -103,7 +110,7 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
 
 router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
   try {
-    const voucher = await PaymentVoucher.findById(req.params.id);
+    const voucher = await PaymentVoucher.findByPk(req.params.id);
     if (!voucher) return res.status(404).json({ message: 'Not found' });
 
     const fields = [
@@ -129,7 +136,7 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await PaymentVoucher.findByIdAndDelete(req.params.id);
+    const deleted = await PaymentVoucher.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {
@@ -139,17 +146,16 @@ router.delete('/:id', auth, async (req, res) => {
 
 router.post('/:id/duplicate', auth, async (req, res) => {
   try {
-    const original = await PaymentVoucher.findById(req.params.id);
+    const original = await PaymentVoucher.findByPk(req.params.id);
     if (!original) return res.status(404).json({ message: 'Not found' });
 
-    const copy = original.toObject();
-    delete copy._id;
+    const copy = original.toJSON();
+    delete copy.id;
     delete copy.createdAt;
     delete copy.updatedAt;
     copy.voucherNo = await generateVoucherNo();
     copy.date = Date.now();
     copy.status = 'pending';
-    copy.approvals = [];
     copy.editedBy = '';
 
     const created = await PaymentVoucher.create(copy);

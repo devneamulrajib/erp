@@ -1,11 +1,22 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
-const FlatSale = require('../models/FlatSale');
-const Flat = require('../models/Flat');
+const { Op } = require('sequelize');
+const {
+  FlatSale, FlatSaleInstallment, FlatSaleInstallmentPayment,
+  Flat, Project, Site, Customer,
+} = require('../models/associations');
 
 function generateCode() {
   return 'Sale' + Math.floor(1000000 + Math.random() * 9000000);
 }
+
+const includeAll = [
+  { model: Project, attributes: ['name'] },
+  { model: Site, attributes: ['name'] },
+  { model: Flat },
+  { model: Customer },
+  { model: FlatSaleInstallment, include: [{ model: FlatSaleInstallmentPayment }] },
+];
 
 router.get('/next-code', auth, async (req, res) => {
   res.json({ code: generateCode() });
@@ -14,22 +25,26 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { from, to, salesBy, project, customer } = req.query;
-    const filter = {};
-    if (project) filter.project = project;
-    if (customer) filter.customer = customer;
-    if (salesBy) filter.salesBy = salesBy;
+    const where = {};
+    if (project) where.projectId = project;
+    if (customer) where.customerId = customer;
+    if (salesBy) where.salesBy = salesBy;
     if (from || to) {
-      filter.date = {};
-      if (from) filter.date.$gte = from;
-      if (to) filter.date.$lte = to;
+      where.date = {};
+      if (from) where.date[Op.gte] = from;
+      if (to) where.date[Op.lte] = to;
     }
 
-    const sales = await FlatSale.find(filter)
-      .populate('project', 'name')
-      .populate('site', 'name')
-      .populate('flat', 'flatLandNo')
-      .populate('customer', 'name')
-      .sort({ createdAt: -1 });
+    const sales = await FlatSale.findAll({
+      where,
+      include: [
+        { model: Project, attributes: ['name'] },
+        { model: Site, attributes: ['name'] },
+        { model: Flat, attributes: ['flatLandNo'] },
+        { model: Customer, attributes: ['name'] },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
 
     res.json(sales);
   } catch (err) {
@@ -37,33 +52,35 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// Flattens every installment across every sale into one row per installment.
-// Must be declared before GET /:id or Express would treat "installment-report"
-// as an :id value.
+// Must stay ABOVE GET /:id
 router.get('/installment-report', auth, async (req, res) => {
   try {
     const { from, to, salesBy, project } = req.query;
-    const filter = {};
-    if (project) filter.project = project;
-    if (salesBy) filter.salesBy = salesBy;
+    const where = {};
+    if (project) where.projectId = project;
+    if (salesBy) where.salesBy = salesBy;
 
-    const sales = await FlatSale.find(filter)
-      .populate('project', 'name')
-      .populate('flat', 'flatLandNo')
-      .populate('customer', 'name')
-      .lean();
+    const sales = await FlatSale.findAll({
+      where,
+      include: [
+        { model: Project, attributes: ['name'] },
+        { model: Flat, attributes: ['flatLandNo'] },
+        { model: Customer, attributes: ['name'] },
+        { model: FlatSaleInstallment },
+      ],
+    });
 
     const rows = [];
     sales.forEach((sale) => {
-      (sale.installments || []).forEach((inst) => {
+      (sale.FlatSaleInstallments || []).forEach((inst) => {
         if (from && inst.date && inst.date < from) return;
         if (to && inst.date && inst.date > to) return;
         rows.push({
-          saleId: sale._id,
-          installmentId: inst._id,
-          project: sale.project,
-          flat: sale.flat,
-          customerName: sale.customer?.name || '-',
+          saleId: sale.id,
+          installmentId: inst.id,
+          project: sale.Project,
+          flat: sale.Flat,
+          customerName: sale.Customer?.name || '-',
           totalValue: sale.grandTotal,
           paid: sale.paid,
           due: sale.due,
@@ -82,7 +99,6 @@ router.get('/installment-report', auth, async (req, res) => {
   }
 });
 
-// Records a recovery payment against one specific installment.
 router.put('/:saleId/installments/:installmentId/pay', auth, async (req, res) => {
   try {
     const { saleId, installmentId } = req.params;
@@ -92,32 +108,29 @@ router.put('/:saleId/installments/:installmentId/pay', auth, async (req, res) =>
       return res.status(400).json({ message: 'Amount must be greater than 0' });
     }
 
-    const sale = await FlatSale.findById(saleId);
+    const sale = await FlatSale.findByPk(saleId);
     if (!sale) return res.status(404).json({ message: 'Sale not found' });
 
-    const installment = sale.installments.id(installmentId);
+    const installment = await FlatSaleInstallment.findOne({ where: { id: installmentId, flatSaleId: sale.id } });
     if (!installment) return res.status(404).json({ message: 'Installment not found' });
 
     installment.recovered = (installment.recovered || 0) + numAmount;
-    installment.payments.push({
+    await FlatSaleInstallmentPayment.create({
       amount: numAmount,
       method: method || 'Cash',
       receiptNo,
       comment,
       date: new Date(),
+      installmentId: installment.id,
     });
     if (installment.recovered >= installment.amount) installment.paid = true;
+    await installment.save();
 
     sale.paid = (Number(sale.paid) || 0) + numAmount;
     sale.due = sale.grandTotal - sale.paid;
-
     await sale.save();
-    const populated = await sale.populate([
-      { path: 'project', select: 'name' },
-      { path: 'flat', select: 'flatLandNo' },
-      { path: 'customer', select: 'name' },
-    ]);
 
+    const populated = await FlatSale.findByPk(sale.id, { include: includeAll });
     res.json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -126,11 +139,7 @@ router.put('/:saleId/installments/:installmentId/pay', auth, async (req, res) =>
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const sale = await FlatSale.findById(req.params.id)
-      .populate('project', 'name')
-      .populate('site', 'name')
-      .populate('flat')
-      .populate('customer');
+    const sale = await FlatSale.findByPk(req.params.id, { include: includeAll });
     if (!sale) return res.status(404).json({ message: 'Not found' });
     res.json(sale);
   } catch (err) {
@@ -151,7 +160,7 @@ router.post('/', auth, async (req, res) => {
       return res.status(400).json({ message: 'Project, Flat/Land and Customer are required' });
     }
 
-    const flatDoc = await Flat.findById(flat);
+    const flatDoc = await Flat.findByPk(flat);
     const size = flatDoc ? flatDoc.size : 0;
 
     const numRate = Number(rate) || 0;
@@ -167,8 +176,15 @@ router.post('/', auth, async (req, res) => {
 
     const sale = await FlatSale.create({
       code: code || generateCode(),
-      date, bookingNo, project, site, flat, customer, projectType,
-      collectionOfficer, salesBy, ledger: ledger || 'Flat Sales', attachment,
+      date, bookingNo,
+      projectId: project,
+      siteId: site,
+      flatId: flat,
+      customerId: customer,
+      projectType,
+      collectionOfficer, salesBy,
+      ledger: ledger || 'Flat Sales',
+      attachment,
       size,
       rate: numRate, parking: numParking, utilityCharge: numUtility,
       otherCost: numOther, discount: numDiscount,
@@ -176,25 +192,23 @@ router.post('/', auth, async (req, res) => {
       bookingMoney: numBooking,
       paymentMethod: paymentMethod || 'Cash',
       chequeReceiptNo,
-      installments: Array.isArray(installments) ? installments : [],
       paid: numBooking,
       due,
       status: 'Booked',
     });
 
-    // Mark the flat as booked so it drops out of the "available" pool
+    if (Array.isArray(installments)) {
+      for (const inst of installments) {
+        await FlatSaleInstallment.create({ ...inst, flatSaleId: sale.id });
+      }
+    }
+
     if (flatDoc) {
       flatDoc.status = 'Booked';
       await flatDoc.save();
     }
 
-    const populated = await sale.populate([
-      { path: 'project', select: 'name' },
-      { path: 'site', select: 'name' },
-      { path: 'flat', select: 'flatLandNo' },
-      { path: 'customer', select: 'name' },
-    ]);
-
+    const populated = await FlatSale.findByPk(sale.id, { include: includeAll });
     res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -203,18 +217,29 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const sale = await FlatSale.findById(req.params.id);
+    const sale = await FlatSale.findByPk(req.params.id);
     if (!sale) return res.status(404).json({ message: 'Not found' });
 
+    const map = { project: 'projectId', site: 'siteId', flat: 'flatId', customer: 'customerId' };
     const fields = [
       'date', 'bookingNo', 'project', 'site', 'flat', 'customer', 'projectType',
       'collectionOfficer', 'salesBy', 'ledger', 'attachment', 'size',
       'rate', 'parking', 'utilityCharge', 'otherCost', 'discount',
-      'bookingMoney', 'paymentMethod', 'chequeReceiptNo', 'installments',
+      'bookingMoney', 'paymentMethod', 'chequeReceiptNo',
     ];
     fields.forEach((key) => {
-      if (req.body[key] !== undefined) sale[key] = req.body[key];
+      if (req.body[key] !== undefined) {
+        const target = map[key] || key;
+        sale[target] = req.body[key];
+      }
     });
+
+    if (req.body.installments !== undefined) {
+      await FlatSaleInstallment.destroy({ where: { flatSaleId: sale.id } });
+      for (const inst of req.body.installments) {
+        await FlatSaleInstallment.create({ ...inst, flatSaleId: sale.id });
+      }
+    }
 
     sale.subtotal = (Number(sale.rate) || 0) * (Number(sale.size) || 0);
     sale.grandTotal = sale.subtotal + (Number(sale.parking) || 0) + (Number(sale.utilityCharge) || 0)
@@ -223,13 +248,7 @@ router.put('/:id', auth, async (req, res) => {
     sale.due = sale.grandTotal - (Number(sale.paid) || 0);
 
     await sale.save();
-    const populated = await sale.populate([
-      { path: 'project', select: 'name' },
-      { path: 'site', select: 'name' },
-      { path: 'flat', select: 'flatLandNo' },
-      { path: 'customer', select: 'name' },
-    ]);
-
+    const populated = await FlatSale.findByPk(sale.id, { include: includeAll });
     res.json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -238,12 +257,14 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await FlatSale.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ message: 'Not found' });
+    const sale = await FlatSale.findByPk(req.params.id);
+    if (!sale) return res.status(404).json({ message: 'Not found' });
 
-    // Free up the flat again since the sale is being removed
-    if (deleted.flat) {
-      await Flat.findByIdAndUpdate(deleted.flat, { status: 'Available' });
+    const flatId = sale.flatId;
+    await sale.destroy();
+
+    if (flatId) {
+      await Flat.update({ status: 'Available' }, { where: { id: flatId } });
     }
 
     res.json({ deleted: true });

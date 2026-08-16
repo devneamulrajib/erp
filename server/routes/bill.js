@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
-const Bill = require('../models/Bill');
+const { Op } = require('sequelize');
+const { Bill, BillLineItem, BillPayment, BillApproval, Customer, Project } = require('../models/associations');
 
 function generateCode() {
   return 'Bill' + Math.floor(1000000 + Math.random() * 9000000);
@@ -41,6 +42,8 @@ function computeTotals(body, items) {
   };
 }
 
+const includeAll = [{ model: BillLineItem }, { model: BillPayment }, { model: BillApproval }];
+
 router.get('/next-code', auth, async (req, res) => {
   res.json({ code: generateCode() });
 });
@@ -48,19 +51,24 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const { from, to, customer, project } = req.query;
-    const filter = {};
-    if (customer) filter.customer = customer;
-    if (project) filter.project = project;
+    const where = {};
+    if (customer) where.customerId = customer;
+    if (project) where.projectId = project;
     if (from || to) {
-      filter.date = {};
-      if (from) filter.date.$gte = from;
-      if (to) filter.date.$lte = to;
+      where.date = {};
+      if (from) where.date[Op.gte] = from;
+      if (to) where.date[Op.lte] = to;
     }
 
-    const bills = await Bill.find(filter)
-      .populate('customer', 'name')
-      .populate('project', 'name')
-      .sort({ createdAt: -1 });
+    const bills = await Bill.findAll({
+      where,
+      include: [
+        { model: Customer, attributes: ['name'] },
+        { model: Project, attributes: ['name'] },
+        { model: BillLineItem }, { model: BillPayment }, { model: BillApproval },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
 
     res.json(bills);
   } catch (err) {
@@ -70,11 +78,13 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const bill = await Bill.findById(req.params.id)
-      .populate('customer', 'name')
-      .populate('ledger', 'name')
-      .populate('project', 'name')
-      .populate('site', 'name');
+    const bill = await Bill.findByPk(req.params.id, {
+      include: [
+        { model: Customer, attributes: ['name'] },
+        { model: Project, attributes: ['name'] },
+        ...includeAll,
+      ],
+    });
     if (!bill) return res.status(404).json({ message: 'Not found' });
     res.json(bill);
   } catch (err) {
@@ -91,18 +101,33 @@ router.post('/', auth, async (req, res) => {
     const totals = computeTotals(req.body, items);
 
     const bill = await Bill.create({
-      ...req.body,
       code: req.body.code || generateCode(),
-      items,
+      date: req.body.date,
+      customerId: req.body.customer,
+      ledgerId: req.body.ledger,
+      projectType: req.body.projectType,
+      projectId: req.body.project,
+      siteId: req.body.site,
+      refWoNo: req.body.refWoNo,
+      contentBody: req.body.contentBody,
+      attachment: req.body.attachment,
       ...totals,
-      approvals: [{ name: 'Admin', approved: false }],
       addedBy: req.user?.name || 'Admin',
     });
 
-    const populated = await bill.populate([
-      { path: 'customer', select: 'name' },
-      { path: 'project', select: 'name' },
-    ]);
+    for (const it of items) {
+      await BillLineItem.create({ ...it, billId: bill.id });
+    }
+    if (Array.isArray(req.body.payments)) {
+      for (const p of req.body.payments) {
+        await BillPayment.create({ ...p, billId: bill.id });
+      }
+    }
+    await BillApproval.create({ name: 'Admin', approved: false, billId: bill.id });
+
+    const populated = await Bill.findByPk(bill.id, {
+      include: [{ model: Customer, attributes: ['name'] }, { model: Project, attributes: ['name'] }, ...includeAll],
+    });
 
     res.status(201).json(populated);
   } catch (err) {
@@ -112,29 +137,54 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const bill = await Bill.findById(req.params.id);
+    const bill = await Bill.findByPk(req.params.id);
     if (!bill) return res.status(404).json({ message: 'Not found' });
 
-    const fields = [
-      'date', 'customer', 'ledger', 'projectType', 'project', 'site',
-      'refWoNo', 'contentBody', 'attachment', 'payments',
-      'vatIncluded', 'vatPercent', 'aitIncluded', 'aitPercent', 'interestRate',
-    ];
-    fields.forEach((key) => {
-      if (req.body[key] !== undefined) bill[key] = req.body[key];
+    const directFields = {
+      date: req.body.date,
+      customerId: req.body.customer,
+      ledgerId: req.body.ledger,
+      projectType: req.body.projectType,
+      projectId: req.body.project,
+      siteId: req.body.site,
+      refWoNo: req.body.refWoNo,
+      contentBody: req.body.contentBody,
+      attachment: req.body.attachment,
+      vatIncluded: req.body.vatIncluded,
+      vatPercent: req.body.vatPercent,
+      aitIncluded: req.body.aitIncluded,
+      aitPercent: req.body.aitPercent,
+      interestRate: req.body.interestRate,
+    };
+    Object.keys(directFields).forEach((key) => {
+      if (directFields[key] !== undefined) bill[key] = directFields[key];
     });
 
-    const items = req.body.items !== undefined ? cleanItems(req.body.items) : bill.items;
-    if (req.body.items !== undefined) bill.items = items;
+    let items;
+    if (req.body.items !== undefined) {
+      items = cleanItems(req.body.items);
+      await BillLineItem.destroy({ where: { billId: bill.id } });
+      for (const it of items) {
+        await BillLineItem.create({ ...it, billId: bill.id });
+      }
+    } else {
+      items = await BillLineItem.findAll({ where: { billId: bill.id } });
+    }
 
-    const totals = computeTotals({ ...bill.toObject(), ...req.body }, items);
+    if (req.body.payments !== undefined) {
+      await BillPayment.destroy({ where: { billId: bill.id } });
+      for (const p of req.body.payments) {
+        await BillPayment.create({ ...p, billId: bill.id });
+      }
+    }
+
+    const totals = computeTotals(req.body, items);
     Object.assign(bill, totals);
 
     await bill.save();
-    const populated = await bill.populate([
-      { path: 'customer', select: 'name' },
-      { path: 'project', select: 'name' },
-    ]);
+    const populated = await Bill.findByPk(bill.id, {
+      include: [{ model: Customer, attributes: ['name'] }, { model: Project, attributes: ['name'] }, ...includeAll],
+    });
 
     res.json(populated);
   } catch (err) {
@@ -144,7 +194,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Bill.findByIdAndDelete(req.params.id);
+    const deleted = await Bill.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

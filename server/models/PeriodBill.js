@@ -1,27 +1,31 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const periodBillSchema = new mongoose.Schema({
-  code: { type: String, unique: true },
-  date: String,
+const PeriodBill = sequelize.define('PeriodBill', {
+  code: { type: DataTypes.STRING, unique: true },
+  date: DataTypes.STRING,
 
-  customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
-  ledger: { type: mongoose.Schema.Types.ObjectId, ref: 'ChartOfAccount' },
-  site: { type: mongoose.Schema.Types.ObjectId, ref: 'Site' },
-  refWoNo: String,
+  customerId: DataTypes.INTEGER,
+  ledgerId: DataTypes.INTEGER,
+  siteId: DataTypes.INTEGER,
+  refWoNo: DataTypes.STRING,
 
-  startDate: String,
-  endDate: String,
-  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
-  projectCost: { type: Number, default: 0 },
-  percentage: { type: Number, default: 0 },
-  constructionCost: { type: Number, default: 0 },
-  serviceCharge: { type: Number, default: 0 },
-  grandTotal: { type: Number, default: 0 },
+  startDate: DataTypes.STRING,
+  endDate: DataTypes.STRING,
+  projectId: DataTypes.INTEGER,
+  projectCost: { type: DataTypes.DECIMAL(14, 2), defaultValue: 0 },
+  percentage: { type: DataTypes.DECIMAL(6, 2), defaultValue: 0 },
+  constructionCost: { type: DataTypes.DECIMAL(14, 2), defaultValue: 0 },
+  serviceCharge: { type: DataTypes.DECIMAL(14, 2), defaultValue: 0 },
+  grandTotal: { type: DataTypes.DECIMAL(14, 2), defaultValue: 0 },
 
-  attachment: String,
-  contentBody: String,
+  attachment: DataTypes.STRING,
+  contentBody: DataTypes.TEXT,
 
-  addedBy: String,
-}, { timestamps: true });
+  addedBy: DataTypes.STRING,
+}, {
+  tableName: 'period_bills',
+  timestamps: true,
+});
 
-module.exports = mongoose.model('PeriodBill', periodBillSchema);
+module.exports = PeriodBill;

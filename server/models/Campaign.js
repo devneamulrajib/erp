@@ -1,12 +1,36 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const campaignSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  leadSourceId: { type: mongoose.Schema.Types.ObjectId, ref: 'LeadSource' },
-  description: { type: String },
-  formId: { type: String }, // Facebook Lead Form ID, if this campaign is Facebook-based
-  status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
-  addedBy: { type: String },
-}, { timestamps: true });
+const Campaign = sequelize.define('Campaign', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  leadSourceId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  description: {
+    type: DataTypes.STRING,
+  },
+  formId: {
+    type: DataTypes.STRING,
+  },
+  status: {
+    type: DataTypes.ENUM('Active', 'Inactive'),
+    defaultValue: 'Active',
+  },
+  addedBy: {
+    type: DataTypes.STRING,
+  },
+}, {
+  tableName: 'campaigns',
+  timestamps: true,
+});
 
-module.exports = mongoose.model('Campaign', campaignSchema);
+module.exports = Campaign;

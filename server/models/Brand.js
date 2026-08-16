@@ -1,8 +1,23 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/db');
 
-const brandSchema = new mongoose.Schema({
-  code: { type: String, unique: true },
-  name: { type: String, required: true },
-}, { timestamps: true });
+const Brand = sequelize.define('Brand', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  code: {
+    type: DataTypes.STRING,
+    unique: true,
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+}, {
+  tableName: 'brands',
+  timestamps: true,
+});
 
-module.exports = mongoose.model('Brand', brandSchema);
+module.exports = Brand;

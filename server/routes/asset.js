@@ -1,19 +1,32 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
-const Asset = require('../models/Asset');
+const {
+  Asset, AssetDepreciationEntry, AssetMovementEntry, AssetRevaluationEntry,
+  Item, Project, ChartOfAccount,
+} = require('../models/associations');
 
-function recalcValues(asset) {
-  const totalDepreciation = asset.depreciationEntries.reduce((sum, e) => sum + (e.depreciation || 0), 0);
+async function recalcValues(asset) {
+  const entries = await AssetDepreciationEntry.findAll({ where: { assetId: asset.id } });
+  const totalDepreciation = entries.reduce((sum, e) => sum + (e.depreciation || 0), 0);
   asset.bookValue = asset.originalValue - totalDepreciation;
   asset.depreciableValue = asset.originalValue - asset.notDepreciableValue - totalDepreciation;
 }
 
+const includeAll = [
+  { model: AssetDepreciationEntry },
+  { model: AssetMovementEntry },
+  { model: AssetRevaluationEntry },
+];
+
 router.get('/', auth, async (req, res) => {
   try {
-    const assets = await Asset.find()
-      .populate('item', 'name')
-      .populate('project', 'name')
-      .sort({ createdAt: -1 });
+    const assets = await Asset.findAll({
+      include: [
+        { model: Item, attributes: ['name'] },
+        { model: Project, attributes: ['name'] },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
     res.json(assets);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -22,10 +35,14 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const asset = await Asset.findById(req.params.id)
-      .populate('item', 'name')
-      .populate('project', 'name')
-      .populate('expenseAccount', 'name');
+    const asset = await Asset.findByPk(req.params.id, {
+      include: [
+        { model: Item, attributes: ['name'] },
+        { model: Project, attributes: ['name'] },
+        { model: ChartOfAccount, attributes: ['name'] },
+        ...includeAll,
+      ],
+    });
     if (!asset) return res.status(404).json({ message: 'Not found' });
     res.json(asset);
   } catch (err) {
@@ -45,22 +62,22 @@ router.post('/', auth, async (req, res) => {
       return res.status(400).json({ message: 'Original Value and Acquisition Date are required' });
     }
 
-    const asset = new Asset({
-      item: item || null,
+    const asset = await Asset.create({
+      itemId: item || null,
       location: location || '',
       originalValue,
       acquisitionDate,
-      project: project || null,
+      projectId: project || null,
       method: method || 'Straight Line',
       duration: duration || 0,
       durationUnit: durationUnit || 'Year',
       computation: computation || 'Yearly',
       notDepreciableValue: notDepreciableValue || 0,
-      expenseAccount: expenseAccount || null,
+      expenseAccountId: expenseAccount || null,
       voucherNo: voucherNo || '',
     });
 
-    recalcValues(asset);
+    await recalcValues(asset);
     await asset.save();
     res.status(201).json(asset);
   } catch (err) {
@@ -70,19 +87,25 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const asset = await Asset.findById(req.params.id);
+    const asset = await Asset.findByPk(req.params.id);
     if (!asset) return res.status(404).json({ message: 'Not found' });
 
+    const map = {
+      item: 'itemId', project: 'projectId', expenseAccount: 'expenseAccountId',
+    };
     const fields = [
       'item', 'location', 'originalValue', 'acquisitionDate', 'project',
       'method', 'duration', 'durationUnit', 'computation',
       'notDepreciableValue', 'expenseAccount', 'voucherNo', 'status',
     ];
     fields.forEach((key) => {
-      if (req.body[key] !== undefined) asset[key] = req.body[key] || null;
+      if (req.body[key] !== undefined) {
+        const target = map[key] || key;
+        asset[target] = req.body[key] || null;
+      }
     });
 
-    recalcValues(asset);
+    await recalcValues(asset);
     await asset.save();
     res.json(asset);
   } catch (err) {
@@ -92,7 +115,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Asset.findByIdAndDelete(req.params.id);
+    const deleted = await Asset.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {
@@ -103,25 +126,29 @@ router.delete('/:id', auth, async (req, res) => {
 // --- Depreciation Board ---
 router.post('/:id/depreciation', auth, async (req, res) => {
   try {
-    const asset = await Asset.findById(req.params.id);
+    const asset = await Asset.findByPk(req.params.id);
     if (!asset) return res.status(404).json({ message: 'Not found' });
 
     const { date, reference, depreciation, journalEntry } = req.body;
-    const priorCumulative = asset.depreciationEntries.reduce((sum, e) => sum + (e.depreciation || 0), 0);
+    const priorEntries = await AssetDepreciationEntry.findAll({ where: { assetId: asset.id } });
+    const priorCumulative = priorEntries.reduce((sum, e) => sum + (e.depreciation || 0), 0);
     const cumulativeDepreciation = priorCumulative + Number(depreciation || 0);
 
-    asset.depreciationEntries.push({
+    await AssetDepreciationEntry.create({
       date,
       reference: reference || '',
       depreciation: Number(depreciation || 0),
       cumulativeDepreciation,
       depreciableValue: asset.originalValue - asset.notDepreciableValue - cumulativeDepreciation,
       journalEntry: journalEntry || '',
+      assetId: asset.id,
     });
 
-    recalcValues(asset);
+    await recalcValues(asset);
     await asset.save();
-    res.status(201).json(asset);
+
+    const populated = await Asset.findByPk(asset.id, { include: includeAll });
+    res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -130,15 +157,16 @@ router.post('/:id/depreciation', auth, async (req, res) => {
 // --- Movement History ---
 router.post('/:id/movement', auth, async (req, res) => {
   try {
-    const asset = await Asset.findById(req.params.id);
+    const asset = await Asset.findByPk(req.params.id);
     if (!asset) return res.status(404).json({ message: 'Not found' });
 
     const { date, from, to } = req.body;
-    asset.movementEntries.push({ date, from: from || '', to: to || '' });
+    await AssetMovementEntry.create({ date, from: from || '', to: to || '', assetId: asset.id });
     if (to) asset.location = to;
 
     await asset.save();
-    res.status(201).json(asset);
+    const populated = await Asset.findByPk(asset.id, { include: includeAll });
+    res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -147,19 +175,22 @@ router.post('/:id/movement', auth, async (req, res) => {
 // --- Revaluations History ---
 router.post('/:id/revaluation', auth, async (req, res) => {
   try {
-    const asset = await Asset.findById(req.params.id);
+    const asset = await Asset.findByPk(req.params.id);
     if (!asset) return res.status(404).json({ message: 'Not found' });
 
     const { date, newValue, note } = req.body;
     const oldValue = asset.originalValue;
     const change = Number(newValue || 0) - oldValue;
 
-    asset.revaluationEntries.push({ date, oldValue, newValue: Number(newValue || 0), change, note: note || '' });
+    await AssetRevaluationEntry.create({
+      date, oldValue, newValue: Number(newValue || 0), change, note: note || '', assetId: asset.id,
+    });
     asset.originalValue = Number(newValue || 0);
-    recalcValues(asset);
+    await recalcValues(asset);
 
     await asset.save();
-    res.status(201).json(asset);
+    const populated = await Asset.findByPk(asset.id, { include: includeAll });
+    res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -1,14 +1,15 @@
 const router = require('express').Router();
+const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
 const Profession = require('../models/Profession');
 
 router.get('/', auth, async (req, res) => {
   try {
     const { search } = req.query;
-    const filter = {};
-    if (search) filter.name = { $regex: search, $options: 'i' };
+    const where = {};
+    if (search) where.name = { [Op.like]: `%${search}%` };
 
-    const items = await Profession.find(filter).sort({ createdAt: -1 });
+    const items = await Profession.findAll({ where, order: [['createdAt', 'DESC']] });
     res.json(items);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -34,7 +35,7 @@ router.post('/', auth, async (req, res) => {
 
 router.put('/:id', auth, async (req, res) => {
   try {
-    const item = await Profession.findById(req.params.id);
+    const item = await Profession.findByPk(req.params.id);
     if (!item) return res.status(404).json({ message: 'Not found' });
 
     ['name', 'status'].forEach((key) => {
@@ -50,7 +51,7 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Profession.findByIdAndDelete(req.params.id);
+    const deleted = await Profession.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {
