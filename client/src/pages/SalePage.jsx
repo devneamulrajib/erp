@@ -10,7 +10,6 @@ import {
   getSale, getNextSaleCode, createSale, updateSale,
 } from '../api/sale';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
 import { Plus, Trash2, X } from 'lucide-react';
 
@@ -28,6 +27,7 @@ export default function SalePage() {
   const [projects, setProjects] = useState([]);
   const [sites, setSites] = useState([]);
   const [items, setItems] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [customer, setCustomer] = useState('');
@@ -66,6 +66,7 @@ export default function SalePage() {
     getCustomers().then(setCustomers).catch(() => {});
     api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
     api.get('/sites').then((res) => setSites(res.data)).catch(() => {});
+    api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
     getItems().then(setItems).catch(() => {});
   }, []);
 
@@ -78,13 +79,13 @@ export default function SalePage() {
     if (!isEdit) return;
     getSale(id).then((s) => {
       setDate(s.date || '');
-      setCustomer(s.customer?._id || s.customer || '');
+      setCustomer(s.customer?.id || s.customer || '');
       setLedger(s.ledger || 'Flat Sales');
       setCode(s.code || '');
       setProjectType(s.projectType || '');
-      setProject(s.project?._id || s.project || '');
+      setProject(s.project?.id || s.project || '');
       setTitleOfWork(s.titleOfWork || '');
-      setSite(s.site?._id || s.site || '');
+      setSite(s.site?.id || s.site || '');
       setRefWoNo(s.refWoNo || '');
       setContent(s.content || '');
       setRows(s.items || []);
@@ -121,10 +122,10 @@ export default function SalePage() {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
   }
   function selectRowItem(i, itemId) {
-    const it = items.find((x) => x._id === itemId);
+    const it = items.find((x) => String(x.id) === String(itemId));
     if (!it) return;
     setRows((prev) => prev.map((r, idx) => (idx === i ? {
-      ...r, item: it._id, itemName: it.name, unit: it.unit, rate: it.salePrice || it.purchasePrice || 0,
+      ...r, item: it.id, itemName: it.name, unit: it.unit, rate: it.salePrice || it.purchasePrice || 0,
     } : r)));
   }
   function removeRow(i) {
@@ -185,7 +186,6 @@ export default function SalePage() {
   return (
     <div className="min-h-screen w-full bg-gray-50 text-left">
       <Topbar />
-      <ModuleNav />
 
       <div className="flex items-center justify-between pr-4">
         <Breadcrumb
@@ -218,7 +218,7 @@ export default function SalePage() {
           <Field label="Customer" required>
             <select value={customer} onChange={(e) => setCustomer(e.target.value)} className="input">
               <option value="">Select One Option</option>
-              {customers.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+              {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
           <Field label="Ledger">
@@ -228,12 +228,15 @@ export default function SalePage() {
             <input value={code} readOnly className="input bg-gray-50" />
           </Field>
           <Field label="Project Type">
-            <input value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input" placeholder="Select value" />
+            <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
+              <option value="">Select value</option>
+              {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+            </select>
           </Field>
           <Field label="Project">
             <select value={project} onChange={(e) => setProject(e.target.value)} className="input">
               <option value="">Select Project</option>
-              {projects.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
           <Field label="Title/Name of Work">
@@ -242,7 +245,7 @@ export default function SalePage() {
           <Field label="Site">
             <select value={site} onChange={(e) => setSite(e.target.value)} className="input">
               <option value="">Select Site</option>
-              {sites.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+              {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
           <Field label="Ref W/O No.">
@@ -251,11 +254,6 @@ export default function SalePage() {
         </div>
 
         <Field label="Content Body">
-          {/*
-            Swap this textarea for your existing RichTextEditor component
-            (components/RichTextEditor.jsx) if you'd like the full toolbar
-            shown in the reference design — usage: <RichTextEditor value={content} onChange={setContent} />
-          */}
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
@@ -287,7 +285,7 @@ export default function SalePage() {
                     <td className="px-2 py-1.5">
                       <select value={r.item || ''} onChange={(e) => selectRowItem(i, e.target.value)} className="w-40 border border-gray-200 rounded px-2 py-1">
                         <option value="">Select Item</option>
-                        {items.map((it) => <option key={it._id} value={it._id}>{it.name}</option>)}
+                        {items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
                       </select>
                     </td>
                     <td className="px-2 py-1.5">
@@ -432,7 +430,7 @@ export default function SalePage() {
       {showCustomerModal && (
         <CustomerAddModal
           onClose={() => setShowCustomerModal(false)}
-          onCreated={(newCustomer) => { setCustomers((prev) => [...prev, newCustomer]); setCustomer(newCustomer._id); setShowCustomerModal(false); }}
+          onCreated={(newCustomer) => { setCustomers((prev) => [...prev, newCustomer]); setCustomer(newCustomer.id); setShowCustomerModal(false); }}
         />
       )}
     </div>
@@ -492,13 +490,13 @@ function ItemAddModal({ onClose, onCreated }) {
             <Field label="Category">
               <select value={category} onChange={(e) => setCategory(e.target.value)} className="input">
                 <option value="">Select Category</option>
-                {categories.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </Field>
             <Field label="Brand">
               <select value={brand} onChange={(e) => setBrand(e.target.value)} className="input">
                 <option value="">Select Brand</option>
-                {brands.map((b) => <option key={b._id} value={b._id}>{b.name}</option>)}
+                {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </Field>
             <Field label="Item Name" required>
@@ -507,7 +505,7 @@ function ItemAddModal({ onClose, onCreated }) {
             <Field label="Unit">
               <select value={unit} onChange={(e) => setUnit(e.target.value)} className="input">
                 <option value="">Select Unit</option>
-                {units.map((u) => <option key={u._id} value={u.name || u._id}>{u.name}</option>)}
+                {units.map((u) => <option key={u.id} value={u.name || u.id}>{u.name}</option>)}
               </select>
             </Field>
             <Field label="Purchase Price">
@@ -545,7 +543,7 @@ function CustomerAddModal({ onClose, onCreated }) {
 
   useEffect(() => {
     api.get('/customers/next-code').then((res) => setCode(res.data?.code || '')).catch(() => {});
-    api.get('/chart-of-groups').then((res) => setChartOfGroups(res.data)).catch(() => {});
+    api.get('/chart-of-group').then((res) => setChartOfGroups(res.data)).catch(() => {});
   }, []);
 
   async function handleSubmit(e) {
@@ -607,7 +605,7 @@ function CustomerAddModal({ onClose, onCreated }) {
               <Field label="Chart Of Groups" required>
                 <select value={chartOfGroup} onChange={(e) => setChartOfGroup(e.target.value)} className="input">
                   <option value="">Select One Option</option>
-                  {chartOfGroups.map((g) => <option key={g._id} value={g._id}>{g.name}</option>)}
+                  {chartOfGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
               </Field>
             </div>

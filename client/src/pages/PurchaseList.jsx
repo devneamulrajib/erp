@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { getPurchases, deletePurchase } from '../api/purchase';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
 import { Pencil, Trash2, Eye, PlusCircle } from 'lucide-react';
 
@@ -70,7 +69,6 @@ export default function PurchaseList() {
   return (
     <div className="min-h-screen w-full bg-gray-50 text-left">
       <Topbar />
-      <ModuleNav />
 
       <div className="flex items-center justify-between pr-4">
         <Breadcrumb

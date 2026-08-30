@@ -6,22 +6,29 @@ export default function ModuleNav() {
   const [resetKey, setResetKey] = useState(0);
   const wrapperRef = useRef(null);
 
-  // Forces the whole tree to remount, collapsing every open dropdown/flyout
-  // at any depth — simpler and safer than threading close-state through
-  // every level like the old openMenu/openSubmenu pair did.
-  const closeAll = useCallback(() => setResetKey((k) => k + 1), []);
+  const closeAll = useCallback(() => {
+    setResetKey((key) => key + 1);
+  }, []);
 
   useEffect(() => {
-    function handleClickOutside(e) {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+    const handleClickOutside = (event) => {
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(event.target)
+      ) {
         closeAll();
       }
-    }
-    function handleEscape(e) {
-      if (e.key === 'Escape') closeAll();
-    }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        closeAll();
+      }
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleEscape);
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
@@ -32,11 +39,39 @@ export default function ModuleNav() {
     <nav
       ref={wrapperRef}
       role="menubar"
-      className="relative flex items-center gap-1 bg-gray-100 px-2 py-1.5 border-b border-gray-200 overflow-visible"
+      className="
+        relative
+        z-[99999]
+        flex
+        w-fit
+        max-w-[calc(100vw-24px)]
+        items-center
+        overflow-visible
+        rounded-[24px]
+        border
+        border-black/[0.08]
+        bg-white
+        px-1.5
+        py-1.5
+        shadow-[0_10px_30px_rgba(0,0,0,0.12)]
+      "
     >
-      <div key={resetKey} className="contents">
+      <div
+        key={resetKey}
+        className="
+          flex
+          items-center
+          gap-0.5
+          overflow-visible
+        "
+      >
         {TOP_MODULES.map((mod) => (
-          <MenuNode key={mod.key} item={mod} depth={0} onNavigate={closeAll} />
+          <MenuNode
+            key={mod.key}
+            item={mod}
+            depth={0}
+            onNavigate={closeAll}
+          />
         ))}
       </div>
     </nav>

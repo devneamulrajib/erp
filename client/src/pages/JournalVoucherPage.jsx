@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
 import { Trash2 } from 'lucide-react';
@@ -152,6 +151,7 @@ export default function JournalVoucherPage() {
       }
       navigate('/accounts-module/journal_list');
     } catch (err) {
+      console.error('Failed to save journal voucher', err);
       setError(err.response?.data?.message || err.message || 'Failed to save journal voucher');
     } finally {
       setSubmitting(false);
@@ -161,7 +161,6 @@ export default function JournalVoucherPage() {
   return (
     <div className="min-h-screen w-full bg-gray-50 text-left">
       <Topbar />
-      <ModuleNav />
 
       <div className="flex items-center justify-between pr-4">
         <Breadcrumb

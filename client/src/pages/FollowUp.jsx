@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, Phone, Trash2, Filter as FilterIcon } from 'lucide-react';
-import ModuleNav from '../components/ModuleNav';
 import Modal from '../components/Modal';
 import ConfirmSelectionModal from '../components/ConfirmSelectionModal';
 import { getAllFollowUps, deleteFollowUpEntry } from '../api/lead';
@@ -98,7 +97,6 @@ export default function FollowUp() {
 
   return (
     <div>
-      <ModuleNav />
 
       <div className="px-6 py-4">
         <div className="flex items-center justify-between mb-4">

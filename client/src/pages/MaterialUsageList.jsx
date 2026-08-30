@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { getMaterialUsages, deleteMaterialUsage } from '../api/materialUsage';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
 import { Pencil, Trash2, Copy, PlusCircle } from 'lucide-react';
 
@@ -81,7 +80,6 @@ export default function MaterialUsageList() {
   return (
     <div className="min-h-screen w-full bg-gray-50 text-left">
       <Topbar />
-      <ModuleNav />
 
       <div className="flex items-center justify-between pr-4">
         <Breadcrumb

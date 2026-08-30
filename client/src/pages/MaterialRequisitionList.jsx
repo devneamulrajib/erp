@@ -9,7 +9,6 @@ import {
   convertRequisitionToRfq,
 } from '../api/materialRequisition';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
 import { ChevronDown, PlusCircle, RefreshCw } from 'lucide-react';
 
@@ -106,7 +105,6 @@ export default function MaterialRequisitionList() {
   return (
     <div className="min-h-screen w-full bg-gray-50 text-left">
       <Topbar />
-      <ModuleNav />
 
       <div className="flex items-center justify-between pr-4 flex-wrap gap-2">
         <Breadcrumb

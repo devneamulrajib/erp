@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api/axios';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
-import { Pencil, Trash2, Eye, Copy, Printer, Mail } from 'lucide-react';
+import {
+  Pencil, Trash2, Eye, Copy, Printer, Mail, Search, FileText, FileSpreadsheet, Plus,
+  Receipt, Landmark, SlidersHorizontal, ChevronDown, ChevronUp, Paperclip, CheckCircle2, XCircle,
+} from 'lucide-react';
 import {
   getReceiptVouchers, getReceiptVoucher, getNextReceiptVoucherCode,
   createReceiptVoucher, updateReceiptVoucher, deleteReceiptVoucher, duplicateReceiptVoucher,
@@ -12,8 +14,12 @@ import {
 import { getChartOfAccounts, createChartOfAccount } from '../api/chartOfAccounts';
 import { getChartOfGroupOptions } from '../api/chartOfGroup';
 
+const inputClass = "w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition";
+const labelClass = "block text-xs font-medium text-slate-500 mb-1.5";
+
 export default function ReceiptVoucherPage() {
   const [projects, setProjects] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
   const [sites, setSites] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [groupOptions, setGroupOptions] = useState([]);
@@ -47,6 +53,7 @@ export default function ReceiptVoucherPage() {
   const [quickAddSaving, setQuickAddSaving] = useState(false);
 
   // filters
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [filterCredit, setFilterCredit] = useState('');
@@ -84,16 +91,19 @@ export default function ReceiptVoucherPage() {
   useEffect(() => { loadVouchers(); }, [loadVouchers]);
 
   function reloadAccounts() {
-    getChartOfAccounts().then((res) => setAccounts(res.data)).catch(() => {});
+    getChartOfAccounts().then((res) => setAccounts(res?.data ?? res ?? [])).catch(() => {});
   }
 
   useEffect(() => {
-    api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
-    api.get('/sites').then((res) => setSites(res.data)).catch(() => {});
+    api.get('/projects').then((res) => setProjects(res.data ?? [])).catch(() => {});
+    api.get('/project-types').then((res) => setProjectTypes(res.data ?? [])).catch(() => {});
+    api.get('/sites').then((res) => setSites(res.data ?? [])).catch(() => {});
     reloadAccounts();
-    getChartOfGroupOptions().then((res) => setGroupOptions(res.data)).catch(() => {});
+    getChartOfGroupOptions().then((res) => setGroupOptions(res?.data ?? res ?? [])).catch(() => {});
     resetFormForCreate();
   }, []);
+
+  useEffect(() => { setPage(1); }, [search, pageSize]);
 
   function resetFormForCreate() {
     setEditingId(null);
@@ -109,7 +119,7 @@ export default function ReceiptVoucherPage() {
   async function loadForEdit(id) {
     try {
       const v = await getReceiptVoucher(id);
-      setEditingId(v._id);
+      setEditingId(v.id);
       setProjectType(v.projectType || '');
       setProject(v.project || '');
       setTitleOfWork(v.titleOfWork || '');
@@ -232,266 +242,415 @@ export default function ReceiptVoucherPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
   const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
+  const totalAmount = filtered.reduce((sum, v) => sum + Number(v.amount || 0), 0);
+  const activeFilterCount = [fromDate, toDate, filterCredit, filterDebit, filterProject, filterTitle, filterSite, filterTask].filter(Boolean).length;
 
   return (
-    <div className="min-h-screen w-full bg-gray-50 text-left">
+    <div className="min-h-screen w-full bg-slate-50 text-left">
       <Topbar />
-      <ModuleNav />
 
-      <div className="flex items-center justify-between pr-4">
-        <Breadcrumb
-          items={[
-            { label: 'Home', to: '/dashboard' },
-            { label: 'Accounts Module', to: '/dashboard' },
-            { label: 'Receipt Voucher' },
-          ]}
-        />
-      </div>
-
-      <div className="px-4 pb-10">
-        {formError && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-4">{formError}</div>}
-
-        <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-md p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            <Field label="Project Type">
-              <input value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input" placeholder="Select Project Type" />
-            </Field>
-            <Field label="Project">
-              <select value={project} onChange={(e) => setProject(e.target.value)} className="input">
-                <option value="">Select Project</option>
-                {projects.map((p) => <option key={p._id} value={p.name}>{p.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Title/Name of Work">
-              <input value={titleOfWork} onChange={(e) => setTitleOfWork(e.target.value)} className="input" placeholder="Select Title/Name of Work" />
-            </Field>
-            <Field label="If Task">
-              <input value={task} onChange={(e) => setTask(e.target.value)} className="input" placeholder="Select Task" />
-            </Field>
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+        {/* Header */}
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+          <div>
+            <Breadcrumb
+              items={[
+                { label: 'Home', to: '/dashboard' },
+                { label: 'Accounts Module', to: '/dashboard' },
+                { label: 'Receipt Voucher' },
+              ]}
+            />
+            <div className="flex items-center gap-2.5 mt-1">
+              <span className="w-9 h-9 flex items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm shadow-indigo-600/25">
+                <Receipt size={17} />
+              </span>
+              <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">Receipt Voucher</h1>
+            </div>
+            <p className="text-sm text-slate-500 mt-1 ml-[46px]">Record incoming payments against a credit and debit account</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            <Field label="Site">
-              <select value={site} onChange={(e) => setSite(e.target.value)} className="input">
-                <option value="">Select Site</option>
-                {sites.map((s) => <option key={s._id} value={s.name}>{s.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Date">
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
-            </Field>
-            <Field label="Vouchar No">
-              <input value={voucherNo} readOnly className="input bg-gray-50" />
-            </Field>
-            <Field label="Select Accounts" required>
-              <div className="flex gap-2">
-                <select value={creditAccount} onChange={(e) => setCreditAccount(e.target.value)} className="input flex-1">
-                  <option value="">Select Chart Of Account_id</option>
-                  {accounts.map((a) => <option key={a._id} value={a.name}>{a.name}</option>)}
+          {/* Quick stats */}
+          <div className="flex gap-3">
+            <div className="bg-white rounded-xl border border-slate-200 px-4 py-2.5 min-w-[120px]">
+              <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Entries</div>
+              <div className="text-lg font-semibold text-slate-900">{filtered.length}</div>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 px-4 py-2.5 min-w-[140px]">
+              <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Total Amount</div>
+              <div className="text-lg font-semibold text-slate-900">{totalAmount.toFixed(2)}</div>
+            </div>
+          </div>
+        </div>
+
+        {formError && (
+          <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-5 flex items-center gap-2">
+            <XCircle size={16} className="shrink-0" />
+            {formError}
+          </div>
+        )}
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/60">
+            <h2 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+              <Landmark size={15} className="text-indigo-500" />
+              {editingId ? `Editing Voucher · ${voucherNo}` : 'New Voucher'}
+            </h2>
+            {editingId && (
+              <span className="text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded-full px-2.5 py-1">
+                Editing mode
+              </span>
+            )}
+          </div>
+
+          <div className="p-6">
+            {/* Section: Project context */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
+              <Field label="Project Type">
+                <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputClass}>
+                  <option value="">Select Project Type</option>
+                  {projectTypes.map((pt) => <option key={pt.id} value={pt.name}>{pt.name}</option>)}
                 </select>
-                <button type="button" onClick={() => setQuickAddOpen(true)} className="px-3 rounded-md bg-emerald-500 hover:bg-emerald-600 text-white font-bold">+</button>
-              </div>
-            </Field>
+              </Field>
+              <Field label="Project">
+                <select value={project} onChange={(e) => setProject(e.target.value)} className={inputClass}>
+                  <option value="">Select Project</option>
+                  {projects.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Title/Name of Work">
+                <input value={titleOfWork} onChange={(e) => setTitleOfWork(e.target.value)} className={inputClass} placeholder="Select Title/Name of Work" />
+              </Field>
+              <Field label="If Task">
+                <input value={task} onChange={(e) => setTask(e.target.value)} className={inputClass} placeholder="Select Task" />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
+              <Field label="Site">
+                <select value={site} onChange={(e) => setSite(e.target.value)} className={inputClass}>
+                  <option value="">Select Site</option>
+                  {sites.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Date">
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
+              </Field>
+              <Field label="Voucher No">
+                <input value={voucherNo} readOnly className={`${inputClass} bg-slate-50 text-slate-500 font-mono`} />
+              </Field>
+              <Field label="Select Accounts" required>
+                <div className="flex gap-2">
+                  <select value={creditAccount} onChange={(e) => setCreditAccount(e.target.value)} className={`${inputClass} flex-1`}>
+                    <option value="">Select Chart Of Account</option>
+                    {accounts.map((a) => <option key={a.id} value={a.name}>{a.name}</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setQuickAddOpen(true)}
+                    className="w-10 shrink-0 flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                    title="Quick add account"
+                  >
+                    <Plus size={16} strokeWidth={2.5} />
+                  </button>
+                </div>
+              </Field>
+            </div>
+
+            <div className="h-px bg-slate-100 mb-5" />
+
+            {/* Section: Payment */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
+              <Field
+                label={
+                  <span className="flex items-center gap-2">
+                    Payment Method <span className="text-red-500">*</span>
+                    <label className="flex items-center gap-1 text-xs font-normal text-slate-500">
+                      <input type="checkbox" checked={ifCheque} onChange={(e) => setIfCheque(e.target.checked)} className="rounded" />
+                      if Cheque
+                    </label>
+                  </span>
+                }
+                required
+              >
+                <select value={debitAccount} onChange={(e) => setDebitAccount(e.target.value)} className={inputClass}>
+                  <option value="">Select Payment Method</option>
+                  {accounts.map((a) => <option key={a.id} value={a.name}>{a.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Cheque/Receipt No">
+                <input value={chequeReceiptNo} onChange={(e) => setChequeReceiptNo(e.target.value)} className={inputClass} placeholder="Enter Cheque/Receipt No" disabled={!ifCheque} />
+              </Field>
+              <Field label="Amount" required>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">৳</span>
+                  <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputClass} pl-7`} placeholder="0.00" />
+                </div>
+              </Field>
+              <Field label="Comment">
+                <input value={comment} onChange={(e) => setComment(e.target.value)} className={inputClass} placeholder="Enter Comment" />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
+              <Field label="Attachment">
+                <label className={`${inputClass} flex items-center gap-2 cursor-pointer text-slate-500`}>
+                  <Paperclip size={14} className="shrink-0 text-slate-400" />
+                  <span className="truncate">{attachmentFile ? attachmentFile.name : 'Choose file — no file chosen'}</span>
+                  <input type="file" onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)} className="hidden" />
+                </label>
+              </Field>
+            </div>
+
+            <div className="h-px bg-slate-100 mb-5" />
+
+            {/* Section: References */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Field label="Select Invoice/Bill">
+                <input value={invoiceBill} onChange={(e) => setInvoiceBill(e.target.value)} className={inputClass} placeholder="Select Invoice" />
+              </Field>
+              <Field label="Payment Type">
+                <input value={paymentType} onChange={(e) => setPaymentType(e.target.value)} className={inputClass} placeholder="Select Payment Type" />
+              </Field>
+              <Field label="Select Installment">
+                <input value={installment} onChange={(e) => setInstallment(e.target.value)} className={inputClass} placeholder="Select Invoice" />
+              </Field>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            <Field label={<span>Payment Method <span className="text-red-500">*</span> <label className="ml-2 text-xs font-normal"><input type="checkbox" checked={ifCheque} onChange={(e) => setIfCheque(e.target.checked)} className="mr-1" />if Cheque</label></span>} required>
-              <select value={debitAccount} onChange={(e) => setDebitAccount(e.target.value)} className="input">
-                <option value="">Select Payment Method</option>
-                {accounts.map((a) => <option key={a._id} value={a.name}>{a.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Cheque/Receipt No">
-              <input value={chequeReceiptNo} onChange={(e) => setChequeReceiptNo(e.target.value)} className="input" placeholder="Enter Cheque/Receipt No" disabled={!ifCheque} />
-            </Field>
-            <Field label="Amount" required>
-              <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="input" placeholder="Amount" />
-            </Field>
-            <Field label="Comment">
-              <input value={comment} onChange={(e) => setComment(e.target.value)} className="input" placeholder="Enter Comment" />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            <Field label="Attachment">
-              <input type="file" onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)} className="input" />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <Field label="Select Invoice/Bill">
-              <input value={invoiceBill} onChange={(e) => setInvoiceBill(e.target.value)} className="input" placeholder="Select Invoice" />
-            </Field>
-            <Field label="Payment Type">
-              <input value={paymentType} onChange={(e) => setPaymentType(e.target.value)} className="input" placeholder="Select Payment Type" />
-            </Field>
-            <Field label="Select Installment">
-              <input value={installment} onChange={(e) => setInstallment(e.target.value)} className="input" placeholder="Select Invoice" />
-            </Field>
-          </div>
-
-          <div className="flex gap-2">
+          <div className="flex gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50/60">
             <button
               type="submit"
               disabled={submitting}
-              className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-6 py-2 rounded-md disabled:opacity-50"
+              className="bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-6 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 disabled:opacity-50 transition-colors"
             >
-              {submitting ? 'Saving...' : (editingId ? 'Update' : 'Submit')}
+              {submitting ? 'Saving...' : (editingId ? 'Update Voucher' : 'Submit Voucher')}
             </button>
             {editingId && (
-              <button type="button" onClick={resetFormForCreate} className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-medium px-6 py-2 rounded-md">
+              <button type="button" onClick={resetFormForCreate} className="bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm font-medium px-6 py-2.5 rounded-lg transition-colors">
                 Cancel Edit
               </button>
             )}
           </div>
         </form>
 
-        <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            <Field label="Select Date">
-              <div className="flex gap-2">
-                <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
-                <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
+        {/* Filters */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-5">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((o) => !o)}
+            className="w-full flex items-center justify-between px-6 py-4"
+          >
+            <span className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+              <SlidersHorizontal size={15} className="text-indigo-500" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="text-[11px] font-medium text-indigo-600 bg-indigo-50 rounded-full px-2 py-0.5">{activeFilterCount} active</span>
+              )}
+            </span>
+            {filtersOpen ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+          </button>
+
+          {filtersOpen && (
+            <div className="px-6 pb-6 border-t border-slate-100 pt-5">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <Field label="From">
+                  <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={inputClass} />
+                </Field>
+                <Field label="To">
+                  <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className={inputClass} />
+                </Field>
+                <Field label="Credit Accounts">
+                  <select value={filterCredit} onChange={(e) => setFilterCredit(e.target.value)} className={inputClass}>
+                    <option value="">Select Chart Of Account</option>
+                    {accounts.map((a) => <option key={a.id} value={a.name}>{a.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Debit Accounts">
+                  <select value={filterDebit} onChange={(e) => setFilterDebit(e.target.value)} className={inputClass}>
+                    <option value="">Select Chart Of Account</option>
+                    {accounts.map((a) => <option key={a.id} value={a.name}>{a.name}</option>)}
+                  </select>
+                </Field>
               </div>
-            </Field>
-            <Field label="Credit Accounts">
-              <select value={filterCredit} onChange={(e) => setFilterCredit(e.target.value)} className="input">
-                <option value="">Select Chart Of Account</option>
-                {accounts.map((a) => <option key={a._id} value={a.name}>{a.name}</option>)}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <Field label="Select Project">
+                  <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)} className={inputClass}>
+                    <option value="">Select Project</option>
+                    {projects.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Title/Name of Work">
+                  <input value={filterTitle} onChange={(e) => setFilterTitle(e.target.value)} className={inputClass} placeholder="Select Title/Name of Work" />
+                </Field>
+                <Field label="Site">
+                  <select value={filterSite} onChange={(e) => setFilterSite(e.target.value)} className={inputClass}>
+                    <option value="">Select Site</option>
+                    {sites.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Task">
+                  <select value={filterTask} onChange={(e) => setFilterTask(e.target.value)} className={inputClass}>
+                    <option value="">Select Task</option>
+                  </select>
+                </Field>
+              </div>
+              <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
+                <button type="button" onClick={handlePrint} className="inline-flex items-center justify-center gap-1.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors">
+                  <FileText size={14} /> PDF
+                </button>
+                <button type="button" onClick={exportExcel} className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors">
+                  <FileSpreadsheet size={14} /> Excel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Table panel */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span>Show</span>
+              <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30">
+                {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
-            </Field>
-            <Field label="Debit Accounts">
-              <select value={filterDebit} onChange={(e) => setFilterDebit(e.target.value)} className="input">
-                <option value="">Select Chart Of Account</option>
-                {accounts.map((a) => <option key={a._id} value={a.name}>{a.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Select Project">
-              <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)} className="input">
-                <option value="">Select Project</option>
-                {projects.map((p) => <option key={p._id} value={p.name}>{p.name}</option>)}
-              </select>
-            </Field>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-            <Field label="Title/Name of Work">
-              <input value={filterTitle} onChange={(e) => setFilterTitle(e.target.value)} className="input" placeholder="Select Title/Name of Work" />
-            </Field>
-            <Field label="Site">
-              <select value={filterSite} onChange={(e) => setFilterSite(e.target.value)} className="input">
-                <option value="">Select Site</option>
-                {sites.map((s) => <option key={s._id} value={s.name}>{s.name}</option>)}
-              </select>
-            </Field>
-            <div className="flex items-end gap-2">
-              <Field label="Task">
-                <select value={filterTask} onChange={(e) => setFilterTask(e.target.value)} className="input">
-                  <option value="">Select Task</option>
-                </select>
-              </Field>
-              <button type="button" onClick={handlePrint} className="bg-red-500 hover:bg-red-600 text-white text-sm font-medium px-4 py-2 rounded-md">PDF</button>
-              <button type="button" onClick={exportExcel} className="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2 rounded-md">Excel</button>
+              <span>entries</span>
+            </div>
+
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search vouchers..."
+                className="border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm w-64 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+              />
             </div>
           </div>
-        </div>
 
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2 text-sm">
-            Show
-            <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="border border-gray-300 rounded-md px-2 py-1">
-              {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-            entries
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            Search:
-            <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="border border-gray-300 rounded-md px-3 py-1.5" />
-          </div>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-indigo-500 text-white whitespace-nowrap">
-                {['SL', 'Date', 'Project', 'Code', 'Credit', 'Debit', 'Total', 'Ref', 'Cheque/Receipt',
-                  'Comment', 'Added By', 'Edited By', 'Approve', 'Attachment', 'Status', 'Action'].map((h) => (
-                  <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={16} className="text-center py-6 text-gray-400">Loading...</td></tr>
-              ) : pageRows.length === 0 ? (
-                <tr><td colSpan={16} className="text-center py-6 text-gray-400">No entries found</td></tr>
-              ) : pageRows.map((v, i) => (
-                <tr key={v._id} className="border-t border-gray-100">
-                  <td className="px-3 py-2">{(page - 1) * pageSize + i + 1}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{fmtDate(v.date)}</td>
-                  <td className="px-3 py-2">{v.project}</td>
-                  <td className="px-3 py-2">{v.voucherNo}</td>
-                  <td className="px-3 py-2 text-indigo-600">{v.creditAccount}</td>
-                  <td className="px-3 py-2 text-indigo-600">{v.debitAccount}</td>
-                  <td className="px-3 py-2">{Number(v.amount || 0).toFixed(2)}</td>
-                  <td className="px-3 py-2">{v.titleOfWork}</td>
-                  <td className="px-3 py-2">{v.chequeReceiptNo}</td>
-                  <td className="px-3 py-2">{v.comment}</td>
-                  <td className="px-3 py-2">{v.addedBy}</td>
-                  <td className="px-3 py-2">{v.editedBy}</td>
-                  <td className="px-3 py-2">
-                    {(v.approvals || []).length === 0 ? (
-                      <span className="text-gray-400">-</span>
-                    ) : (
-                      v.approvals.map((a, idx) => (
-                        <div key={idx} className={a.approved ? 'text-emerald-600' : 'text-red-500'}>
-                          {a.approved ? '✓' : '✗'} {a.name}
-                        </div>
-                      ))
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    {v.attachment ? (
-                      <a href={v.attachment} target="_blank" rel="noreferrer" className="text-indigo-600 underline">View</a>
-                    ) : ''}
-                  </td>
-                  <td className="px-3 py-2 capitalize">{v.status}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex gap-1.5 flex-wrap">
-                      <button onClick={() => handleSendMail(v)} className="bg-cyan-500 hover:bg-cyan-600 text-white p-1.5 rounded" title="Send Mail">
-                        <Mail size={13} />
-                      </button>
-                      <button onClick={() => loadForEdit(v._id)} className="bg-sky-500 hover:bg-sky-600 text-white p-1.5 rounded" title="Edit">
-                        <Pencil size={13} />
-                      </button>
-                      <button onClick={handlePrint} className="bg-indigo-500 hover:bg-indigo-600 text-white p-1.5 rounded" title="Print">
-                        <Printer size={13} />
-                      </button>
-                      <button onClick={() => handleDuplicate(v._id)} className="bg-teal-500 hover:bg-teal-600 text-white p-1.5 rounded" title="Duplicate">
-                        <Copy size={13} />
-                      </button>
-                      <button onClick={() => handleDelete(v._id)} className="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded" title="Delete">
-                        <Trash2 size={13} />
-                      </button>
-                      <button onClick={() => loadForEdit(v._id)} className="bg-emerald-500 hover:bg-emerald-600 text-white p-1.5 rounded" title="View">
-                        <Eye size={13} />
-                      </button>
-                    </div>
-                  </td>
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
+                  {['SL', 'Date', 'Project', 'Code', 'Credit', 'Debit', 'Total', 'Ref', 'Cheque/Receipt',
+                    'Comment', 'Added By', 'Edited By', 'Approve', 'Attachment', 'Status', 'Action'].map((h) => (
+                    <th key={h} className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="flex items-center justify-between mt-3 text-sm text-gray-500">
-          <div>
-            Showing {pageRows.length === 0 ? 0 : (page - 1) * pageSize + 1} to{' '}
-            {(page - 1) * pageSize + pageRows.length} of {filtered.length} entries
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  <tr>
+                    <td colSpan={16} className="text-center py-16">
+                      <div className="flex flex-col items-center gap-2 text-slate-400">
+                        <div className="w-6 h-6 border-2 border-slate-200 border-t-indigo-500 rounded-full animate-spin" />
+                        <p className="text-sm">Loading vouchers…</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : pageRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={16} className="text-center py-16">
+                      <div className="flex flex-col items-center gap-2 text-slate-400">
+                        <Receipt size={28} strokeWidth={1.5} />
+                        <p className="text-sm">No entries found. Try adjusting filters, or create a voucher above.</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : pageRows.map((v, i) => (
+                  <tr key={v.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap align-top">
+                    <td className="px-4 py-3.5 text-slate-400 font-mono text-xs">{(page - 1) * pageSize + i + 1}</td>
+                    <td className="px-4 py-3.5 text-slate-600">{fmtDate(v.date)}</td>
+                    <td className="px-4 py-3.5 text-slate-600">{v.project}</td>
+                    <td className="px-4 py-3.5 font-medium text-slate-700">{v.voucherNo}</td>
+                    <td className="px-4 py-3.5 text-indigo-600">{v.creditAccount}</td>
+                    <td className="px-4 py-3.5 text-indigo-600">{v.debitAccount}</td>
+                    <td className="px-4 py-3.5 font-medium text-slate-800">{Number(v.amount || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3.5 text-slate-600">{v.titleOfWork}</td>
+                    <td className="px-4 py-3.5 text-slate-600">{v.chequeReceiptNo}</td>
+                    <td className="px-4 py-3.5 text-slate-600">{v.comment}</td>
+                    <td className="px-4 py-3.5 text-slate-600">{v.addedBy}</td>
+                    <td className="px-4 py-3.5 text-slate-600">{v.editedBy}</td>
+                    <td className="px-4 py-3.5">
+                      {(v.approvals || []).length === 0 ? (
+                        <span className="text-slate-400">-</span>
+                      ) : (
+                        v.approvals.map((a, idx) => (
+                          <div key={idx} className={`flex items-center gap-1 ${a.approved ? 'text-emerald-600' : 'text-red-500'}`}>
+                            {a.approved ? <CheckCircle2 size={12} /> : <XCircle size={12} />} {a.name}
+                          </div>
+                        ))
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      {v.attachment ? (
+                        <a href={v.attachment} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-indigo-600 hover:underline text-sm">
+                          <Paperclip size={12} /> View
+                        </a>
+                      ) : '-'}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-600 px-2.5 py-1 text-xs font-medium ring-1 ring-inset ring-indigo-600/10 capitalize">
+                        {v.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button onClick={() => handleSendMail(v)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-cyan-100 text-slate-500 hover:text-cyan-600 transition-colors" title="Send Mail">
+                          <Mail size={14} />
+                        </button>
+                        <button onClick={() => loadForEdit(v.id)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors" title="Edit">
+                          <Pencil size={14} />
+                        </button>
+                        <button onClick={handlePrint} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors" title="Print">
+                          <Printer size={14} />
+                        </button>
+                        <button onClick={() => handleDuplicate(v.id)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-teal-100 text-slate-500 hover:text-teal-600 transition-colors" title="Duplicate">
+                          <Copy size={14} />
+                        </button>
+                        <button onClick={() => handleDelete(v.id)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors" title="Delete">
+                          <Trash2 size={14} />
+                        </button>
+                        <button onClick={() => loadForEdit(v.id)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-500 hover:text-emerald-600 transition-colors" title="View">
+                          <Eye size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div className="flex gap-1">
-            <button disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-40">Previous</button>
-            <span className="px-3 py-1.5 rounded-md bg-indigo-500 text-white">{page}</span>
-            <button disabled={page === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-40">Next</button>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100">
+            <span className="text-sm text-slate-500">
+              Showing <span className="font-medium text-slate-700">{pageRows.length === 0 ? 0 : (page - 1) * pageSize + 1}</span> to{' '}
+              <span className="font-medium text-slate-700">{(page - 1) * pageSize + pageRows.length}</span> of{' '}
+              <span className="font-medium text-slate-700">{filtered.length}</span> entries
+            </span>
+            <div className="flex gap-1.5">
+              <button disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors">
+                Previous
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setPage(n)}
+                  className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
+                    n === page ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+              <button disabled={page === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors">
+                Next
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -500,38 +659,38 @@ export default function ReceiptVoucherPage() {
         <form onSubmit={handleQuickAddSubmit}>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Chart of Group</label>
+              <label className={labelClass}>Chart of Group</label>
               <select
                 required
                 value={quickAddForm.chartOfGroup}
                 onChange={(e) => setQuickAddForm((f) => ({ ...f, chartOfGroup: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className={inputClass}
               >
                 <option value="">Select value</option>
-                {groupOptions.map((g) => <option key={g._id} value={g._id}>{g.name}</option>)}
+                {groupOptions.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Code</label>
+              <label className={labelClass}>Code</label>
               <input
                 value={quickAddForm.code}
                 onChange={(e) => setQuickAddForm((f) => ({ ...f, code: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className={inputClass}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Account Name</label>
+              <label className={labelClass}>Account Name</label>
               <input
                 required
                 value={quickAddForm.name}
                 onChange={(e) => setQuickAddForm((f) => ({ ...f, name: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className={inputClass}
               />
             </div>
           </div>
-          <div className="flex justify-end gap-2 mt-6">
-            <button type="button" onClick={() => setQuickAddOpen(false)} className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-medium px-5 py-2 rounded-md">Close</button>
-            <button type="submit" disabled={quickAddSaving} className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-5 py-2 rounded-md disabled:opacity-50">
+          <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-slate-100">
+            <button type="button" onClick={() => setQuickAddOpen(false)} className="bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium px-5 py-2.5 rounded-lg transition-colors">Close</button>
+            <button type="submit" disabled={quickAddSaving} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 disabled:opacity-50 transition-colors">
               {quickAddSaving ? 'Saving...' : 'Submit'}
             </button>
           </div>
@@ -544,8 +703,8 @@ export default function ReceiptVoucherPage() {
 function Field({ label, required, children }) {
   return (
     <div>
-      <label className="block text-sm text-gray-700 mb-1">
-        {label}{required && <span className="text-red-500">*</span>}
+      <label className={labelClass}>
+        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       {children}
     </div>

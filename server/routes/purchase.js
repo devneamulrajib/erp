@@ -54,6 +54,46 @@ router.get('/stock/:itemId', auth, async (req, res) => {
   }
 });
 
+// Stock report: all items with purchased, used, transferred and remaining stock.
+router.get('/stock-report/all', auth, async (req, res) => {
+  try {
+    const Item = require('../models/Item');
+    const items = await Item.findAll({ raw: true });
+
+    const purchaseItems = await PurchaseItem.findAll({ raw: true });
+
+    let usageItems = [];
+    try {
+      const { MaterialUsageItem } = require('../models/associations');
+      usageItems = await MaterialUsageItem.findAll({ raw: true });
+    } catch { /* not present yet */ }
+
+    const result = items.map((item) => {
+      const purchased = purchaseItems
+        .filter((p) => p.itemId === item.id)
+        .reduce((sum, p) => sum + (Number(p.purchaseQty) || 0), 0);
+
+      const used = usageItems
+        .filter((u) => u.itemId === item.id)
+        .reduce((sum, u) => sum + (Number(u.useQty) || 0), 0);
+
+      return {
+        id: item.id,
+        code: item.code,
+        name: item.name,
+        unit: item.unit,
+        purchased,
+        used,
+        stockQty: purchased - used,
+      };
+    });
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.get('/', auth, async (req, res) => {
   try {
     const { from, to, supplier, project, titleOfWork } = req.query;

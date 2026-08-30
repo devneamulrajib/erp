@@ -1,7 +1,22 @@
 import api from './axios';
 
-export const getUnits = (params) => api.get('/unit', { params });
-export const getNextUnitCode = () => api.get('/unit/next-code');
-export const createUnit = (data) => api.post('/unit', data);
-export const updateUnit = (id, data) => api.put(`/unit/${id}`, data);
-export const deleteUnit = (id) => api.delete(`/unit/${id}`);
+export async function getUnits(params) {
+  const res = await api.get('/unit', { params });
+  return res.data;
+}
+export async function getNextUnitCode() {
+  const res = await api.get('/unit/next-code');
+  return res.data;
+}
+export async function createUnit(data) {
+  const res = await api.post('/unit', data);
+  return res.data;
+}
+export async function updateUnit(id, data) {
+  const res = await api.put(`/unit/${id}`, data);
+  return res.data;
+}
+export async function deleteUnit(id) {
+  const res = await api.delete(`/unit/${id}`);
+  return res.data;
+}

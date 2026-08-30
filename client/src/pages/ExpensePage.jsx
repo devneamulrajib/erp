@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
 import { getExpense, getNextExpenseCode, createExpense, updateExpense } from '../api/expense';
 import { getChartOfAccounts } from '../api/chartOfAccounts';
+import { getCategories } from '../api/category';
+
+const inputClass = "w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition";
+const labelClass = "block text-xs font-medium text-slate-500 mb-1.5";
 
 export default function ExpensePage() {
   const navigate = useNavigate();
@@ -14,6 +17,7 @@ export default function ExpensePage() {
 
   const [projects, setProjects] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [categories, setCategories] = useState([]);
 
   const [project, setProject] = useState('');
   const [category, setCategory] = useState('');
@@ -28,8 +32,9 @@ export default function ExpensePage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
-    getChartOfAccounts().then((res) => setAccounts(res.data)).catch(() => {});
+    api.get('/projects').then((res) => setProjects(res.data ?? [])).catch(() => {});
+    getChartOfAccounts().then((res) => setAccounts(res?.data ?? res ?? [])).catch(() => {});
+    getCategories().then((res) => setCategories(res ?? [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -77,84 +82,97 @@ export default function ExpensePage() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-gray-50 text-left">
+    <div className="min-h-screen w-full bg-slate-50 text-left">
       <Topbar />
-      <ModuleNav />
 
-      <div className="flex items-center justify-between pr-4">
-        <Breadcrumb
-          items={[
-            { label: 'Home', to: '/dashboard' },
-            { label: 'Accounts Module', to: '/dashboard' },
-            { label: 'Expense' },
-          ]}
-        />
-        <button
-          type="button"
-          onClick={() => navigate('/accounts-module/expense_list')}
-          className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-md"
-        >
-          Expense List
-        </button>
-      </div>
-
-      <form onSubmit={handleSubmit} className="px-4 pb-10">
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-4">{error}</div>}
-
-        <div className="bg-white border border-gray-200 rounded-md p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <Field label="Date">
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
-            </Field>
-            <Field label="Reference">
-              <input value={reference} readOnly className="input bg-gray-50" />
-            </Field>
-            <Field label="Project">
-              <select value={project} onChange={(e) => setProject(e.target.value)} className="input">
-                <option value="">Select Project</option>
-                {projects.map((p) => <option key={p._id} value={p.name}>{p.name}</option>)}
-              </select>
-            </Field>
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+        {/* Header */}
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+          <div>
+            <Breadcrumb
+              items={[
+                { label: 'Home', to: '/dashboard' },
+                { label: 'Accounts Module', to: '/dashboard' },
+                { label: 'Expense' },
+              ]}
+            />
+            <h1 className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">
+              {isEdit ? 'Edit Expense' : 'New Expense'}
+            </h1>
+            <p className="text-sm text-slate-500 mt-0.5">Record a debit and credit entry against a project</p>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <Field label="Category">
-              <input value={category} onChange={(e) => setCategory(e.target.value)} className="input" placeholder="e.g. Materials Carrying" />
-            </Field>
-            <Field label="Debit Account" required>
-              <select value={drAccount} onChange={(e) => setDrAccount(e.target.value)} className="input">
-                <option value="">Select Chart Of Account</option>
-                {accounts.map((a) => <option key={a._id} value={a.name}>{a.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Credit Account" required>
-              <select value={crAccount} onChange={(e) => setCrAccount(e.target.value)} className="input">
-                <option value="">Select Chart Of Account</option>
-                {accounts.map((a) => <option key={a._id} value={a.name}>{a.name}</option>)}
-              </select>
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <Field label="Amount" required>
-              <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="input" placeholder="Amount" />
-            </Field>
-            <Field label="Attachment">
-              <input type="file" onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)} className="input" />
-            </Field>
-          </div>
-
-          <div className="flex justify-center">
-            <button
-              type="submit"
-              disabled={submitting}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white font-medium px-10 py-2.5 rounded-md disabled:opacity-50"
-            >
-              {submitting ? 'Saving...' : 'Submit'}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/accounts-module/expense_list')}
+            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 transition-colors"
+          >
+            Expense List
+          </button>
         </div>
-      </form>
+
+        <form onSubmit={handleSubmit}>
+          {error && (
+            <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-5">{error}</div>
+          )}
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+              <Field label="Date">
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
+              </Field>
+              <Field label="Reference">
+                <input value={reference} readOnly className={`${inputClass} bg-slate-50 text-slate-500`} />
+              </Field>
+              <Field label="Project">
+                <select value={project} onChange={(e) => setProject(e.target.value)} className={inputClass}>
+                  <option value="">Select Project</option>
+                  {projects.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                </select>
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+              <Field label="Category">
+                <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
+                  <option value="">Select Category</option>
+                  {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Debit Account" required>
+                <select value={drAccount} onChange={(e) => setDrAccount(e.target.value)} className={inputClass}>
+                  <option value="">Select Chart Of Account</option>
+                  {accounts.map((a) => <option key={a.id} value={a.name}>{a.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Credit Account" required>
+                <select value={crAccount} onChange={(e) => setCrAccount(e.target.value)} className={inputClass}>
+                  <option value="">Select Chart Of Account</option>
+                  {accounts.map((a) => <option key={a.id} value={a.name}>{a.name}</option>)}
+                </select>
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <Field label="Amount" required>
+                <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className={inputClass} placeholder="Amount" />
+              </Field>
+              <Field label="Attachment">
+                <input type="file" onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)} className={inputClass} />
+              </Field>
+            </div>
+
+            <div className="flex justify-center pt-4 border-t border-slate-100">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-10 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 disabled:opacity-50 transition-colors"
+              >
+                {submitting ? 'Saving...' : 'Submit'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
@@ -162,8 +180,8 @@ export default function ExpensePage() {
 function Field({ label, required, children }) {
   return (
     <div>
-      <label className="block text-sm text-gray-700 mb-1">
-        {label}{required && <span className="text-red-500">*</span>}
+      <label className={labelClass}>
+        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       {children}
     </div>

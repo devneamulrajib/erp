@@ -25,6 +25,7 @@ router.get('/', auth, async (req, res) => {
     const sites = await Site.findAll({ where });
     res.json(sites);
   } catch (err) {
+    console.error('GET /api/sites failed:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -49,6 +50,7 @@ router.post('/', auth, async (req, res) => {
 
     res.status(201).json(newSite);
   } catch (err) {
+    console.error('POST /api/sites failed:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -66,6 +68,7 @@ router.put('/:id', auth, async (req, res) => {
     await item.save();
     res.json(item);
   } catch (err) {
+    console.error('PUT /api/sites/:id failed:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -76,6 +79,7 @@ router.delete('/:id', auth, async (req, res) => {
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {
+    console.error('DELETE /api/sites/:id failed:', err);
     res.status(500).json({ message: err.message });
   }
 });

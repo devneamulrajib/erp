@@ -1,30 +1,39 @@
 const router = require('express').Router();
+const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
 const LabourBill = require('../models/LabourBill');
+const LabourBillItem = require('../models/LabourBillItem');
+const Party = require('../models/Party');
+const Project = require('../models/Project');
 
 router.get('/', auth, async (req, res) => {
   try {
     const { from, to, project, party } = req.query;
-    const filter = {};
-    if (project) filter.project = project;
-    if (party) filter.party = party;
+    const where = {};
+    if (project) where.projectId = project;
+    if (party) where.partyId = party;
     if (from || to) {
-      filter.date = {};
-      if (from) filter.date.$gte = from;
-      if (to) filter.date.$lte = to;
+      where.date = {};
+      if (from) where.date[Op.gte] = from;
+      if (to) where.date[Op.lte] = to;
     }
 
-    const bills = await LabourBill.find(filter)
-      .populate('party', 'name')
-      .populate('project', 'name')
-      .sort({ date: -1 });
+    const bills = await LabourBill.findAll({
+      where,
+      include: [
+        { model: Party, attributes: ['name'] },       // default alias: Party
+        { model: Project, attributes: ['name'] },      // default alias: Project
+        { model: LabourBillItem },                     // default alias: LabourBillItems
+      ],
+      order: [['date', 'DESC']],
+    });
 
     const rows = [];
     bills.forEach((bill) => {
-      (bill.items || []).forEach((item) => {
+      (bill.LabourBillItems || []).forEach((item) => {
         rows.push({
           invoiceNo: bill.code,
-          contractor: bill.party?.name || '',
+          contractor: bill.Party?.name || '',
           labourWorker: item.itemName || '',
           particulars: item.description || '',
           qtyDays: item.qtyDays || 0,

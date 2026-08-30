@@ -1,56 +1,31 @@
-const BASE_URL = '/api/flat';
+import api from './axios';
 
-function authHeaders() {
-  const token = localStorage.getItem('token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
-async function handle(res) {
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.message || 'Request failed');
-  return data;
-}
+const BASE_URL = '/flats';
 
 export async function getFlats(params = {}) {
   const query = new URLSearchParams(
     Object.entries(params).filter(([, v]) => v !== '' && v !== undefined && v !== null)
   ).toString();
-  const res = await fetch(`${BASE_URL}${query ? `?${query}` : ''}`, {
-    headers: authHeaders(),
-  });
-  return handle(res);
+  const res = await api.get(`${BASE_URL}${query ? `?${query}` : ''}`);
+  return res.data;
 }
 
 export async function getNextFlatCode() {
-  const res = await fetch(`${BASE_URL}/next-code`, { headers: authHeaders() });
-  return handle(res);
+  const res = await api.get(`${BASE_URL}/next-code`);
+  return res.data;
 }
 
 export async function createFlat(payload) {
-  const res = await fetch(BASE_URL, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify(payload),
-  });
-  return handle(res);
+  const res = await api.post(BASE_URL, payload);
+  return res.data;
 }
 
 export async function updateFlat(id, payload) {
-  const res = await fetch(`${BASE_URL}/${id}`, {
-    method: 'PUT',
-    headers: authHeaders(),
-    body: JSON.stringify(payload),
-  });
-  return handle(res);
+  const res = await api.put(`${BASE_URL}/${id}`, payload);
+  return res.data;
 }
 
 export async function deleteFlat(id) {
-  const res = await fetch(`${BASE_URL}/${id}`, {
-    method: 'DELETE',
-    headers: authHeaders(),
-  });
-  return handle(res);
+  const res = await api.delete(`${BASE_URL}/${id}`);
+  return res.data;
 }

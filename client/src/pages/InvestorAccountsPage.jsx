@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { Pencil, Trash2 } from 'lucide-react';
-import ModuleNav from '../components/ModuleNav';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import Topbar from '../components/Topbar';
+import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
 import { getChartOfGroupOptions } from '../api/chartOfGroup';
 import {
   getContacts, getNextContactCode, createContact, updateContact, deleteContact,
 } from '../api/contactAccounts';
+import { Pencil, Trash2, Search, Plus, LayoutGrid, Landmark } from 'lucide-react';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const EMPTY_FORM = {
@@ -45,13 +45,20 @@ export default function InvestorAccountsPage() {
     getChartOfGroupOptions().then(({ data }) => setGroupOptions(data)).catch(console.error);
   }, []);
 
-  const filtered = items.filter((c) => {
+  useEffect(() => {
+    setPage(1);
+  }, [search, pageSize]);
+
+  const filtered = useMemo(() => items.filter((c) => {
     if (search && !c.name?.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
-  });
+  }), [items, search]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const pageRows = useMemo(
+    () => filtered.slice((page - 1) * pageSize, page * pageSize),
+    [filtered, page, pageSize]
+  );
 
   async function openAddModal() {
     setEditingId(null);
@@ -62,7 +69,7 @@ export default function InvestorAccountsPage() {
   }
 
   function openEditModal(item) {
-    setEditingId(item._id);
+    setEditingId(item.id);
     setError('');
     setForm({
       code: item.code || '',
@@ -71,9 +78,13 @@ export default function InvestorAccountsPage() {
       email: item.email || '',
       address: item.address || '',
       creditLimit: item.creditLimit ?? '',
-      chartOfGroup: item.chartOfGroup?._id || item.chartOfGroup || '',
+      chartOfGroup: item.chartOfGroup?.id || item.chartOfGroup || '',
     });
     setModalOpen(true);
+  }
+
+  function closeModal() {
+    setModalOpen(false);
   }
 
   async function handleSubmit(e) {
@@ -111,223 +122,283 @@ export default function InvestorAccountsPage() {
   }
 
   return (
-    <div>
-      <ModuleNav />
+    <div className="min-h-screen w-full bg-slate-50 text-left">
+      <Topbar />
 
-      <div className="px-6 py-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-sm text-gray-500 flex items-center gap-1">
-            <Link to="/dashboard" className="text-indigo-600 hover:underline">Home</Link>
-            <span>&gt;</span>
-            <span className="text-indigo-600">Contact</span>
-            <span>&gt;</span>
-            <span className="text-gray-700">Investor List</span>
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+        {/* Header */}
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+          <div>
+            <Breadcrumb
+              items={[
+                { label: 'Home', to: '/dashboard' },
+                { label: 'Contact', to: '/accounts-module/investor-accounts' },
+                { label: 'Investor List' },
+              ]}
+            />
+            <h1 className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">Investor Accounts</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Manage your investor contacts and account details</p>
           </div>
           <button
             onClick={openAddModal}
-            className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-md"
+            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 transition-colors"
           >
-            + Investor Add
+            <Plus size={16} strokeWidth={2.5} />
+            Investor Add
           </button>
         </div>
 
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2 text-sm">
-            Show
-            <select
-              value={pageSize}
-              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-              className="border border-gray-300 rounded-md px-2 py-1"
-            >
-              {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-            entries
+        {/* Summary strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Total Investors</div>
+            <div className="text-xl font-semibold text-slate-900">{items.length}</div>
           </div>
-          <div className="flex items-center gap-2 text-sm">
-            Search:
-            <input
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="border border-gray-300 rounded-md px-3 py-1.5"
-            />
+          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 col-span-2 sm:col-span-2">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Matching Search</div>
+            <div className="text-xl font-semibold text-slate-900">{filtered.length}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Showing</div>
+            <div className="text-xl font-semibold text-slate-900">{pageRows.length} / {filtered.length}</div>
           </div>
         </div>
 
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-indigo-500 text-white text-left text-sm">
-              <th className="px-3 py-2 font-medium">ID</th>
-              <th className="px-3 py-2 font-medium">CODE</th>
-              <th className="px-3 py-2 font-medium">NAME</th>
-              <th className="px-3 py-2 font-medium">MOBILE</th>
-              <th className="px-3 py-2 font-medium">EMAIL</th>
-              <th className="px-3 py-2 font-medium">ADDRESS</th>
-              <th className="px-3 py-2 font-medium">UNDER</th>
-              <th className="px-3 py-2 font-medium text-right">ACTION</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={8} className="text-center py-6 text-gray-400">Loading...</td></tr>
-            ) : pageRows.length === 0 ? (
-              <tr><td colSpan={8} className="text-center py-6 text-gray-400">No entries found</td></tr>
-            ) : pageRows.map((item, i) => (
-              <tr key={item._id} className="border-b border-gray-100 text-sm">
-                <td className="px-3 py-2">{(page - 1) * pageSize + i + 1}</td>
-                <td className="px-3 py-2">{item.code}</td>
-                <td className="px-3 py-2 text-indigo-600">{item.name}</td>
-                <td className="px-3 py-2">{item.mobile}</td>
-                <td className="px-3 py-2">{item.email}</td>
-                <td className="px-3 py-2">{item.address}</td>
-                <td className="px-3 py-2">{item.chartOfGroup?.name || '-'}</td>
-                <td className="px-3 py-2">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => openEditModal(item)}
-                      className="bg-sky-500 hover:bg-sky-600 text-white p-1.5 rounded-md"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(item._id)}
-                      className="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-md"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
-          <div>
-            Showing {pageRows.length === 0 ? 0 : (page - 1) * pageSize + 1} to{' '}
-            {(page - 1) * pageSize + pageRows.length} of {filtered.length} entries
-          </div>
-          <div className="flex gap-1">
-            <button
-              disabled={page === 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-40"
-            >
-              Previous
-            </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).slice(0, 6).map((n) => (
-              <button
-                key={n}
-                onClick={() => setPage(n)}
-                className={`px-3 py-1.5 rounded-md ${n === page ? 'bg-indigo-500 text-white' : 'border border-gray-300'}`}
+        {/* Table panel */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span>Show</span>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
               >
-                {n}
+                {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <span>entries</span>
+            </div>
+
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search investors..."
+                className="border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm w-64 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+              />
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
+                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">ID</th>
+                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Code</th>
+                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Name</th>
+                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Mobile</th>
+                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Email</th>
+                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Address</th>
+                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Under</th>
+                  <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} className="text-center py-16 text-slate-400 text-sm">Loading...</td>
+                  </tr>
+                ) : pageRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="text-center py-16">
+                      <div className="flex flex-col items-center gap-2 text-slate-400">
+                        <LayoutGrid size={28} strokeWidth={1.5} />
+                        <p className="text-sm">No investors found. Try adjusting your search, or add one.</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  pageRows.map((item, i) => (
+                    <tr key={item.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
+                      <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">{(page - 1) * pageSize + i + 1}</td>
+                      <td className="px-5 py-3.5">
+                        <span className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-600 px-2.5 py-1 text-xs font-mono font-medium ring-1 ring-inset ring-indigo-600/10">
+                          {item.code}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <button
+                          onClick={() => openEditModal(item)}
+                          className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-medium hover:underline underline-offset-2"
+                        >
+                          <Landmark size={13} className="text-slate-400" />
+                          {item.name}
+                        </button>
+                      </td>
+                      <td className="px-5 py-3.5 text-slate-700">{item.mobile || '-'}</td>
+                      <td className="px-5 py-3.5 text-slate-700">{item.email || '-'}</td>
+                      <td className="px-5 py-3.5 text-slate-700">{item.address || '-'}</td>
+                      <td className="px-5 py-3.5 text-slate-700">{item.chartOfGroup?.name || '-'}</td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => openEditModal(item)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-sky-100 text-slate-500 hover:text-sky-600 transition-colors"
+                            title="Edit"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100">
+            <span className="text-sm text-slate-500">
+              Showing <span className="font-medium text-slate-700">{filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}</span> to{' '}
+              <span className="font-medium text-slate-700">{Math.min(page * pageSize, filtered.length)}</span> of{' '}
+              <span className="font-medium text-slate-700">{filtered.length}</span> entries
+            </span>
+            <div className="flex gap-1.5">
+              <button
+                disabled={page === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors"
+              >
+                Previous
               </button>
-            ))}
-            <button
-              disabled={page === totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-40"
-            >
-              Next
-            </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setPage(n)}
+                  className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
+                    n === page ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+              <button
+                disabled={page === totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors"
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      <Modal open={modalOpen} title="Investor" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen} title={editingId ? 'Edit Investor' : 'Investor'} onClose={closeModal}>
         <form onSubmit={handleSubmit}>
           {error && (
-            <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+            <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
               {error}
             </div>
           )}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Code</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">Code</label>
               <input
                 value={form.code}
                 onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-gray-50"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-mono bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Name</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">Name</label>
               <input
                 required
                 placeholder="Enter Name"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4 mt-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Mobile</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">Mobile</label>
               <input
                 placeholder="Enter Mobile"
                 value={form.mobile}
                 onChange={(e) => setForm((f) => ({ ...f, mobile: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Email</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">Email</label>
               <input
                 placeholder="Enter E-mail"
                 value={form.email}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4 mt-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Address</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">Address</label>
               <input
                 placeholder="Enter Address"
                 value={form.address}
                 onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Investment Amount</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">Investment Amount</label>
               <input
                 type="number"
                 placeholder="Enter Amount"
                 value={form.creditLimit}
                 onChange={(e) => setForm((f) => ({ ...f, creditLimit: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
           </div>
           <div className="mt-4">
-            <label className="block text-sm font-medium mb-1">Under</label>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Under</label>
             <select
               required
               value={form.chartOfGroup}
               onChange={(e) => setForm((f) => ({ ...f, chartOfGroup: e.target.value }))}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
             >
               <option value="">Select One Option</option>
               {groupOptions.map((g) => (
-                <option key={g._id} value={g._id}>{g.name}</option>
+                <option key={g.id} value={g.id}>{g.name}</option>
               ))}
             </select>
           </div>
-          <div className="flex justify-end gap-2 mt-6">
+          <div className="flex justify-end gap-2 pt-6 mt-6 border-t border-slate-100">
             <button
               type="button"
-              onClick={() => setModalOpen(false)}
-              className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-medium px-5 py-2 rounded-md"
+              onClick={closeModal}
+              className="px-4 py-2.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
             >
               Close
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-5 py-2 rounded-md disabled:opacity-50"
+              className="px-4 py-2.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 shadow-sm shadow-indigo-600/20 transition-colors"
             >
               {saving ? 'Saving...' : 'Submit'}
             </button>

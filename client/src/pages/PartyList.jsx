@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
+import SearchableSelect from '../components/SearchableSelect';
 import { Link } from 'react-router-dom';
-import { Pencil, Trash2, X } from 'lucide-react';
+import { Pencil, Trash2, X, Plus, Search, ChevronDown, User } from 'lucide-react';
 
 const TYPE_OPTIONS = ['First Party', 'Second Party'];
 const STATUS_OPTIONS = ['Active', 'Inactive'];
@@ -36,8 +36,6 @@ export default function PartyList() {
 
   useEffect(() => {
     fetchParties();
-    // Populate the Agreement select. If you don't have this endpoint yet,
-    // this call will just fail silently and the dropdown will be empty.
     api.get('/agreements').then((r) => setAgreements(r.data)).catch(() => {});
   }, []);
 
@@ -65,7 +63,7 @@ export default function PartyList() {
       nid: party.nid || '',
       position: party.position || '',
       address: party.address || '',
-      agreementId: party.agreementId || '',
+      agreementId: party.agreementId ? String(party.agreementId) : '',
       type: party.type || '',
       status: party.status || '',
       details: party.details || '',
@@ -137,141 +135,192 @@ export default function PartyList() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
 
+  const agreementOptions = agreements.map((a) => ({
+    value: String(a.id ?? a._id),
+    label: a.title || a.reference || `Agreement #${a.id ?? a._id}`,
+  }));
+
   return (
     <div className="min-h-screen w-full bg-gray-50 text-left">
       <Topbar />
-      <ModuleNav />
 
-      <div className="p-4">
-        {/* Breadcrumb */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-sm text-gray-500 flex items-center gap-2">
-            <Link to="/dashboard" className="hover:text-indigo-600">Home</Link>
-            <span>&gt;</span>
-            <Link to="/dashboard" className="hover:text-indigo-600">Accounts Module</Link>
-            <span>&gt;</span>
-            <span className="text-gray-700 font-medium">Party List</span>
+      <div className="px-6 pt-6 pb-10">
+        {/* Header row */}
+        <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
+          <div>
+            <div className="text-sm text-gray-500 flex items-center gap-2">
+              <Link to="/dashboard" className="hover:text-indigo-600">Home</Link>
+              <span>&gt;</span>
+              <Link to="/dashboard" className="hover:text-indigo-600">Accounts Module</Link>
+              <span>&gt;</span>
+              <span className="text-gray-700 font-medium">Party List</span>
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mt-2">Party List</h1>
+            <p className="text-sm text-gray-500 mt-1">Manage the parties linked to your agreements</p>
           </div>
+
           <button
             onClick={openAddModal}
-            className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-md"
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow-sm transition-colors"
           >
-            + Party Add
+            <Plus size={16} strokeWidth={2.5} />
+            Create Party
           </button>
         </div>
 
+        {/* Stat cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Total Parties</p>
+            <p className="text-2xl font-bold text-gray-900 mt-2">{parties.length}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Matching Search</p>
+            <p className="text-2xl font-bold text-gray-900 mt-2">{filtered.length}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Showing</p>
+            <p className="text-2xl font-bold text-gray-900 mt-2">
+              {paged.length} / {filtered.length}
+            </p>
+          </div>
+        </div>
+
         {/* Table card */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="flex items-center justify-between px-4 pt-4 pb-2">
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <span>Show</span>
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3.5 flex-wrap gap-3">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-500">Show</span>
               <select
                 value={pageSize}
                 onChange={(e) => {
                   setPageSize(Number(e.target.value));
                   setPage(1);
                 }}
-                className="border border-gray-300 rounded px-2 py-1"
+                className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
               >
                 {[10, 25, 50, 100].map((n) => (
                   <option key={n} value={n}>{n}</option>
                 ))}
               </select>
-              <span>entries</span>
+              <span className="text-gray-500">entries</span>
             </div>
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <span>Search:</span>
-              <input
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="border border-gray-300 rounded px-2 py-1"
-              />
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 border border-indigo-200 text-indigo-600 bg-white hover:bg-indigo-50 text-sm font-medium px-3 py-2 rounded-lg transition-colors"
+              >
+                Select Columns
+                <ChevronDown size={14} />
+              </button>
+
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="Search parties..."
+                  className="border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                />
+              </div>
             </div>
           </div>
 
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-indigo-500 text-white text-left">
-                <th className="px-4 py-2 font-medium">SL</th>
-                <th className="px-4 py-2 font-medium">NAME</th>
-                <th className="px-4 py-2 font-medium">PHONE</th>
-                <th className="px-4 py-2 font-medium">EMAIL</th>
-                <th className="px-4 py-2 font-medium">TYPE</th>
-                <th className="px-4 py-2 font-medium">AGREEMENT</th>
-                <th className="px-4 py-2 font-medium">USER</th>
-                <th className="px-4 py-2 font-medium">ACTION</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
-                    Loading...
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-y border-gray-100">
+                  {['ID', 'Name', 'Phone', 'Email', 'Type', 'Agreement', 'User', 'Action'].map((h) => (
+                    <th
+                      key={h}
+                      className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 whitespace-nowrap"
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-              )}
+              </thead>
+              <tbody>
+                {loading && (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-10 text-center text-gray-400 text-sm">
+                      Loading...
+                    </td>
+                  </tr>
+                )}
 
-              {!loading && paged.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
-                    No parties found
-                  </td>
-                </tr>
-              )}
+                {!loading && paged.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-10 text-center text-gray-400 text-sm">
+                      No parties found
+                    </td>
+                  </tr>
+                )}
 
-              {!loading && paged.map((party, idx) => (
-                <tr key={party._id} className="border-t border-gray-100">
-                  <td className="px-4 py-2">{(page - 1) * pageSize + idx + 1}</td>
-                  <td className="px-4 py-2">{party.name}</td>
-                  <td className="px-4 py-2">{party.phone}</td>
-                  <td className="px-4 py-2">{party.email}</td>
-                  <td className="px-4 py-2">{party.type}</td>
-                  <td className="px-4 py-2">{party.agreementLabel || party.agreementId}</td>
-                  <td className="px-4 py-2">{party.userName || 'Admin'}</td>
-                  <td className="px-4 py-2">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => openEditModal(party)}
-                        className="bg-cyan-500 hover:bg-cyan-600 text-white p-1.5 rounded"
-                        title="Edit"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(party._id)}
-                        className="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded"
-                        title="Delete"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                {!loading && paged.map((party, idx) => (
+                  <tr key={party._id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
+                    <td className="px-4 py-3 text-gray-400">#{(page - 1) * pageSize + idx + 1}</td>
+                    <td className="px-4 py-3">
+                      <span className="flex items-center gap-1.5 font-semibold text-indigo-600">
+                        <User size={14} className="text-indigo-400" />
+                        {party.name || '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">{party.phone || '—'}</td>
+                    <td className="px-4 py-3 text-gray-600">{party.email || '—'}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-block rounded-md bg-indigo-50 text-indigo-600 text-xs font-medium px-2 py-1">
+                        {party.type || '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">{party.agreementLabel || '—'}</td>
+                    <td className="px-4 py-3 text-gray-600">{party.userName || 'Admin'}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => openEditModal(party)}
+                          title="Edit"
+                          className="bg-gray-50 hover:bg-indigo-50 hover:text-indigo-600 text-gray-500 p-2 rounded-lg border border-gray-100 transition-colors"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(party._id)}
+                          title="Delete"
+                          className="bg-gray-50 hover:bg-red-50 hover:text-red-600 text-gray-500 p-2 rounded-lg border border-gray-100 transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-          <div className="flex items-center justify-between px-4 py-3 text-sm text-gray-500">
-            <span>
+          <div className="flex items-center justify-between px-4 py-3.5 border-t border-gray-100 flex-wrap gap-3">
+            <span className="text-sm text-gray-500">
               Showing {filtered.length === 0 ? 0 : (page - 1) * pageSize + 1} to{' '}
               {Math.min(page * pageSize, filtered.length)} of {filtered.length} entries
             </span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-3 py-1 rounded border border-gray-300 disabled:opacity-40"
+                className="px-3 py-1.5 rounded-lg text-sm text-gray-400 hover:text-gray-700 disabled:opacity-50 disabled:hover:text-gray-400"
               >
                 Previous
               </button>
-              <span className="px-3 py-1 rounded bg-indigo-500 text-white">{page}</span>
+              <span className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-indigo-600 text-white">{page}</span>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="px-3 py-1 rounded border border-gray-300 disabled:opacity-40"
+                className="px-3 py-1.5 rounded-lg text-sm text-gray-400 hover:text-gray-700 disabled:opacity-50 disabled:hover:text-gray-400"
               >
                 Next
               </button>
@@ -283,16 +332,19 @@ export default function PartyList() {
       {/* Add / Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-start justify-center pt-16 z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg w-full max-w-3xl mx-4 p-6 relative">
+          <div className="bg-white rounded-xl w-full max-w-3xl mx-4 p-6 relative border border-gray-200 shadow-lg">
             <button
               onClick={closeModal}
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
             >
               <X size={20} />
             </button>
-            <h2 className="text-lg font-semibold mb-5">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">
               {editingId ? 'Edit Party' : 'Add New Party'}
             </h2>
+            <p className="text-sm text-gray-500 mb-5">
+              {editingId ? 'Update the details of this party' : 'Fill in the details to add a new party'}
+            </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               <Field label="Name">
@@ -355,16 +407,12 @@ export default function PartyList() {
                 />
               </Field>
               <Field label="Agreement">
-                <select
+                <SearchableSelect
+                  options={agreementOptions}
                   value={form.agreementId}
-                  onChange={(e) => handleChange('agreementId', e.target.value)}
-                  className="input"
-                >
-                  <option value="">Select Agreement</option>
-                  {agreements.map((a) => (
-                    <option key={a._id} value={a._id}>{a.title || a.name}</option>
-                  ))}
-                </select>
+                  onChange={(val) => handleChange('agreementId', val)}
+                  placeholder="Select Agreement"
+                />
               </Field>
             </div>
 
@@ -408,14 +456,14 @@ export default function PartyList() {
             <div className="flex justify-end gap-2 mt-6">
               <button
                 onClick={closeModal}
-                className="px-4 py-2 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50"
+                className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm font-medium transition-colors"
               >
                 Close
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-4 py-2 rounded-md bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-60"
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm disabled:opacity-60 transition-colors"
               >
                 {saving ? 'Saving...' : 'Save changes'}
               </button>
@@ -428,8 +476,8 @@ export default function PartyList() {
       <style>{`
         .input {
           width: 100%;
-          border: 1px solid #d1d5db;
-          border-radius: 6px;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
           padding: 8px 10px;
           font-size: 14px;
         }
@@ -446,7 +494,7 @@ export default function PartyList() {
 function Field({ label, children }) {
   return (
     <div>
-      <label className="block text-sm text-gray-600 mb-1">{label}</label>
+      <label className="block text-sm text-gray-600 mb-1.5">{label}</label>
       {children}
     </div>
   );

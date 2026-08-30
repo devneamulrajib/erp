@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
-import ModuleNav from '../components/ModuleNav';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   getAsset, createAsset, updateAsset,
   addDepreciationEntry, addMovementEntry, addRevaluationEntry,
   getItemOptions, getProjectOptions,
 } from '../api/asset';
 import { getChartOfAccounts } from '../api/chartOfAccounts';
+import Topbar from '../components/Topbar';
+import Breadcrumb from '../components/Breadcrumb';
+import { Plus } from 'lucide-react';
 
 const TABS = ['Asset', 'Depreciation Board', 'Movement History', 'Revaluations History'];
 const METHOD_OPTIONS = ['Straight Line', 'Declining Balance', 'Double Declining Balance'];
@@ -17,6 +19,11 @@ const EMPTY_FORM = {
   method: '', duration: '', computation: '', notDepreciableValue: '',
   expenseAccount: '', voucherNo: '',
 };
+
+const inputClass = "w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition";
+const readOnlyClass = "w-40 border border-slate-200 bg-slate-50 rounded-lg px-3 py-2.5 text-sm text-right text-slate-500";
+const labelClass = "block text-xs font-medium text-slate-500 mb-1.5";
+const sectionTitleClass = "font-semibold text-slate-800 mb-3";
 
 export default function AssetFormPage() {
   const { id } = useParams();
@@ -39,15 +46,15 @@ export default function AssetFormPage() {
       const { data } = await getAsset(id);
       setAsset(data);
       setForm({
-        item: data.item?._id || data.item || '',
+        item: data.item?.id || data.item || '',
         originalValue: data.originalValue ?? '',
         acquisitionDate: data.acquisitionDate ? data.acquisitionDate.slice(0, 10) : '',
-        project: data.project?._id || data.project || '',
+        project: data.project?.id || data.project || '',
         method: data.method || '',
         duration: data.duration ?? '',
         computation: data.computation || '',
         notDepreciableValue: data.notDepreciableValue ?? '',
-        expenseAccount: data.expenseAccount?._id || data.expenseAccount || '',
+        expenseAccount: data.expenseAccount?.id || data.expenseAccount || '',
         voucherNo: data.voucherNo || '',
       });
     } catch (err) {
@@ -58,9 +65,9 @@ export default function AssetFormPage() {
   useEffect(() => { loadAsset(); }, [loadAsset]);
 
   useEffect(() => {
-    getItemOptions().then(({ data }) => setItemOptions(data)).catch(console.error);
-    getProjectOptions().then(({ data }) => setProjectOptions(data)).catch(console.error);
-    getChartOfAccounts().then(({ data }) => setAccountOptions(data)).catch(console.error);
+    getItemOptions().then((res) => setItemOptions(res?.data ?? res ?? [])).catch(console.error);
+    getProjectOptions().then((res) => setProjectOptions(res?.data ?? res ?? [])).catch(console.error);
+    getChartOfAccounts().then((res) => setAccountOptions(res?.data ?? res ?? [])).catch(console.error);
   }, []);
 
   async function handleSave() {
@@ -76,7 +83,7 @@ export default function AssetFormPage() {
         setAsset(data);
       } else {
         const { data } = await createAsset(form);
-        navigate(`/accounts-module/asset_list_add/${data._id}`, { replace: true });
+        navigate(`/accounts-module/asset_list_add/${data.id}`, { replace: true });
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to save asset');
@@ -88,27 +95,37 @@ export default function AssetFormPage() {
   const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
 
   return (
-    <div>
-      <ModuleNav />
+    <div className="min-h-screen w-full bg-slate-50 text-left">
+      <Topbar />
 
-      <div className="px-6 py-4">
-        <div className="text-sm text-gray-500 flex items-center gap-1 mb-4">
-          <Link to="/dashboard" className="text-indigo-600 hover:underline">Home</Link>
-          <span>&gt;</span>
-          <Link to="/accounts-module/asset_list" className="text-indigo-600 hover:underline">Asset List</Link>
-          <span>&gt;</span>
-          <span className="text-gray-700">Assets</span>
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+        {/* Header */}
+        <div className="mb-6">
+          <Breadcrumb
+            items={[
+              { label: 'Home', to: '/dashboard' },
+              { label: 'Asset List', to: '/accounts-module/asset_list' },
+              { label: 'Assets' },
+            ]}
+          />
+          <h1 className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">
+            {isEdit ? 'Edit Asset' : 'New Asset'}
+          </h1>
+          <p className="text-sm text-slate-500 mt-0.5">Manage asset value, depreciation, and history</p>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <div className="flex border-b border-gray-200">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* Tabs */}
+          <div className="flex border-b border-slate-100 px-2">
             {TABS.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 disabled={!isEdit && tab !== 'Asset'}
-                className={`px-5 py-3 text-sm font-medium border-b-2 -mb-px disabled:opacity-40 disabled:cursor-not-allowed ${
-                  activeTab === tab ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                className={`px-5 py-3.5 text-sm font-medium border-b-2 -mb-px disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${
+                  activeTab === tab
+                    ? 'border-indigo-600 text-indigo-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
                 }`}
               >
                 {tab}
@@ -152,98 +169,98 @@ function AssetTab({
   return (
     <div>
       {error && (
-        <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+        <div className="mb-5 text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
           {error}
         </div>
       )}
-      <div className="grid grid-cols-2 gap-x-12 gap-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-6">
         <div>
-          <h3 className="font-semibold text-gray-700 mb-3">Asset Value</h3>
+          <h3 className={sectionTitleClass}>Asset Value</h3>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Item Name</label>
+              <label className={labelClass}>Item Name</label>
               <select
                 value={form.item}
                 onChange={(e) => setForm((f) => ({ ...f, item: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className={inputClass}
               >
                 <option value="">Select Item</option>
                 {itemOptions.map((it) => (
-                  <option key={it._id} value={it._id}>{it.name}</option>
+                  <option key={it.id} value={it.id}>{it.name}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Original Value</label>
+              <label className={labelClass}>Original Value</label>
               <input
                 type="number"
                 placeholder="0.00"
                 value={form.originalValue}
                 onChange={(e) => setForm((f) => ({ ...f, originalValue: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className={inputClass}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Acquisition Date</label>
+              <label className={labelClass}>Acquisition Date</label>
               <input
                 type="date"
                 value={form.acquisitionDate}
                 onChange={(e) => setForm((f) => ({ ...f, acquisitionDate: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className={inputClass}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Project</label>
+              <label className={labelClass}>Project</label>
               <select
                 value={form.project}
                 onChange={(e) => setForm((f) => ({ ...f, project: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className={inputClass}
               >
                 <option value="">Select a project</option>
                 {projectOptions.map((p) => (
-                  <option key={p._id} value={p._id}>{p.name}</option>
+                  <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          <h3 className="font-semibold text-gray-700 mt-8 mb-3">Depreciation Method</h3>
+          <h3 className={`${sectionTitleClass} mt-8`}>Depreciation Method</h3>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Method</label>
+              <label className={labelClass}>Method</label>
               <select
                 value={form.method}
                 onChange={(e) => setForm((f) => ({ ...f, method: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className={inputClass}
               >
                 <option value="">Select</option>
                 {METHOD_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Duration</label>
+              <label className={labelClass}>Duration</label>
               <div className="flex gap-2">
                 <input
                   type="number"
                   value={form.duration}
                   onChange={(e) => setForm((f) => ({ ...f, duration: e.target.value }))}
-                  className="w-1/2 border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  className={`${inputClass} w-1/2`}
                 />
                 <select
                   value="Year"
                   disabled
-                  className="w-1/2 border border-gray-300 rounded-md px-3 py-2 text-sm bg-gray-50"
+                  className={`${inputClass} w-1/2 bg-slate-50 text-slate-500`}
                 >
                   <option>Year</option>
                 </select>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Computation</label>
+              <label className={labelClass}>Computation</label>
               <select
                 value={form.computation}
                 onChange={(e) => setForm((f) => ({ ...f, computation: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className={inputClass}
               >
                 <option value="">Select</option>
                 {COMPUTATION_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -253,71 +270,67 @@ function AssetTab({
         </div>
 
         <div>
-          <h3 className="font-semibold text-gray-700 mb-3">Current Values</h3>
+          <h3 className={sectionTitleClass}>Current Values</h3>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <label className="text-sm">Not Depreciable Value</label>
+              <label className="text-sm text-slate-600">Not Depreciable Value</label>
               <input
                 type="number"
                 value={form.notDepreciableValue}
                 onChange={(e) => setForm((f) => ({ ...f, notDepreciableValue: e.target.value }))}
-                className="w-40 border border-gray-300 rounded-md px-3 py-2 text-sm text-right"
+                className="w-40 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-right bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
             <div className="flex items-center justify-between">
-              <label className="text-sm">Book Value</label>
-              <div className="w-40 border border-gray-200 bg-gray-50 rounded-md px-3 py-2 text-sm text-right text-gray-500">
-                {asset?.bookValue ?? '0.00'}
-              </div>
+              <label className="text-sm text-slate-600">Book Value</label>
+              <div className={readOnlyClass}>{asset?.bookValue ?? '0.00'}</div>
             </div>
             <div className="flex items-center justify-between">
-              <label className="text-sm">Depreciable Value</label>
-              <div className="w-40 border border-gray-200 bg-gray-50 rounded-md px-3 py-2 text-sm text-right text-gray-500">
-                {asset?.depreciableValue ?? '0.00'}
-              </div>
+              <label className="text-sm text-slate-600">Depreciable Value</label>
+              <div className={readOnlyClass}>{asset?.depreciableValue ?? '0.00'}</div>
             </div>
           </div>
 
-          <h3 className="font-semibold text-gray-700 mt-8 mb-3">Accounting</h3>
+          <h3 className={`${sectionTitleClass} mt-8`}>Accounting</h3>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Expense Account</label>
+              <label className={labelClass}>Expense Account</label>
               <select
                 value={form.expenseAccount}
                 onChange={(e) => setForm((f) => ({ ...f, expenseAccount: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className={inputClass}
               >
                 <option value="">Select Account</option>
                 {accountOptions.map((a) => (
-                  <option key={a._id} value={a._id}>{a.name}</option>
+                  <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">If Tag Voucher No</label>
+              <label className={labelClass}>If Tag Voucher No</label>
               <input
                 placeholder="Voucher No (optional)"
                 value={form.voucherNo}
                 onChange={(e) => setForm((f) => ({ ...f, voucherNo: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className={inputClass}
               />
             </div>
           </div>
         </div>
       </div>
 
-      <div className="flex gap-3 mt-8">
+      <div className="flex gap-2 mt-8 pt-6 border-t border-slate-100">
         <button
           onClick={onSave}
           disabled={saving}
-          className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-6 py-2 rounded-md disabled:opacity-50"
+          className="bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-6 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 disabled:opacity-50 transition-colors"
         >
           {saving ? 'Saving...' : 'Save'}
         </button>
         <button
           type="button"
           disabled
-          className="bg-gray-100 text-gray-400 text-sm font-medium px-6 py-2 rounded-md cursor-not-allowed"
+          className="bg-slate-100 text-slate-400 text-sm font-medium px-6 py-2.5 rounded-lg cursor-not-allowed"
         >
           Cancel
         </button>
@@ -347,54 +360,56 @@ function DepreciationBoardTab({ assetId, asset, reload, fmtDate }) {
 
   return (
     <div>
-      <form onSubmit={handleAdd} className="grid grid-cols-5 gap-3 mb-4 items-end">
+      <form onSubmit={handleAdd} className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5 items-end">
         <div>
-          <label className="block text-xs font-medium mb-1">Date</label>
-          <input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <label className={labelClass}>Date</label>
+          <input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className={inputClass} />
         </div>
         <div>
-          <label className="block text-xs font-medium mb-1">Reference</label>
-          <input value={form.reference} onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <label className={labelClass}>Reference</label>
+          <input value={form.reference} onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))} className={inputClass} />
         </div>
         <div>
-          <label className="block text-xs font-medium mb-1">Depreciation</label>
-          <input type="number" value={form.depreciation} onChange={(e) => setForm((f) => ({ ...f, depreciation: e.target.value }))} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <label className={labelClass}>Depreciation</label>
+          <input type="number" value={form.depreciation} onChange={(e) => setForm((f) => ({ ...f, depreciation: e.target.value }))} className={inputClass} />
         </div>
         <div>
-          <label className="block text-xs font-medium mb-1">Journal Entry</label>
-          <input value={form.journalEntry} onChange={(e) => setForm((f) => ({ ...f, journalEntry: e.target.value }))} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <label className={labelClass}>Journal Entry</label>
+          <input value={form.journalEntry} onChange={(e) => setForm((f) => ({ ...f, journalEntry: e.target.value }))} className={inputClass} />
         </div>
-        <button type="submit" disabled={saving} className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-md disabled:opacity-50">
-          + Add
+        <button type="submit" disabled={saving} className="inline-flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 disabled:opacity-50 transition-colors">
+          <Plus size={14} strokeWidth={2.5} /> Add
         </button>
       </form>
 
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="bg-indigo-500 text-white text-left text-sm">
-            <th className="px-3 py-2 font-medium">DEPRECIATION DATE</th>
-            <th className="px-3 py-2 font-medium">REFERENCE</th>
-            <th className="px-3 py-2 font-medium">DEPRECIATION</th>
-            <th className="px-3 py-2 font-medium">COMULATIVE DEPRECIATION</th>
-            <th className="px-3 py-2 font-medium">DEPRECIABLE VALUE</th>
-            <th className="px-3 py-2 font-medium">JOURNAL ENTRY</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(!asset?.depreciationEntries || asset.depreciationEntries.length === 0) ? (
-            <tr><td colSpan={6} className="text-center py-6 text-gray-400">No entries found</td></tr>
-          ) : asset.depreciationEntries.map((e) => (
-            <tr key={e._id} className="border-b border-gray-100 text-sm">
-              <td className="px-3 py-2">{fmtDate(e.date)}</td>
-              <td className="px-3 py-2">{e.reference}</td>
-              <td className="px-3 py-2">{e.depreciation}</td>
-              <td className="px-3 py-2">{e.cumulativeDepreciation}</td>
-              <td className="px-3 py-2">{e.depreciableValue}</td>
-              <td className="px-3 py-2">{e.journalEntry}</td>
+      <div className="rounded-xl border border-slate-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Depreciation Date</th>
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Reference</th>
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Depreciation</th>
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Cumulative Depreciation</th>
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Depreciable Value</th>
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Journal Entry</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {(!asset?.depreciationEntries || asset.depreciationEntries.length === 0) ? (
+              <tr><td colSpan={6} className="text-center py-10 text-slate-400 text-sm">No entries found</td></tr>
+            ) : asset.depreciationEntries.map((e) => (
+              <tr key={e.id} className="hover:bg-slate-50/70 transition-colors">
+                <td className="px-4 py-3 text-slate-600">{fmtDate(e.date)}</td>
+                <td className="px-4 py-3 text-slate-600">{e.reference}</td>
+                <td className="px-4 py-3 text-slate-600">{e.depreciation}</td>
+                <td className="px-4 py-3 text-slate-600">{e.cumulativeDepreciation}</td>
+                <td className="px-4 py-3 text-slate-600">{e.depreciableValue}</td>
+                <td className="px-4 py-3 text-slate-600">{e.journalEntry}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -420,46 +435,48 @@ function MovementHistoryTab({ assetId, asset, reload, fmtDate }) {
 
   return (
     <div>
-      <form onSubmit={handleAdd} className="grid grid-cols-4 gap-3 mb-4 items-end">
+      <form onSubmit={handleAdd} className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 items-end">
         <div>
-          <label className="block text-xs font-medium mb-1">Date</label>
-          <input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <label className={labelClass}>Date</label>
+          <input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className={inputClass} />
         </div>
         <div>
-          <label className="block text-xs font-medium mb-1">From</label>
-          <input value={form.from} onChange={(e) => setForm((f) => ({ ...f, from: e.target.value }))} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <label className={labelClass}>From</label>
+          <input value={form.from} onChange={(e) => setForm((f) => ({ ...f, from: e.target.value }))} className={inputClass} />
         </div>
         <div>
-          <label className="block text-xs font-medium mb-1">To</label>
-          <input value={form.to} onChange={(e) => setForm((f) => ({ ...f, to: e.target.value }))} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <label className={labelClass}>To</label>
+          <input value={form.to} onChange={(e) => setForm((f) => ({ ...f, to: e.target.value }))} className={inputClass} />
         </div>
-        <button type="submit" disabled={saving} className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-md disabled:opacity-50">
-          + Add
+        <button type="submit" disabled={saving} className="inline-flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 disabled:opacity-50 transition-colors">
+          <Plus size={14} strokeWidth={2.5} /> Add
         </button>
       </form>
 
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="bg-indigo-500 text-white text-left text-sm">
-            <th className="px-3 py-2 font-medium">SL.</th>
-            <th className="px-3 py-2 font-medium">DATE</th>
-            <th className="px-3 py-2 font-medium">FROM</th>
-            <th className="px-3 py-2 font-medium">TO</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(!asset?.movementEntries || asset.movementEntries.length === 0) ? (
-            <tr><td colSpan={4} className="text-center py-6 text-gray-400">No entries found</td></tr>
-          ) : asset.movementEntries.map((e, i) => (
-            <tr key={e._id} className="border-b border-gray-100 text-sm">
-              <td className="px-3 py-2">{i + 1}</td>
-              <td className="px-3 py-2">{fmtDate(e.date)}</td>
-              <td className="px-3 py-2">{e.from}</td>
-              <td className="px-3 py-2">{e.to}</td>
+      <div className="rounded-xl border border-slate-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">SL</th>
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Date</th>
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">From</th>
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">To</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {(!asset?.movementEntries || asset.movementEntries.length === 0) ? (
+              <tr><td colSpan={4} className="text-center py-10 text-slate-400 text-sm">No entries found</td></tr>
+            ) : asset.movementEntries.map((e, i) => (
+              <tr key={e.id} className="hover:bg-slate-50/70 transition-colors">
+                <td className="px-4 py-3 text-slate-400 font-mono text-xs">{i + 1}</td>
+                <td className="px-4 py-3 text-slate-600">{fmtDate(e.date)}</td>
+                <td className="px-4 py-3 text-slate-600">{e.from}</td>
+                <td className="px-4 py-3 text-slate-600">{e.to}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -485,50 +502,52 @@ function RevaluationsHistoryTab({ assetId, asset, reload, fmtDate }) {
 
   return (
     <div>
-      <form onSubmit={handleAdd} className="grid grid-cols-4 gap-3 mb-4 items-end">
+      <form onSubmit={handleAdd} className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 items-end">
         <div>
-          <label className="block text-xs font-medium mb-1">Date</label>
-          <input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <label className={labelClass}>Date</label>
+          <input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className={inputClass} />
         </div>
         <div>
-          <label className="block text-xs font-medium mb-1">New Value</label>
-          <input type="number" value={form.newValue} onChange={(e) => setForm((f) => ({ ...f, newValue: e.target.value }))} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <label className={labelClass}>New Value</label>
+          <input type="number" value={form.newValue} onChange={(e) => setForm((f) => ({ ...f, newValue: e.target.value }))} className={inputClass} />
         </div>
         <div>
-          <label className="block text-xs font-medium mb-1">Note</label>
-          <input value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" />
+          <label className={labelClass}>Note</label>
+          <input value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} className={inputClass} />
         </div>
-        <button type="submit" disabled={saving} className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-md disabled:opacity-50">
-          + Add
+        <button type="submit" disabled={saving} className="inline-flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 disabled:opacity-50 transition-colors">
+          <Plus size={14} strokeWidth={2.5} /> Add
         </button>
       </form>
 
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="bg-indigo-500 text-white text-left text-sm">
-            <th className="px-3 py-2 font-medium">SL.</th>
-            <th className="px-3 py-2 font-medium">DATE.</th>
-            <th className="px-3 py-2 font-medium">OLD VALUE</th>
-            <th className="px-3 py-2 font-medium">NEW VALUE</th>
-            <th className="px-3 py-2 font-medium">CHANGE</th>
-            <th className="px-3 py-2 font-medium">NOTE</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(!asset?.revaluationEntries || asset.revaluationEntries.length === 0) ? (
-            <tr><td colSpan={6} className="text-center py-6 text-gray-400">No entries found</td></tr>
-          ) : asset.revaluationEntries.map((e, i) => (
-            <tr key={e._id} className="border-b border-gray-100 text-sm">
-              <td className="px-3 py-2">{i + 1}</td>
-              <td className="px-3 py-2">{fmtDate(e.date)}</td>
-              <td className="px-3 py-2">{e.oldValue}</td>
-              <td className="px-3 py-2">{e.newValue}</td>
-              <td className="px-3 py-2">{e.change}</td>
-              <td className="px-3 py-2">{e.note}</td>
+      <div className="rounded-xl border border-slate-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">SL</th>
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Date</th>
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Old Value</th>
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">New Value</th>
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Change</th>
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Note</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {(!asset?.revaluationEntries || asset.revaluationEntries.length === 0) ? (
+              <tr><td colSpan={6} className="text-center py-10 text-slate-400 text-sm">No entries found</td></tr>
+            ) : asset.revaluationEntries.map((e, i) => (
+              <tr key={e.id} className="hover:bg-slate-50/70 transition-colors">
+                <td className="px-4 py-3 text-slate-400 font-mono text-xs">{i + 1}</td>
+                <td className="px-4 py-3 text-slate-600">{fmtDate(e.date)}</td>
+                <td className="px-4 py-3 text-slate-600">{e.oldValue}</td>
+                <td className="px-4 py-3 text-slate-600">{e.newValue}</td>
+                <td className="px-4 py-3 text-slate-600">{e.change}</td>
+                <td className="px-4 py-3 text-slate-600">{e.note}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

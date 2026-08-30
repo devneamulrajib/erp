@@ -4,18 +4,28 @@ import api from '../api/axios';
 import { getCategories } from '../api/category';
 import { getItems } from '../api/item';
 import { getItemStockQty } from '../api/purchase';
+import { getEmployees } from '../api/employee';
+import { getChartOfAccounts } from '../api/chartOfAccounts';
 import {
   getMaterialUsage, getNextMaterialUsageCode,
   createMaterialUsage, updateMaterialUsage,
 } from '../api/materialUsage';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
 import { Trash2 } from 'lucide-react';
 
 function num(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
+}
+
+// Normalizes API responses that might come back as a bare array,
+// or as a paginated shape like { rows: [...] } / { data: [...] } / { count, rows }.
+function toArray(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.rows)) return payload.rows;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
 }
 
 export default function MaterialUsagePage() {
@@ -27,6 +37,9 @@ export default function MaterialUsagePage() {
   const [sites, setSites] = useState([]);
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [employee, setEmployee] = useState('');
@@ -48,13 +61,37 @@ export default function MaterialUsagePage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
-    api.get('/sites').then((res) => setSites(res.data)).catch(() => {});
-    getCategories().then(setCategories).catch(() => {});
+    api.get('/projects')
+      .then((res) => setProjects(toArray(res.data)))
+      .catch((err) => { console.error('Failed to load projects', err); setProjects([]); });
+
+    api.get('/sites')
+      .then((res) => setSites(toArray(res.data)))
+      .catch((err) => { console.error('Failed to load sites', err); setSites([]); });
+
+    api.get('/project-types')
+      .then((res) => setProjectTypes(toArray(res.data)))
+      .catch((err) => { console.error('Failed to load project types', err); setProjectTypes([]); });
+
+    // getCategories() already unwraps res.data internally and resolves
+    // directly to the array itself — do NOT do res.data again here.
+    getCategories()
+      .then((res) => setCategories(toArray(res)))
+      .catch((err) => { console.error('Failed to load categories', err); setCategories([]); });
+
+    getEmployees()
+      .then((res) => setEmployees(toArray(res.data)))
+      .catch((err) => { console.error('Failed to load employees', err); setEmployees([]); });
+
+    getChartOfAccounts()
+      .then((res) => setAccounts(toArray(res.data)))
+      .catch((err) => { console.error('Failed to load chart of accounts', err); setAccounts([]); });
   }, []);
 
   useEffect(() => {
-    getItems(category ? { category } : {}).then(setItems).catch(() => {});
+    getItems(category ? { category } : {})
+      .then((res) => setItems(toArray(res.data)))
+      .catch((err) => { console.error('Failed to load items', err); setItems([]); });
   }, [category]);
 
   useEffect(() => {
@@ -71,11 +108,11 @@ export default function MaterialUsagePage() {
       setDebitLedger(u.debitLedger || 'Cost of Goods Sold (COGS)');
       setCode(u.code || '');
       setProjectType(u.projectType || '');
-      setProject(u.project?._id || u.project || '');
+      setProject(u.project?.id || u.project || '');
       setTitleOfWork(u.titleOfWork || '');
       setTask(u.task || '');
-      setSite(u.site?._id || u.site || '');
-      setCategory(u.category?._id || u.category || '');
+      setSite(u.site?.id || u.site || '');
+      setCategory(u.category?.id || u.category || '');
       setRows(u.items || []);
     }).catch((err) => {
       console.error(err);
@@ -90,12 +127,12 @@ export default function MaterialUsagePage() {
 
   async function handleSelectItem(itemId) {
     setSelectedItemId(itemId);
-    const it = items.find((x) => x._id === itemId);
+    const it = items.find((x) => x.id === itemId);
     if (!it) return;
     let stockQty = 0;
-    try { stockQty = await getItemStockQty(it._id); } catch { /* default 0 */ }
+    try { stockQty = await getItemStockQty(it.id); } catch { /* default 0 */ }
     setRows((prev) => [...prev, {
-      item: it._id,
+      item: it.id,
       itemCode: it.code,
       itemName: it.name,
       details: '',
@@ -148,7 +185,6 @@ export default function MaterialUsagePage() {
   return (
     <div className="min-h-screen w-full bg-gray-50 text-left">
       <Topbar />
-      <ModuleNav />
 
       <div className="flex items-center justify-between pr-4">
         <Breadcrumb
@@ -175,24 +211,36 @@ export default function MaterialUsagePage() {
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
           </Field>
           <Field label="Employee" required>
-            <input value={employee} onChange={(e) => setEmployee(e.target.value)} className="input" placeholder="Select One Option" />
+            <select value={employee} onChange={(e) => setEmployee(e.target.value)} className="input">
+              <option value="">Select One Option</option>
+              {(employees || []).map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+            </select>
           </Field>
           <Field label="Credit Ledger" required>
-            <input value={creditLedger} onChange={(e) => setCreditLedger(e.target.value)} className="input" />
+            <select value={creditLedger} onChange={(e) => setCreditLedger(e.target.value)} className="input">
+              <option value="">Select Chart Of Account</option>
+              {(accounts || []).map((a) => <option key={a.id} value={a.name}>{a.name}</option>)}
+            </select>
           </Field>
           <Field label="Debit Ledger" required>
-            <input value={debitLedger} onChange={(e) => setDebitLedger(e.target.value)} className="input" />
+            <select value={debitLedger} onChange={(e) => setDebitLedger(e.target.value)} className="input">
+              <option value="">Select Chart Of Account</option>
+              {(accounts || []).map((a) => <option key={a.id} value={a.name}>{a.name}</option>)}
+            </select>
           </Field>
           <Field label="Code">
             <input value={code} readOnly className="input bg-gray-50" />
           </Field>
           <Field label="Project Type">
-            <input value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input" placeholder="Select value" />
+            <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
+              <option value="">Select value</option>
+              {(projectTypes || []).map((pt) => <option key={pt.id} value={pt.name}>{pt.name}</option>)}
+            </select>
           </Field>
           <Field label="Project">
             <select value={project} onChange={(e) => setProject(e.target.value)} className="input">
               <option value="">Select Project</option>
-              {projects.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
+              {(projects || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
           <Field label="Title/Name of Work">
@@ -204,19 +252,19 @@ export default function MaterialUsagePage() {
           <Field label="Site">
             <select value={site} onChange={(e) => setSite(e.target.value)} className="input">
               <option value="">Select Site</option>
-              {sites.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+              {(sites || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
           <Field label="Category">
             <select value={category} onChange={(e) => setCategory(e.target.value)} className="input">
               <option value="">Select Category</option>
-              {categories.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+              {(categories || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
           <Field label="Select Item">
             <select value={selectedItemId} onChange={(e) => handleSelectItem(e.target.value)} className="input">
               <option value="">Select Item</option>
-              {items.map((it) => <option key={it._id} value={it._id}>{it.name}</option>)}
+              {(items || []).map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
             </select>
           </Field>
         </div>

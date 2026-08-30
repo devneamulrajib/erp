@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
 import { Trash2 } from 'lucide-react';
@@ -11,6 +10,7 @@ import {
 } from '../api/contraVoucher';
 import { getChartOfAccounts, createChartOfAccount } from '../api/chartOfAccounts';
 import { getChartOfGroupOptions } from '../api/chartOfGroup';
+import { getProjectTypes } from '../api/projectType';
 
 function num(v) {
   const n = Number(v);
@@ -28,6 +28,7 @@ export default function ContraVoucherPage() {
   const [sites, setSites] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [groupOptions, setGroupOptions] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
 
   const [voucherNo, setVoucherNo] = useState('');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -53,14 +54,15 @@ export default function ContraVoucherPage() {
   const [error, setError] = useState('');
 
   function reloadAccounts() {
-    getChartOfAccounts().then((res) => setAccounts(res.data)).catch(() => {});
+    getChartOfAccounts().then((data) => setAccounts(data)).catch(() => {});
   }
 
   useEffect(() => {
     api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
     api.get('/sites').then((res) => setSites(res.data)).catch(() => {});
     reloadAccounts();
-    getChartOfGroupOptions().then((res) => setGroupOptions(res.data)).catch(() => {});
+    getChartOfGroupOptions().then((data) => setGroupOptions(data)).catch(() => {});
+    getProjectTypes().then((data) => setProjectTypes(data)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -152,6 +154,7 @@ export default function ContraVoucherPage() {
       }
       navigate('/accounts-module/contra_list');
     } catch (err) {
+      console.error('Failed to save contra voucher', err);
       setError(err.response?.data?.message || err.message || 'Failed to save contra voucher');
     } finally {
       setSubmitting(false);
@@ -161,7 +164,6 @@ export default function ContraVoucherPage() {
   return (
     <div className="min-h-screen w-full bg-gray-50 text-left">
       <Topbar />
-      <ModuleNav />
 
       <div className="flex items-center justify-between pr-4">
         <Breadcrumb
@@ -204,7 +206,10 @@ export default function ContraVoucherPage() {
               </select>
             </Field>
             <Field label="Project Type">
-              <input value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input" placeholder="Select Project Type" />
+              <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
+                <option value="">Select Project Type</option>
+                {projectTypes.map((pt) => <option key={pt.id} value={pt.name}>{pt.name}</option>)}
+              </select>
             </Field>
             <Field label="If Task">
               <input value={task} onChange={(e) => setTask(e.target.value)} className="input" placeholder="Select Task" />

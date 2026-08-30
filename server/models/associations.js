@@ -138,15 +138,32 @@ const StockTransferItem = require('./StockTransferItem');
 
 const PeriodBill = require('./PeriodBill');
 
+const PartyContact = require('./PartyContact');
+
+const Agreement = require('./Agreement');
+const AgreementParty = require('./AgreementParty');
+const AgreementPayment = require('./AgreementPayment');
+
 const PaymentVoucher = require('./PaymentVoucher');
 const PaymentVoucherApproval = require('./PaymentVoucherApproval');
 
 const ReceiptVoucher = require('./ReceiptVoucher');
 const ReceiptVoucherApproval = require('./ReceiptVoucherApproval');
 
+// ---- PartyContact (Agreement party list) ----
+Agreement.hasMany(PartyContact, { as: 'partyContacts', foreignKey: 'agreementId' });
+PartyContact.belongsTo(Agreement, { as: 'agreement', foreignKey: 'agreementId' });
+
 // ---- ContractorWorkorder ----
 ContractorWorkorder.hasMany(ContractorWorkorderItem, { foreignKey: 'contractorWorkorderId', onDelete: 'CASCADE' });
 ContractorWorkorderItem.belongsTo(ContractorWorkorder, { foreignKey: 'contractorWorkorderId' });
+
+// ---- Agreement ----
+Agreement.hasMany(AgreementParty, { as: 'parties', foreignKey: 'agreementId', onDelete: 'CASCADE' });
+AgreementParty.belongsTo(Agreement, { foreignKey: 'agreementId' });
+
+Agreement.hasMany(AgreementPayment, { as: 'payments', foreignKey: 'agreementId', onDelete: 'CASCADE' });
+AgreementPayment.belongsTo(Agreement, { foreignKey: 'agreementId' });
 
 Party.hasMany(ContractorWorkorder, { foreignKey: 'supplierId' });
 ContractorWorkorder.belongsTo(Party, { foreignKey: 'supplierId' });
@@ -621,6 +638,16 @@ PaymentVoucherApproval.belongsTo(PaymentVoucher, { foreignKey: 'paymentVoucherId
 ReceiptVoucher.hasMany(ReceiptVoucherApproval, { as: 'approvals', foreignKey: 'receiptVoucherId', onDelete: 'CASCADE' });
 ReceiptVoucherApproval.belongsTo(ReceiptVoucher, { foreignKey: 'receiptVoucherId' });
 
+// ---- Voucher (dashboard needs project/contact/bank names) ----
+Project.hasMany(Voucher, { foreignKey: 'projectId' });
+Voucher.belongsTo(Project, { as: 'project', foreignKey: 'projectId' });
+
+Party.hasMany(Voucher, { foreignKey: 'contactId' });
+Voucher.belongsTo(Party, { as: 'contact', foreignKey: 'contactId' });
+
+BankAccount.hasMany(Voucher, { foreignKey: 'bankId' });
+Voucher.belongsTo(BankAccount, { as: 'bank', foreignKey: 'bankId' });
+
 module.exports = {
   AdjustmentBill,
   AdjustmentBillItem,
@@ -725,4 +752,8 @@ module.exports = {
   PaymentVoucherApproval,
   ReceiptVoucher,
   ReceiptVoucherApproval,
+  Agreement,
+  AgreementParty,
+  AgreementPayment,
+  PartyContact,
 };

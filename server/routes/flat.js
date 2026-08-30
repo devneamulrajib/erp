@@ -29,6 +29,7 @@ router.get('/', auth, async (req, res) => {
 
     res.json(flats);
   } catch (err) {
+    console.error('GET /api/flats failed:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -80,6 +81,7 @@ router.post('/', auth, async (req, res) => {
 
     res.status(201).json(populated);
   } catch (err) {
+    console.error('POST /api/flats failed:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -115,6 +117,7 @@ router.put('/:id', auth, async (req, res) => {
 
     res.json(populated);
   } catch (err) {
+    console.error('PUT /api/flats/:id failed:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -125,6 +128,7 @@ router.delete('/:id', auth, async (req, res) => {
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {
+    console.error('DELETE /api/flats/:id failed:', err);
     res.status(500).json({ message: err.message });
   }
 });

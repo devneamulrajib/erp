@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
-import ModuleNav from '../components/ModuleNav';
 import { getFundRequisitions } from '../api/fundRequisition';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -88,7 +87,6 @@ export default function FundRequisitionReportPage() {
 
   return (
     <div>
-      <ModuleNav />
 
       <div className="px-6 py-4">
         <div className="text-sm text-gray-500 flex items-center gap-1 mb-4">

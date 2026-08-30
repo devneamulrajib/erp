@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
 import SelectColumnsDropdown from '../components/SelectColumnsDropdown';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, Search, LayoutGrid, Plus, MapPin } from 'lucide-react';
 
 const COLUMNS = [
   { key: 'id', label: 'ID' },
@@ -17,9 +16,7 @@ const COLUMNS = [
   { key: 'action', label: 'Action' },
 ];
 
-const PAGE_SIZE = 10;
-
-const EMPTY_VISIBLE = {
+const ALL_VISIBLE = {
   id: true,
   code: true,
   project: true,
@@ -35,8 +32,9 @@ export default function Site() {
   const [projects, setProjects] = useState([]);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
+  const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
-  const [visibleColumns, setVisibleColumns] = useState(EMPTY_VISIBLE);
+  const [visibleColumns, setVisibleColumns] = useState(ALL_VISIBLE);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -47,6 +45,7 @@ export default function Site() {
   const [formDescription, setFormDescription] = useState('');
   const [formLocation, setFormLocation] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     loadRows();
@@ -81,10 +80,10 @@ export default function Site() {
   }
 
   function openEditModal(row) {
-    setEditingId(row._id);
+    setEditingId(row.id);
     setFormCode(row.code);
     setFormProjectTypeName(row.projectTypeName || '');
-    setFormProjectId(row.projectId || '');
+    setFormProjectId(row.projectId ? String(row.projectId) : '');
     setFormName(row.name);
     setFormDescription(row.description || '');
     setFormLocation(row.location || '');
@@ -97,7 +96,6 @@ export default function Site() {
 
   function handleProjectTypeChange(value) {
     setFormProjectTypeName(value);
-    // Reset project selection since the filtered list will change
     setFormProjectId('');
   }
 
@@ -107,12 +105,12 @@ export default function Site() {
     if (!formProjectId) return alert('Please select a Project.');
     if (!formName.trim()) return;
 
-    const selectedProject = projects.find((p) => p._id === formProjectId);
+    const selectedProject = projects.find((p) => String(p.id) === String(formProjectId));
 
     const payload = {
       code: formCode,
       projectTypeName: formProjectTypeName,
-      projectId: formProjectId,
+      projectId: Number(formProjectId),
       projectName: selectedProject ? selectedProject.name : '',
       name: formName,
       description: formDescription,
@@ -123,7 +121,7 @@ export default function Site() {
     try {
       if (editingId) {
         const res = await api.put(`/sites/${editingId}`, payload);
-        setRows((prev) => prev.map((r) => (r._id === editingId ? res.data : r)));
+        setRows((prev) => prev.map((r) => (r.id === editingId ? res.data : r)));
       } else {
         const res = await api.post('/sites', payload);
         setRows((prev) => [...prev, res.data]);
@@ -139,12 +137,15 @@ export default function Site() {
 
   async function handleDelete(row) {
     if (!window.confirm(`Delete site "${row.name}"?`)) return;
+    setDeletingId(row.id);
     try {
-      await api.delete(`/sites/${row._id}`);
-      setRows((prev) => prev.filter((r) => r._id !== row._id));
+      await api.delete(`/sites/${row.id}`);
+      setRows((prev) => prev.filter((r) => r.id !== row.id));
     } catch (err) {
       console.error(err);
       alert('Failed to delete site.');
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -161,232 +162,320 @@ export default function Site() {
     );
   });
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const pagedRows = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => {
+    setPage(1);
+  }, [search, pageSize]);
 
-  // Projects filtered by the currently selected Project Type in the modal
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const pagedRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
+
   const filteredProjects = formProjectTypeName
     ? projects.filter((p) => p.projectType === formProjectTypeName)
     : [];
 
   return (
-    <div className="min-h-screen w-full bg-gray-50 text-left">
+    <div className="min-h-screen w-full bg-slate-50 text-left">
       <Topbar />
-      <ModuleNav />
 
-      <div className="flex items-center justify-between pr-4">
-        <Breadcrumb
-          items={[
-            { label: 'Home', to: '/dashboard' },
-            { label: 'Project', to: '/dashboard/project' },
-            { label: 'Site' },
-          ]}
-        />
-        <button
-          onClick={openCreateModal}
-          className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-md"
-        >
-          + Create Site
-        </button>
-      </div>
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+        {/* Header */}
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+          <div>
+            <Breadcrumb
+              items={[
+                { label: 'Home', to: '/dashboard' },
+                { label: 'Project', to: '/dashboard/project' },
+                { label: 'Site' },
+              ]}
+            />
+            <h1 className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">Sites</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Manage the sites linked to your projects</p>
+          </div>
+          <button
+            onClick={openCreateModal}
+            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 transition-colors"
+          >
+            <Plus size={16} strokeWidth={2.5} />
+            Create Site
+          </button>
+        </div>
 
-      <div className="px-4 pb-6">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-4">{error}</div>
+          <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-5">{error}</div>
         )}
 
-        <div className="flex items-center justify-between mb-3">
-          <SelectColumnsDropdown
-            columns={COLUMNS}
-            visible={visibleColumns}
-            onToggle={toggleColumn}
-            onClearAll={() =>
-              setVisibleColumns({
-                id: false, code: false, project: false, name: false,
-                description: false, location: false, action: false,
-              })
-            }
-            onSelectAll={() => setVisibleColumns(EMPTY_VISIBLE)}
-          />
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-500">Search:</span>
-            <input
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            />
+        {/* Summary strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Total Sites</div>
+            <div className="text-xl font-semibold text-slate-900">{rows.length}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 col-span-2 sm:col-span-2">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Matching Search</div>
+            <div className="text-xl font-semibold text-slate-900">{filteredRows.length}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Showing</div>
+            <div className="text-xl font-semibold text-slate-900">{pagedRows.length} / {filteredRows.length}</div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-indigo-500 text-white">
-                {visibleColumns.id && <th className="px-4 py-2 text-left font-medium">ID</th>}
-                {visibleColumns.code && <th className="px-4 py-2 text-left font-medium">Code</th>}
-                {visibleColumns.project && <th className="px-4 py-2 text-left font-medium">Project</th>}
-                {visibleColumns.name && <th className="px-4 py-2 text-left font-medium">Name</th>}
-                {visibleColumns.description && <th className="px-4 py-2 text-left font-medium">Description</th>}
-                {visibleColumns.location && <th className="px-4 py-2 text-left font-medium">Location</th>}
-                {visibleColumns.action && <th className="px-4 py-2 text-left font-medium">Action</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {pagedRows.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-8 text-gray-400">
-                    No data available in table
-                  </td>
+        {/* Table panel */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span>Show</span>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+              >
+                {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <span>entries</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <SelectColumnsDropdown
+                columns={COLUMNS}
+                visible={visibleColumns}
+                onToggle={toggleColumn}
+                onClearAll={() =>
+                  setVisibleColumns({
+                    id: false, code: false, project: false, name: false,
+                    description: false, location: false, action: false,
+                  })
+                }
+                onSelectAll={() => setVisibleColumns(ALL_VISIBLE)}
+              />
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search sites..."
+                  className="border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm w-64 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
+                  {visibleColumns.id && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">ID</th>}
+                  {visibleColumns.code && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Code</th>}
+                  {visibleColumns.project && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Project</th>}
+                  {visibleColumns.name && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Name</th>}
+                  {visibleColumns.description && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Description</th>}
+                  {visibleColumns.location && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Location</th>}
+                  {visibleColumns.action && <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Action</th>}
                 </tr>
-              ) : (
-                pagedRows.map((row) => (
-                  <tr key={row._id} className="border-t border-gray-100">
-                    {visibleColumns.id && <td className="px-4 py-2">{row._id}</td>}
-                    {visibleColumns.code && <td className="px-4 py-2">{row.code}</td>}
-                    {visibleColumns.project && (
-                      <td className="px-4 py-2 text-indigo-600 font-medium">{row.projectName}</td>
-                    )}
-                    {visibleColumns.name && <td className="px-4 py-2">{row.name}</td>}
-                    {visibleColumns.description && <td className="px-4 py-2">{row.description}</td>}
-                    {visibleColumns.location && <td className="px-4 py-2">{row.location}</td>}
-                    {visibleColumns.action && (
-                      <td className="px-4 py-2">
-                        <div className="flex gap-2">
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {pagedRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-16">
+                      <div className="flex flex-col items-center gap-2 text-slate-400">
+                        <LayoutGrid size={28} strokeWidth={1.5} />
+                        <p className="text-sm">No sites found. Try adjusting your search, or create one.</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  pagedRows.map((row) => (
+                    <tr key={row.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
+                      {visibleColumns.id && <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">#{row.id}</td>}
+                      {visibleColumns.code && (
+                        <td className="px-5 py-3.5">
+                          <span className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-600 px-2.5 py-1 text-xs font-mono font-medium ring-1 ring-inset ring-indigo-600/10">
+                            {row.code}
+                          </span>
+                        </td>
+                      )}
+                      {visibleColumns.project && (
+                        <td className="px-5 py-3.5 text-indigo-600 font-medium">{row.projectName}</td>
+                      )}
+                      {visibleColumns.name && (
+                        <td className="px-5 py-3.5">
                           <button
                             onClick={() => openEditModal(row)}
-                            className="bg-indigo-500 hover:bg-indigo-600 text-white p-1.5 rounded"
+                            className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-medium hover:underline underline-offset-2"
                           >
-                            <Pencil size={14} />
+                            <MapPin size={13} className="text-slate-400" />
+                            {row.name}
                           </button>
-                          <button
-                            onClick={() => handleDelete(row)}
-                            className="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                        </td>
+                      )}
+                      {visibleColumns.description && (
+                        <td className="px-5 py-3.5 text-slate-600 whitespace-normal max-w-xs">{row.description}</td>
+                      )}
+                      {visibleColumns.location && (
+                        <td className="px-5 py-3.5 text-slate-600">{row.location}</td>
+                      )}
+                      {visibleColumns.action && (
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => openEditModal(row)}
+                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors"
+                              title="Edit"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(row)}
+                              disabled={deletingId === row.id}
+                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors disabled:opacity-50"
+                              title="Delete"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
-        <div className="flex justify-end gap-2 mt-3">
-          <button
-            disabled={page === 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="px-3 py-1.5 rounded-md text-sm bg-gray-100 text-gray-500 disabled:opacity-50"
-          >
-            Previous
-          </button>
-          <span className="px-3 py-1.5 rounded-md text-sm bg-indigo-500 text-white">{page}</span>
-          <button
-            disabled={page === totalPages}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            className="px-3 py-1.5 rounded-md text-sm bg-gray-100 text-gray-500 disabled:opacity-50"
-          >
-            Next
-          </button>
+          {/* Pagination */}
+          <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100">
+            <span className="text-sm text-slate-500">
+              Showing <span className="font-medium text-slate-700">{filteredRows.length === 0 ? 0 : (page - 1) * pageSize + 1}</span> to{' '}
+              <span className="font-medium text-slate-700">{Math.min(page * pageSize, filteredRows.length)}</span> of{' '}
+              <span className="font-medium text-slate-700">{filteredRows.length}</span> entries
+            </span>
+            <div className="flex gap-1.5">
+              <button
+                disabled={page === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors"
+              >
+                Previous
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setPage(n)}
+                  className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
+                    n === page ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+              <button
+                disabled={page === totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <Modal open={modalOpen} title="Project Add" onClose={closeModal}>
+      <Modal open={modalOpen} title={editingId ? 'Edit Site' : 'New Site'} onClose={closeModal}>
         <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
             <div>
-              <label className="block text-sm text-gray-600 mb-1">
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">
                 Project Type <span className="text-red-500">*</span>
               </label>
               <select
                 value={formProjectTypeName}
                 onChange={(e) => handleProjectTypeChange(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
                 required
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               >
                 <option value="">Select Project Type</option>
                 {projectTypes.map((pt) => (
-                  <option key={pt._id} value={pt.name}>{pt.name}</option>
+                  <option key={pt.id} value={pt.name}>{pt.name}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">
                 Project <span className="text-red-500">*</span>
               </label>
               <select
                 value={formProjectId}
                 onChange={(e) => setFormProjectId(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
                 required
                 disabled={!formProjectTypeName}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition disabled:bg-slate-50 disabled:text-slate-400"
               >
                 <option value="">Select Project</option>
                 {filteredProjects.map((p) => (
-                  <option key={p._id} value={p._id}>{p.name}</option>
+                  <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Code</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">Code</label>
               <input
                 value={formCode}
                 readOnly
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-gray-50 text-gray-500"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-mono bg-slate-50 text-slate-500"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Name</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">Name</label>
               <input
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
                 placeholder="Name"
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
                 required
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Description</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">Description</label>
               <input
                 value={formDescription}
                 onChange={(e) => setFormDescription(e.target.value)}
                 placeholder="Description"
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Location</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">Location</label>
               <input
                 value={formLocation}
                 onChange={(e) => setFormLocation(e.target.value)}
                 placeholder="Location"
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
             <button
               type="button"
               onClick={closeModal}
-              className="px-4 py-2 rounded-md text-sm bg-gray-200 text-gray-700 hover:bg-gray-300"
+              className="px-4 py-2.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
             >
-              Close
+              Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="px-4 py-2 rounded-md text-sm bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-50"
+              className="px-4 py-2.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 shadow-sm shadow-indigo-600/20 transition-colors"
             >
-              {submitting ? 'Saving...' : 'Submit'}
+              {submitting ? 'Saving...' : editingId ? 'Save Changes' : 'Create Site'}
             </button>
           </div>
         </form>

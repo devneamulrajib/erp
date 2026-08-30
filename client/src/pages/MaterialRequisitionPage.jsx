@@ -9,7 +9,6 @@ import {
   createMaterialRequisition, updateMaterialRequisition,
 } from '../api/materialRequisition';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
 import { Plus, Trash2 } from 'lucide-react';
 
@@ -24,6 +23,7 @@ export default function MaterialRequisitionPage() {
   const isEdit = !!id;
 
   const [suppliers, setSuppliers] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
   const [projects, setProjects] = useState([]);
   const [sites, setSites] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -52,6 +52,7 @@ export default function MaterialRequisitionPage() {
 
   useEffect(() => {
     getCustomers().then(setSuppliers).catch(() => {});
+    api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
     api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
     api.get('/sites').then((res) => setSites(res.data)).catch(() => {});
     getCategories().then(setCategories).catch(() => {});
@@ -72,14 +73,14 @@ export default function MaterialRequisitionPage() {
       setDate(r.date || '');
       setDemandDate(r.demandDate || '');
       setCompany(r.company || '');
-      setSupplier(r.supplier?._id || r.supplier || '');
+      setSupplier(r.supplier?.id || r.supplier || '');
       setCode(r.code || '');
-      setProjectType(r.projectType || '');
-      setProject(r.project?._id || r.project || '');
+      setProjectType(r.projectType?.id || r.projectType || '');
+      setProject(r.project?.id || r.project || '');
       setTitleOfWork(r.titleOfWork || '');
       setTask(r.task || '');
-      setSite(r.site?._id || r.site || '');
-      setCategory(r.category?._id || r.category || '');
+      setSite(r.site?.id || r.site || '');
+      setCategory(r.category?.id || r.category || '');
       setReference(r.reference || '');
       setRows(r.items || []);
       setNote(r.note || '');
@@ -95,10 +96,13 @@ export default function MaterialRequisitionPage() {
   );
 
   function addItemRow() {
-    const it = items.find((x) => x._id === selectedItemId);
+    // NOTE: <select> values are always strings, but after the Mongoose -> Sequelize
+    // migration, item ids are numeric. String() on both sides makes this robust
+    // regardless of which type either side happens to be.
+    const it = items.find((x) => String(x.id) === String(selectedItemId));
     if (!it) return;
     setRows((prev) => [...prev, {
-      item: it._id,
+      item: it.id,
       itemCode: it.code,
       itemName: it.name,
       details: '',
@@ -146,7 +150,6 @@ export default function MaterialRequisitionPage() {
   return (
     <div className="min-h-screen w-full bg-gray-50 text-left">
       <Topbar />
-      <ModuleNav />
 
       <div className="flex items-center justify-between pr-4">
         <Breadcrumb
@@ -184,19 +187,22 @@ export default function MaterialRequisitionPage() {
           <Field label="Supplier">
             <select value={supplier} onChange={(e) => setSupplier(e.target.value)} className="input">
               <option value="">Select an option</option>
-              {suppliers.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
           <Field label="Reference">
             <input value={reference} onChange={(e) => setReference(e.target.value)} className="input" placeholder="Reference" />
           </Field>
           <Field label="Project Type">
-            <input value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input" placeholder="Select Project Type" />
+            <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
+              <option value="">Select Project Type</option>
+              {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+            </select>
           </Field>
           <Field label="Project">
             <select value={project} onChange={(e) => setProject(e.target.value)} className="input">
               <option value="">Select Project</option>
-              {projects.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
           <Field label="Title/Name of Work">
@@ -208,20 +214,20 @@ export default function MaterialRequisitionPage() {
           <Field label="Site">
             <select value={site} onChange={(e) => setSite(e.target.value)} className="input">
               <option value="">Select Site</option>
-              {sites.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+              {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
           <Field label="Category">
             <select value={category} onChange={(e) => setCategory(e.target.value)} className="input">
               <option value="">Select Category</option>
-              {categories.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
           <Field label="Select Item">
             <div className="flex gap-2">
               <select value={selectedItemId} onChange={(e) => setSelectedItemId(e.target.value)} className="input flex-1">
                 <option value="">Select Item</option>
-                {items.map((it) => <option key={it._id} value={it._id}>{it.name}</option>)}
+                {items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
               </select>
               <button type="button" onClick={addItemRow} disabled={!selectedItemId} className="px-3 rounded-md bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50">
                 <Plus size={16} />

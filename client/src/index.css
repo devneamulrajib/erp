@@ -90,9 +90,9 @@ code {
   line-height: 135%;
   color: var(--text-h);
   background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -103,12 +103,14 @@ code {
 
 .input:focus {
   outline: none;
-  border-color: var(--accent-border);
-  box-shadow: 0 0 0 3px var(--accent-bg);
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
 
-.input:disabled {
-  opacity: 0.5;
+.input:disabled,
+.input[readonly] {
+  background: #f8fafc;
+  color: #94a3b8;
   cursor: not-allowed;
 }
 
@@ -119,4 +121,5 @@ textarea.input {
 
 select.input {
   cursor: pointer;
+  appearance: auto;
 }

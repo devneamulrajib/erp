@@ -9,13 +9,21 @@ import {
   createPurchaseOrder, updatePurchaseOrder,
 } from '../api/purchaseOrder';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
 import { Plus, Trash2 } from 'lucide-react';
 
 function num(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
+}
+
+// Normalizes an API response into a plain array, regardless of whether the
+// underlying api/*.js function returns the raw axios response ({ data: [...] })
+// or already-unwrapped data ([...]). Falls back to [] so `.map()` never crashes.
+function unwrap(res) {
+  if (Array.isArray(res)) return res;
+  if (res && Array.isArray(res.data)) return res.data;
+  return [];
 }
 
 export default function PurchaseOrderPage() {
@@ -25,6 +33,7 @@ export default function PurchaseOrderPage() {
 
   const [suppliers, setSuppliers] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
   const [sites, setSites] = useState([]);
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
@@ -49,14 +58,29 @@ export default function PurchaseOrderPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    getCustomers().then(setSuppliers).catch(() => {});
-    api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
-    api.get('/sites').then((res) => setSites(res.data)).catch(() => {});
-    getCategories().then(setCategories).catch(() => {});
+    getCustomers()
+      .then((res) => setSuppliers(unwrap(res)))
+      .catch(() => setSuppliers([]));
+    api.get('/projects')
+      .then((res) => setProjects(unwrap(res)))
+      .catch(() => setProjects([]));
+    // NOTE: assumed route '/project-types' — same endpoint PurchasePage.jsx uses.
+    // Update this one line if your backend uses a different path.
+    api.get('/project-types')
+      .then((res) => setProjectTypes(unwrap(res)))
+      .catch(() => setProjectTypes([]));
+    api.get('/sites')
+      .then((res) => setSites(unwrap(res)))
+      .catch(() => setSites([]));
+    getCategories()
+      .then((res) => setCategories(unwrap(res)))
+      .catch(() => setCategories([]));
   }, []);
 
   useEffect(() => {
-    getItems(category ? { category } : {}).then(setItems).catch(() => {});
+    getItems(category ? { category } : {})
+      .then((res) => setItems(unwrap(res)))
+      .catch(() => setItems([]));
   }, [category]);
 
   useEffect(() => {
@@ -68,16 +92,16 @@ export default function PurchaseOrderPage() {
     if (!isEdit) return;
     getPurchaseOrder(id).then((o) => {
       setDate(o.date || '');
-      setSupplier(o.supplier?._id || o.supplier || '');
+      setSupplier(o.supplier?.id || o.supplierId || o.supplier || '');
       setCode(o.code || '');
-      setProjectType(o.projectType || '');
-      setProject(o.project?._id || o.project || '');
+      setProjectType(o.projectType?.id || o.projectTypeId || o.projectType || '');
+      setProject(o.project?.id || o.projectId || o.project || '');
       setTitleOfWork(o.titleOfWork || '');
       setTask(o.task || '');
-      setSite(o.site?._id || o.site || '');
-      setCategory(o.category?._id || o.category || '');
+      setSite(o.site?.id || o.siteId || o.site || '');
+      setCategory(o.category?.id || o.categoryId || o.category || '');
       setBoqItems(o.boqItems || []);
-      setRows(o.items || []);
+      setRows(unwrap(o.items));
     }).catch((err) => {
       console.error(err);
       setError('Failed to load purchase order.');
@@ -99,18 +123,18 @@ export default function PurchaseOrderPage() {
   }
 
   function addItemRow() {
-    const it = items.find((x) => x._id === selectedItemId);
+    const it = items.find((x) => x.id === Number(selectedItemId) || x.id === selectedItemId);
     if (!it) return;
     setRows((prev) => [...prev, {
-      item: it._id,
+      item: it.id,
       itemCode: it.code,
       itemName: it.name,
       details: '',
       unit: it.unit,
-      quantity: 0,
-      rate: it.purchasePrice || 0,
-      budgetQty: 0,
-      purchaseQty: 0,
+      quantity: '',
+      rate: it.purchasePrice || '',
+      budgetQty: '',
+      purchaseQty: '',
       stockQty: 0,
       amount: 0,
     }]);
@@ -128,6 +152,10 @@ export default function PurchaseOrderPage() {
     setError('');
     if (!supplier) {
       setError('Supplier is required');
+      return;
+    }
+    if (rows.length === 0) {
+      setError('Add at least one item before submitting.');
       return;
     }
     setSubmitting(true);
@@ -154,7 +182,6 @@ export default function PurchaseOrderPage() {
   return (
     <div className="min-h-screen w-full bg-gray-50 text-left">
       <Topbar />
-      <ModuleNav />
 
       <div className="flex items-center justify-between pr-4">
         <Breadcrumb
@@ -183,19 +210,22 @@ export default function PurchaseOrderPage() {
           <Field label="Supplier" required>
             <select value={supplier} onChange={(e) => setSupplier(e.target.value)} className="input">
               <option value="">Select an option</option>
-              {suppliers.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
           <Field label="Code">
             <input value={code} readOnly className="input bg-gray-50" />
           </Field>
           <Field label="Project Type">
-            <input value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input" placeholder="Select Project Type" />
+            <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
+              <option value="">Select Project Type</option>
+              {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+            </select>
           </Field>
           <Field label="Project">
             <select value={project} onChange={(e) => setProject(e.target.value)} className="input">
               <option value="">Select Project</option>
-              {projects.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
           <Field label="Title/Name of Work">
@@ -207,25 +237,28 @@ export default function PurchaseOrderPage() {
           <Field label="Site">
             <select value={site} onChange={(e) => setSite(e.target.value)} className="input">
               <option value="">Select Site</option>
-              {sites.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+              {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
           <Field label="Category">
             <select value={category} onChange={(e) => setCategory(e.target.value)} className="input">
               <option value="">Select Category</option>
-              {categories.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
           <Field label="Select Item">
             <div className="flex gap-2">
               <select value={selectedItemId} onChange={(e) => setSelectedItemId(e.target.value)} className="input flex-1">
                 <option value="">Select Item</option>
-                {items.map((it) => <option key={it._id} value={it._id}>{it.name}</option>)}
+                {items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
               </select>
               <button type="button" onClick={addItemRow} disabled={!selectedItemId} className="px-3 rounded-md bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50">
                 <Plus size={16} />
               </button>
             </div>
+            {items.length === 0 && (
+              <p className="text-xs text-gray-400 mt-1">No items found for this category.</p>
+            )}
           </Field>
         </div>
 
@@ -271,7 +304,7 @@ export default function PurchaseOrderPage() {
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={11} className="text-center py-4 text-gray-400">No items added</td></tr>
+                  <tr><td colSpan={11} className="text-center py-4 text-gray-400">No items added — select an item above and click +</td></tr>
                 ) : (
                   rows.map((r, i) => (
                     <tr key={i} className="border-t border-gray-100">
@@ -282,16 +315,16 @@ export default function PurchaseOrderPage() {
                       </td>
                       <td className="px-2 py-1.5">{r.unit}</td>
                       <td className="px-2 py-1.5">
-                        <input type="number" value={r.quantity} onChange={(e) => updateRow(i, 'quantity', e.target.value)} className="w-20 border border-gray-200 rounded px-2 py-1" />
+                        <input type="number" min="0" value={r.quantity} onChange={(e) => updateRow(i, 'quantity', e.target.value)} className="w-20 border border-gray-200 rounded px-2 py-1" />
                       </td>
                       <td className="px-2 py-1.5">
-                        <input type="number" value={r.rate} onChange={(e) => updateRow(i, 'rate', e.target.value)} className="w-20 border border-gray-200 rounded px-2 py-1" />
+                        <input type="number" min="0" value={r.rate} onChange={(e) => updateRow(i, 'rate', e.target.value)} className="w-20 border border-gray-200 rounded px-2 py-1" />
                       </td>
                       <td className="px-2 py-1.5">
-                        <input type="number" value={r.budgetQty} onChange={(e) => updateRow(i, 'budgetQty', e.target.value)} className="w-20 border border-gray-200 rounded px-2 py-1" />
+                        <input type="number" min="0" value={r.budgetQty} onChange={(e) => updateRow(i, 'budgetQty', e.target.value)} className="w-20 border border-gray-200 rounded px-2 py-1" />
                       </td>
                       <td className="px-2 py-1.5">
-                        <input type="number" value={r.purchaseQty} onChange={(e) => updateRow(i, 'purchaseQty', e.target.value)} className="w-20 border border-gray-200 rounded px-2 py-1" />
+                        <input type="number" min="0" value={r.purchaseQty} onChange={(e) => updateRow(i, 'purchaseQty', e.target.value)} className="w-20 border border-gray-200 rounded px-2 py-1" />
                       </td>
                       <td className="px-2 py-1.5">{r.stockQty}</td>
                       <td className="px-2 py-1.5 font-medium">{(num(r.rate) * num(r.purchaseQty)).toLocaleString()}</td>
@@ -311,10 +344,16 @@ export default function PurchaseOrderPage() {
         <div className="bg-white border border-gray-200 rounded-md p-4 mb-6">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <Field label="Subtotal">
-              <input value={subtotal.toLocaleString()} readOnly className="input bg-gray-50" />
+              <input
+                value={subtotal.toLocaleString()}
+                readOnly
+                title="Auto-calculated as the sum of Rate x Purchase Qty across all item rows"
+                className="input bg-gray-50 cursor-not-allowed"
+              />
+              <p className="text-xs text-gray-400 mt-1">Auto-calculated from item rows</p>
             </Field>
             <Field label="Grand Total">
-              <input value={subtotal.toLocaleString()} readOnly className="input bg-gray-50 font-medium" />
+              <input value={subtotal.toLocaleString()} readOnly className="input bg-gray-50 font-medium cursor-not-allowed" />
             </Field>
             <Field label="Attachment">
               <input type="file" onChange={(e) => setAttachmentName(e.target.files?.[0]?.name || '')} className="input" />

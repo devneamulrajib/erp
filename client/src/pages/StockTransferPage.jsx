@@ -4,12 +4,12 @@ import api from '../api/axios';
 import { getCategories } from '../api/category';
 import { getItems } from '../api/item';
 import { getItemStockQty } from '../api/purchase';
+import { getEmployees } from '../api/employee';
 import {
   getStockTransfer, getNextStockTransferCode,
   createStockTransfer, updateStockTransfer,
 } from '../api/stockTransfer';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
 import { Trash2 } from 'lucide-react';
 
@@ -22,6 +22,8 @@ export default function StockTransferPage() {
   const [sites, setSites] = useState([]);
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [employee, setEmployee] = useState('');
@@ -47,7 +49,9 @@ export default function StockTransferPage() {
   useEffect(() => {
     api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
     api.get('/sites').then((res) => setSites(res.data)).catch(() => {});
+    api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
     getCategories().then(setCategories).catch(() => {});
+    getEmployees().then((res) => setEmployees(res.data)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -66,14 +70,14 @@ export default function StockTransferPage() {
       setEmployee(t.employee || '');
       setCode(t.code || '');
       setFromProjectType(t.fromProjectType || '');
-      setFromProject(t.fromProject?._id || t.fromProject || '');
-      setFromSite(t.fromSite?._id || t.fromSite || '');
+      setFromProject(t.fromProject?.id || t.fromProject || '');
+      setFromSite(t.fromSite?.id || t.fromSite || '');
       setFromTask(t.fromTask || '');
-      setCategory(t.category?._id || t.category || '');
+      setCategory(t.category?.id || t.category || '');
       setRows(t.items || []);
       setToProjectType(t.toProjectType || '');
-      setToProject(t.toProject?._id || t.toProject || '');
-      setToSite(t.toSite?._id || t.toSite || '');
+      setToProject(t.toProject?.id || t.toProject || '');
+      setToSite(t.toSite?.id || t.toSite || '');
       setToTask(t.toTask || '');
       setToSubTask(t.toSubTask || '');
     }).catch((err) => {
@@ -84,12 +88,12 @@ export default function StockTransferPage() {
 
   async function handleSelectItem(itemId) {
     setSelectedItemId(itemId);
-    const it = items.find((x) => x._id === itemId);
+    const it = items.find((x) => String(x.id) === String(itemId));
     if (!it) return;
     let availableQty = 0;
-    try { availableQty = await getItemStockQty(it._id); } catch { /* default 0 */ }
+    try { availableQty = await getItemStockQty(it.id); } catch { /* default 0 */ }
     setRows((prev) => [...prev, {
-      item: it._id,
+      item: it.id,
       itemCode: it.code,
       itemName: it.name,
       unit: it.unit,
@@ -137,7 +141,6 @@ export default function StockTransferPage() {
   return (
     <div className="min-h-screen w-full bg-gray-50 text-left">
       <Topbar />
-      <ModuleNav />
 
       <div className="flex items-center justify-between pr-4">
         <Breadcrumb
@@ -164,24 +167,30 @@ export default function StockTransferPage() {
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
           </Field>
           <Field label="User/Employee">
-            <input value={employee} onChange={(e) => setEmployee(e.target.value)} className="input" placeholder="Select Employee" />
+            <select value={employee} onChange={(e) => setEmployee(e.target.value)} className="input">
+              <option value="">Select Employee</option>
+              {employees.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
           </Field>
           <Field label="Code">
             <input value={code} readOnly className="input bg-gray-50" />
           </Field>
           <Field label="From Project Type">
-            <input value={fromProjectType} onChange={(e) => setFromProjectType(e.target.value)} className="input" placeholder="Select value" />
+            <select value={fromProjectType} onChange={(e) => setFromProjectType(e.target.value)} className="input">
+              <option value="">Select value</option>
+              {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+            </select>
           </Field>
           <Field label="From Project" required>
             <select value={fromProject} onChange={(e) => setFromProject(e.target.value)} className="input">
               <option value="">Select Project</option>
-              {projects.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
           <Field label="From Site">
             <select value={fromSite} onChange={(e) => setFromSite(e.target.value)} className="input">
               <option value="">Select Site</option>
-              {sites.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+              {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
           <Field label="If Task(From)">
@@ -190,13 +199,13 @@ export default function StockTransferPage() {
           <Field label="Category">
             <select value={category} onChange={(e) => setCategory(e.target.value)} className="input">
               <option value="">Select Category</option>
-              {categories.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
           <Field label="Select Item">
             <select value={selectedItemId} onChange={(e) => handleSelectItem(e.target.value)} className="input">
               <option value="">Select Item</option>
-              {items.map((it) => <option key={it._id} value={it._id}>{it.name}</option>)}
+              {items.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
             </select>
           </Field>
         </div>
@@ -240,18 +249,21 @@ export default function StockTransferPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-2">
           <Field label="To Project Type">
-            <input value={toProjectType} onChange={(e) => setToProjectType(e.target.value)} className="input" placeholder="Select Project Type" />
+            <select value={toProjectType} onChange={(e) => setToProjectType(e.target.value)} className="input">
+              <option value="">Select Project Type</option>
+              {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+            </select>
           </Field>
           <Field label="To Project" required>
             <select value={toProject} onChange={(e) => setToProject(e.target.value)} className="input">
               <option value="">Select Project</option>
-              {projects.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
           <Field label="To Site">
             <select value={toSite} onChange={(e) => setToSite(e.target.value)} className="input">
               <option value="">Select Site</option>
-              {sites.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+              {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
           <Field label="If Task(To)">
