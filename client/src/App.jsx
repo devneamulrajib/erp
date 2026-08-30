@@ -95,6 +95,12 @@ import JournalVoucherPage from './pages/JournalVoucherPage'
 import ContraVoucherListPage from './pages/ContraVoucherListPage'
 import ContraVoucherPage from './pages/ContraVoucherPage'
 import WorkorderList from './pages/WorkorderList'
+import StockReportPage from './pages/StockReportPage';
+import EmployeeListPage from './pages/EmployeeListPage';
+import MaterialUsageReportPage from './pages/MaterialUsageReportPage';
+import PurchaseDetailsReportPage from './pages/PurchaseDetailsReportPage';
+import PurchaseOrderReceiveReportPage from './pages/PurchaseOrderReceiveReportPage';
+import AccountsDashboard from './pages/AccountsDashboard'
 import './App.css'
 
 function App() {
@@ -220,6 +226,12 @@ function App() {
         <Route path="/accounts-module/contra_list_add" element={<ContraVoucherPage />} />
         <Route path="/accounts-module/contra_list_add/:id" element={<ContraVoucherPage />} />
         <Route path="/accounts-module/journal_list_add/:id" element={<JournalVoucherPage />} />
+        <Route path="/inventory-module/reports/stock" element={<StockReportPage />} />
+        <Route path="/hrm-module/employee" element={<EmployeeListPage />} />
+        <Route path="/dashboard/accounts" element={<AccountsDashboard />} />
+        <Route path="/inventory-module/reports/purchase-order-receive-details" element={<PurchaseOrderReceiveReportPage />} />
+        <Route path="/inventory-module/reports/material-usage" element={<MaterialUsageReportPage />} />
+        <Route path="/inventory-module/reports/purchase-details" element={<PurchaseDetailsReportPage />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>

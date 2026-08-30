@@ -7,7 +7,6 @@ import {
   createServiceRequisition, updateServiceRequisition,
 } from '../api/serviceRequisition';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
 import { Plus, Trash2 } from 'lucide-react';
 
@@ -57,10 +56,10 @@ export default function ServiceRequisitionPage() {
       setDate(r.date || '');
       setCode(r.code || '');
       setProjectType(r.projectType || '');
-      setProject(r.project?._id || r.project || '');
+      setProject(r.project?.id || r.project || '');
       setTitleOfWork(r.titleOfWork || '');
       setTask(r.task || '');
-      setSite(r.site?._id || r.site || '');
+      setSite(r.site?.id || r.site || '');
       setRows(r.items || []);
     }).catch((err) => {
       console.error(err);
@@ -74,17 +73,19 @@ export default function ServiceRequisitionPage() {
   );
 
   function addItemRow() {
-    const it = serviceItems.find((x) => x._id === selectedServiceItemId);
+    // <select> values are always strings; ids coming from Sequelize/MySQL are
+    // numeric, so compare as strings on both sides to avoid a silent mismatch.
+    const it = serviceItems.find((x) => String(x.id) === String(selectedServiceItemId));
     if (!it) return;
     setRows((prev) => [...prev, {
-      serviceItem: it._id,
+      serviceItem: it.id,
       boqItem: '',
       date: new Date().toISOString().slice(0, 10),
       code: it.code || '',
       name: it.name,
       unit: it.unit || '',
       qtyDays: 0,
-      rate: it.rate || 0,
+      rate: it.salePrice || 0,
       details: '',
       amount: 0,
     }]);
@@ -123,7 +124,6 @@ export default function ServiceRequisitionPage() {
   return (
     <div className="min-h-screen w-full bg-gray-50 text-left">
       <Topbar />
-      <ModuleNav />
 
       <div className="flex items-center justify-between pr-4">
         <Breadcrumb
@@ -159,7 +159,7 @@ export default function ServiceRequisitionPage() {
             <Field label="Project">
               <select value={project} onChange={(e) => setProject(e.target.value)} className="input">
                 <option value="">Select Project</option>
-                {projects.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </Field>
             <Field label="Title/Name of Work">
@@ -171,14 +171,14 @@ export default function ServiceRequisitionPage() {
             <Field label="Site">
               <select value={site} onChange={(e) => setSite(e.target.value)} className="input">
                 <option value="">Select Site</option>
-                {sites.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+                {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </Field>
             <Field label="Select Service/Work">
               <div className="flex gap-2">
                 <select value={selectedServiceItemId} onChange={(e) => setSelectedServiceItemId(e.target.value)} className="input flex-1">
                   <option value="">Select Item</option>
-                  {serviceItems.map((it) => <option key={it._id} value={it._id}>{it.name}</option>)}
+                  {serviceItems.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
                 </select>
                 <button type="button" onClick={addItemRow} disabled={!selectedServiceItemId} className="px-3 rounded-md bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50">
                   <Plus size={16} />

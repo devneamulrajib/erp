@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, ArrowLeft, Send } from 'lucide-react';
-import ModuleNav from '../components/ModuleNav';
 import { getContactLedgerSummary } from '../api/accountingReports';
 import { getChartOfAccounts } from '../api/chartOfAccounts';
 import { getProjects } from '../api/project';
@@ -82,7 +81,6 @@ export default function ReceivableReportPage() {
 
   return (
     <div>
-      <ModuleNav />
 
       <div className="px-6 py-4">
         <div className="flex items-center justify-between mb-4">

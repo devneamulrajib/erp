@@ -1,6 +1,18 @@
 import api from './axios';
 
-export const getItems = (params) => api.get('/item', { params });
-export const createItem = (data) => api.post('/item', data);
-export const updateItem = (id, data) => api.put(`/item/${id}`, data);
-export const deleteItem = (id) => api.delete(`/item/${id}`);
+export const getItems = async (params) => {
+  const res = await api.get('/item', { params });
+  return res.data;
+};
+export const createItem = async (data) => {
+  const res = await api.post('/item', data);
+  return res.data;
+};
+export const updateItem = async (id, data) => {
+  const res = await api.put(`/item/${id}`, data);
+  return res.data;
+};
+export const deleteItem = async (id) => {
+  const res = await api.delete(`/item/${id}`);
+  return res.data;
+};

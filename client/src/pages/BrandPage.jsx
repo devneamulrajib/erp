@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { Pencil, Trash2, ArrowLeft } from 'lucide-react';
-import ModuleNav from '../components/ModuleNav';
+import { Pencil, Trash2, LayoutGrid, Plus, Tag } from 'lucide-react';
+import Topbar from '../components/Topbar';
+import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
 import {
   getBrands, getNextBrandCode, createBrand, updateBrand, deleteBrand,
@@ -44,17 +44,29 @@ export default function BrandPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
 
+  useEffect(() => {
+    setPage(1);
+  }, [search, pageSize]);
+
   async function openAddModal() {
     setEditingId(null);
-    const { data } = await getNextBrandCode();
-    setForm({ code: data.code, name: '' });
+    try {
+      const { data } = await getNextBrandCode();
+      setForm({ code: data.code, name: '' });
+    } catch {
+      setForm({ code: '', name: '' });
+    }
     setModalOpen(true);
   }
 
   function openEditModal(brand) {
-    setEditingId(brand._id);
+    setEditingId(brand.id);
     setForm({ code: brand.code, name: brand.name });
     setModalOpen(true);
+  }
+
+  function closeModal() {
+    setModalOpen(false);
   }
 
   async function handleSubmit(e) {
@@ -71,179 +83,235 @@ export default function BrandPage() {
       await load();
     } catch (err) {
       console.error('Failed to save brand', err);
+      alert(err.response?.data?.message || 'Failed to save brand.');
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleDelete(id) {
-    if (!window.confirm('Delete this brand?')) return;
+  async function handleDelete(brand) {
+    if (!window.confirm(`Delete brand "${brand.name}"?`)) return;
     try {
-      await deleteBrand(id);
+      await deleteBrand(brand.id);
       await load();
     } catch (err) {
       console.error('Failed to delete brand', err);
+      alert('Failed to delete brand.');
     }
   }
 
   return (
-    <div>
-      <ModuleNav />
+    <div className="min-h-screen w-full bg-slate-50 text-left">
+      <Topbar />
 
-      <div className="px-6 py-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-sm text-gray-500 flex items-center gap-1">
-            <Link to="/dashboard" className="text-indigo-600 hover:underline">Home</Link>
-            <span>&gt;</span>
-            <Link to="/dashboard/inventory" className="text-indigo-600 hover:underline">Inventory</Link>
-            <span>&gt;</span>
-            <span className="text-gray-700">Brand List</span>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={openAddModal}
-              className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-md"
-            >
-              + Add Brand
-            </button>
-            <Link
-              to="/dashboard/inventory"
-              className="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-900 text-white text-sm font-medium px-4 py-2 rounded-md"
-            >
-              <ArrowLeft size={15} /> Back to Previous
-            </Link>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2 text-sm">
-            Show
-            <select
-              value={pageSize}
-              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-              className="border border-gray-300 rounded-md px-2 py-1"
-            >
-              {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-            entries
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            Search:
-            <input
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="border border-gray-300 rounded-md px-3 py-1.5"
-            />
-          </div>
-        </div>
-
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-indigo-500 text-white text-left text-sm">
-              <th className="px-3 py-2 font-medium">ID</th>
-              <th className="px-3 py-2 font-medium">CODE</th>
-              <th className="px-3 py-2 font-medium">NAME</th>
-              <th className="px-3 py-2 font-medium text-right">ACTION</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={4} className="text-center py-6 text-gray-400">Loading...</td></tr>
-            ) : pageRows.length === 0 ? (
-              <tr><td colSpan={4} className="text-center py-6 text-gray-400">No entries found</td></tr>
-            ) : pageRows.map((brand, i) => (
-              <tr key={brand._id} className="border-b border-gray-100 text-sm">
-                <td className="px-3 py-2">{(page - 1) * pageSize + i + 1}</td>
-                <td className="px-3 py-2">{brand.code}</td>
-                <td className="px-3 py-2">{brand.name}</td>
-                <td className="px-3 py-2">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => openEditModal(brand)}
-                      className="bg-indigo-500 hover:bg-indigo-600 text-white p-1.5 rounded-md"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(brand._id)}
-                      className="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-md"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+        {/* Header */}
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
-            Showing {pageRows.length === 0 ? 0 : (page - 1) * pageSize + 1} to{' '}
-            {(page - 1) * pageSize + pageRows.length} of {filtered.length} entries
+            <Breadcrumb
+              items={[
+                { label: 'Home', to: '/dashboard' },
+                { label: 'Inventory', to: '/dashboard/inventory' },
+                { label: 'Brand List' },
+              ]}
+            />
+            <h1 className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">Brands</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Manage the brands used to classify your products</p>
           </div>
-          <div className="flex gap-1">
-            <button
-              disabled={page === 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-40"
-            >
-              Previous
-            </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).slice(0, 6).map((n) => (
-              <button
-                key={n}
-                onClick={() => setPage(n)}
-                className={`px-3 py-1.5 rounded-md ${n === page ? 'bg-indigo-500 text-white' : 'border border-gray-300'}`}
+          <button
+            onClick={openAddModal}
+            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 transition-colors"
+          >
+            <Plus size={16} strokeWidth={2.5} />
+            Add Brand
+          </button>
+        </div>
+
+        {/* Summary strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Total Brands</div>
+            <div className="text-xl font-semibold text-slate-900">{brands.length}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 col-span-2 sm:col-span-2">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Matching Search</div>
+            <div className="text-xl font-semibold text-slate-900">{filtered.length}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Showing</div>
+            <div className="text-xl font-semibold text-slate-900">{pageRows.length} / {filtered.length}</div>
+          </div>
+        </div>
+
+        {/* Table panel */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span>Show</span>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
               >
-                {n}
+                {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <span>entries</span>
+            </div>
+
+            <div className="relative">
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search brands..."
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-64 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+              />
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
+                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">ID</th>
+                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Code</th>
+                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Name</th>
+                  <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-16 text-slate-400 text-sm">Loading...</td>
+                  </tr>
+                ) : pageRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-16">
+                      <div className="flex flex-col items-center gap-2 text-slate-400">
+                        <LayoutGrid size={28} strokeWidth={1.5} />
+                        <p className="text-sm">No brands found. Try adjusting your search, or create one.</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  pageRows.map((brand, i) => (
+                    <tr key={brand.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
+                      <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">
+                        {(page - 1) * pageSize + i + 1}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-600 px-2.5 py-1 text-xs font-mono font-medium ring-1 ring-inset ring-indigo-600/10">
+                          {brand.code}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <button
+                          onClick={() => openEditModal(brand)}
+                          className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-medium hover:underline underline-offset-2"
+                        >
+                          <Tag size={13} className="text-slate-400" />
+                          {brand.name}
+                        </button>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => openEditModal(brand)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors"
+                            title="Edit"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(brand)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100">
+            <span className="text-sm text-slate-500">
+              Showing <span className="font-medium text-slate-700">{filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}</span> to{' '}
+              <span className="font-medium text-slate-700">{Math.min(page * pageSize, filtered.length)}</span> of{' '}
+              <span className="font-medium text-slate-700">{filtered.length}</span> entries
+            </span>
+            <div className="flex gap-1.5">
+              <button
+                disabled={page === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors"
+              >
+                Previous
               </button>
-            ))}
-            <button
-              disabled={page === totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-40"
-            >
-              Next
-            </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setPage(n)}
+                  className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
+                    n === page ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+              <button
+                disabled={page === totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors"
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      <Modal open={modalOpen} title="Brand" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen} title="Brand" onClose={closeModal}>
         <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
             <div>
-              <label className="block text-sm font-medium mb-1">Code</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">Code</label>
               <input
                 value={form.code}
                 onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-gray-50"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-mono bg-slate-50 text-slate-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Name</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">Name</label>
               <input
                 required
                 placeholder="Name"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
           </div>
-          <div className="flex justify-end gap-2 mt-6">
+
+          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
             <button
               type="button"
-              onClick={() => setModalOpen(false)}
-              className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-medium px-5 py-2 rounded-md"
+              onClick={closeModal}
+              className="px-4 py-2.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
             >
               Close
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-5 py-2 rounded-md disabled:opacity-50"
+              className="px-4 py-2.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 shadow-sm shadow-indigo-600/20 transition-colors"
             >
               {saving ? 'Saving...' : 'Submit'}
             </button>

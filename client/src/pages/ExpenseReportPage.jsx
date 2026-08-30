@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, ArrowLeft } from 'lucide-react';
-import ModuleNav from '../components/ModuleNav';
 import { getExpenseReport } from '../api/accountingReports';
 import { getProjects } from '../api/project';
 
@@ -61,7 +60,6 @@ export default function ExpenseReportPage() {
 
   return (
     <div>
-      <ModuleNav />
       <div className="px-6 py-4">
         <div className="flex items-center justify-between mb-4">
           <div className="text-sm text-gray-500 flex items-center gap-1">

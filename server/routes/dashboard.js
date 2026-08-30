@@ -4,11 +4,39 @@ const auth = require('../middleware/auth');
 const Project = require('../models/Project');
 const Expense = require('../models/Expense');
 const Voucher = require('../models/Voucher');
+const VoucherApproval = require('../models/VoucherApproval');
 const BankAccount = require('../models/BankAccount');
 const Property = require('../models/Property');
+const Party = require('../models/Party');
 const { Comment, CommentAttachment } = require('../models/associations');
 const Customer = require('../models/Customer');
 const ChartOfAccount = require('../models/ChartOfAccount');
+const Sale = require('../models/Sale');
+const Purchase = require('../models/Purchase');
+
+// Helper: date range for a TimeFilterTabs-style range key
+function getRangeBounds(range) {
+  const now = new Date();
+  const start = new Date(now);
+  switch (range) {
+    case 'weekly':
+      start.setDate(now.getDate() - 7);
+      break;
+    case 'monthly':
+      start.setMonth(now.getMonth() - 1);
+      break;
+    case 'yearly':
+      start.setFullYear(now.getFullYear() - 1);
+      break;
+    case 'all':
+      return null; // no lower bound
+    case 'today':
+    default:
+      start.setHours(0, 0, 0, 0);
+      break;
+  }
+  return { [Op.gte]: start };
+}
 
 // Top stat cards: Expenses / Material Req / Service Req / Sales / Purchases / Receipt
 router.get('/summary', auth, async (req, res) => {
@@ -24,6 +52,31 @@ router.get('/summary', auth, async (req, res) => {
       purchases: 0,   // TODO: wire up once Purchase is converted
       receipt,
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Accounts module dashboard stat cards:
+// Total Expense (sum) / Payment / Sales / Purchases / Receipt / Journal (counts)
+// Accepts ?range=today|weekly|monthly|yearly|all (defaults to today, matches the
+// Today/Weekly/Monthly/Yearly/All tabs in the UI).
+router.get('/accounts-summary', auth, async (req, res) => {
+  try {
+    const dateFilter = getRangeBounds(req.query.range);
+    const dateWhere = dateFilter ? { date: dateFilter } : {};
+
+    const totalExpense = await Expense.sum('amount', { where: dateWhere }) || 0;
+    const payment = await Voucher.count({ where: { type: 'Payment', ...dateWhere } });
+    const receipt = await Voucher.count({ where: { type: 'Receipt', ...dateWhere } });
+    const journal = await Voucher.count({ where: { type: 'Journal', ...dateWhere } });
+
+    // NOTE: Sale/Purchase models weren't shared with this task, so if their date
+    // column isn't literally `date`, adjust dateWhere's key below to match.
+    const sales = await Sale.count({ where: dateWhere }).catch(() => 0);
+    const purchases = await Purchase.count({ where: dateWhere }).catch(() => 0);
+
+    res.json({ totalExpense, payment, sales, purchases, receipt, journal });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -108,9 +161,36 @@ router.get('/inflow-outflow', auth, async (req, res) => {
 // Cash Bank Balance table
 router.get('/bank-balances', auth, async (req, res) => {
   try {
-    const accounts = await BankAccount.findAll({ order: [['name', 'ASC']] });
+    const accounts = await BankAccount.findAll({ order: [['lastUpdated', 'DESC']] });
     const total = accounts.reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
     res.json({ accounts, total });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Pending Cheque table (from vouchers with a bank + cheque date, awaiting reconciliation)
+router.get('/pending-cheques', auth, async (req, res) => {
+  try {
+    const cheques = await Voucher.findAll({
+      where: {
+        chequeDate: { [Op.ne]: null },
+        reconciliationStatus: 'Pending',
+      },
+      include: [{ model: BankAccount, as: 'bank', attributes: ['id', 'name'] }],
+      order: [['chequeDate', 'DESC']],
+    });
+
+    res.json(cheques.map((c) => ({
+      _id: c.id,
+      voucherNo: c.voucherNo,
+      description: c.narration,
+      bank: c.bank?.name || c.bankId || '-',
+      date: c.date,
+      chequeDate: c.chequeDate,
+      amount: c.amount,
+      status: c.reconciliationStatus,
+    })));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -131,10 +211,33 @@ router.get('/pending-vouchers', auth, async (req, res) => {
   try {
     const vouchers = await Voucher.findAll({
       where: { status: 'pending' },
+      include: [
+        { model: Project, as: 'project', attributes: ['id', 'name'] },
+        { model: Party, as: 'contact', attributes: ['id', 'name'] },
+        { model: VoucherApproval },
+      ],
       order: [['createdAt', 'DESC']],
       limit: 10,
     });
-    res.json(vouchers);
+
+    const result = vouchers.map((v) => ({
+      _id: v.id,
+      type: v.type,
+      amount: v.amount,
+      project: v.project?.name || '-',
+      contact: v.contact?.name || '',
+      reference: v.voucherNo,
+      addedBy: v.addedBy,
+      date: v.date,
+      // NOTE: VoucherApproval field names weren't shared with this task -
+      // adjust `name`/`approved` below to match its actual columns.
+      approvals: (v.VoucherApprovals || []).map((a) => ({
+        name: a.approverName || a.name || 'Approver',
+        approved: a.status === 'approved' || a.approved === true,
+      })),
+    }));
+
+    res.json(result);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

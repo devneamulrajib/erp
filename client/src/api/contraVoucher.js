@@ -28,15 +28,15 @@ function buildFormData(payload) {
 }
 
 export async function createContraVoucher(payload) {
-  const res = await api.post('/contra-vouchers', buildFormData(payload), {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  // NOTE: do NOT set 'Content-Type' manually for FormData —
+  // axios/the browser needs to generate it itself so the multipart
+  // boundary is included. Setting it explicitly breaks parsing on
+  // the server and causes silent failures.
+  const res = await api.post('/contra-vouchers', buildFormData(payload));
   return res.data;
 }
 export async function updateContraVoucher(id, payload) {
-  const res = await api.put(`/contra-vouchers/${id}`, buildFormData(payload), {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  const res = await api.put(`/contra-vouchers/${id}`, buildFormData(payload));
   return res.data;
 }
 export async function deleteContraVoucher(id) {

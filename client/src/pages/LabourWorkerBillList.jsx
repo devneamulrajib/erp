@@ -4,11 +4,17 @@ import { getParties } from '../api/party';
 import { getChartOfAccounts } from '../api/chartOfAccounts';
 import { getLabourBills, deleteLabourBill } from '../api/labourBill';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
-import { ChevronDown, PlusCircle } from 'lucide-react';
+import { ChevronDown, PlusCircle, Search } from 'lucide-react';
 
 function num(v) { return Number(v) || 0; }
+function asArray(res) {
+  const body = res?.data ?? res;
+  if (Array.isArray(body)) return body;
+  return body?.rows || body?.data || [];
+}
+
+const inputCls = 'w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition';
 
 export default function LabourWorkerBillList() {
   const navigate = useNavigate();
@@ -32,7 +38,7 @@ export default function LabourWorkerBillList() {
     setError('');
     try {
       const data = await getLabourBills({ from, to, party: filterParty, ledger: filterLedger });
-      setRows(Array.isArray(data) ? data : []);
+      setRows(asArray(data));
     } catch (e) {
       setError(e.response?.data?.message || e.message || 'Failed to load labour/worker bills');
     } finally {
@@ -43,15 +49,15 @@ export default function LabourWorkerBillList() {
   useEffect(() => { loadRows(); }, [loadRows]);
 
   useEffect(() => {
-    getParties().then(setParties).catch(() => {});
-    getChartOfAccounts().then((res) => setLedgers(res.data || res)).catch(() => {});
+    getParties().then((res) => setParties(asArray(res))).catch((err) => console.error('Failed to load parties', err));
+    getChartOfAccounts().then((res) => setLedgers(asArray(res))).catch((err) => console.error('Failed to load ledgers', err));
   }, []);
 
   async function handleDelete(row) {
     if (!window.confirm('Delete this labour/worker bill?')) return;
     try {
-      await deleteLabourBill(row._id);
-      setRows((prev) => prev.filter((r) => r._id !== row._id));
+      await deleteLabourBill(row.id);
+      setRows((prev) => prev.filter((r) => r.id !== row.id));
     } catch (e) {
       alert(e.response?.data?.message || e.message || 'Failed to delete');
     }
@@ -74,156 +80,209 @@ export default function LabourWorkerBillList() {
   }), { grandTotal: 0, paid: 0, due: 0 });
 
   return (
-    <div className="min-h-screen w-full bg-gray-50 text-left">
+    <div className="min-h-screen w-full bg-slate-50 text-left">
       <Topbar />
-      <ModuleNav />
 
-      <div className="flex items-center justify-between pr-4">
-        <Breadcrumb
-          items={[
-            { label: 'Home', to: '/dashboard' },
-            { label: 'Labour/Worker', to: '/service/labor-worker-bill-list' },
-            { label: 'Labour/Worker Bill List' },
-          ]}
-        />
-        <button
-          onClick={() => navigate('/service/labor-worker-bill-add')}
-          className="flex items-center gap-1.5 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-md"
-        >
-          <PlusCircle size={15} /> New Labour/Worker Bill
-        </button>
-      </div>
-
-      <div className="px-4 pb-6">
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-4">{error}</div>}
-
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-2">
+      <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-6">
+        {/* Header */}
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
-            <label className="block text-sm text-gray-600 mb-1">From</label>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+            <Breadcrumb
+              items={[
+                { label: 'Home', to: '/dashboard' },
+                { label: 'Labour/Worker', to: '/service/labor-worker-bill-list' },
+                { label: 'Labour/Worker Bill List' },
+              ]}
+            />
+            <h1 className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">Labour/Worker Bills</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Track labour and worker billing across your projects</p>
           </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">To</label>
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Contractor/Supplier/Worker</label>
-            <select value={filterParty} onChange={(e) => setFilterParty(e.target.value)} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-              <option value="">Select One Option</option>
-              {parties.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
-            </select>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4">
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Ledger</label>
-            <select value={filterLedger} onChange={(e) => setFilterLedger(e.target.value)} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-              <option value="">Select Chart Of Account</option>
-              {ledgers.map((l) => <option key={l._id} value={l._id}>{l.code ? `${l.code}-${l.name}` : l.name}</option>)}
-            </select>
-          </div>
+          <button
+            onClick={() => navigate('/service/labor-worker-bill-add')}
+            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 transition-colors"
+          >
+            <PlusCircle size={16} /> New Labour/Worker Bill
+          </button>
         </div>
 
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-500">Show</span>
-            <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
-              {[10, 25, 50].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-            <span className="text-gray-500">entries</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-500">Search:</span>
-            <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-56" />
+        {error && <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-5">{error}</div>}
+
+        {/* Stat cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+          <StatCard label="Total Bills" value={filtered.length.toLocaleString()} />
+          <StatCard label="Grand Total" value={totals.grandTotal.toLocaleString()} />
+          <StatCard label="Paid" value={totals.paid.toLocaleString()} valueCls="text-emerald-600" />
+          <StatCard label="Due" value={totals.due.toLocaleString()} valueCls="text-red-600" />
+        </div>
+
+        {/* Filters card */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Field label="From">
+              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="To">
+              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="Contractor/Supplier/Worker">
+              <select value={filterParty} onChange={(e) => setFilterParty(e.target.value)} className={inputCls}>
+                <option value="">Select One Option</option>
+                {parties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Ledger">
+              <select value={filterLedger} onChange={(e) => setFilterLedger(e.target.value)} className={inputCls}>
+                <option value="">Select Chart Of Account</option>
+                {ledgers.map((l) => <option key={l.id} value={l.id}>{l.code ? `${l.code}-${l.name}` : l.name}</option>)}
+              </select>
+            </Field>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="bg-indigo-500 text-white whitespace-nowrap">
-                {['ID', 'Project Type', 'Project', 'Title/Name of Work', 'Worker/Contractor/Supplier', 'DR Ledger',
-                  'Credit Ledger', 'Code', 'Date', 'Grand Total', 'Paid', 'Due', 'Added By', 'Approve', 'Attachment', 'Action'].map((h) => (
-                  <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={16} className="text-center py-8 text-gray-400">Loading…</td></tr>
-              ) : paged.length === 0 ? (
-                <tr><td colSpan={16} className="text-center py-8 text-gray-400">No data available in table</td></tr>
-              ) : (
-                paged.map((row, i) => (
-                  <tr key={row._id} className="border-t border-gray-100 whitespace-nowrap align-top">
-                    <td className="px-3 py-2">{(page - 1) * pageSize + i + 1}</td>
-                    <td className="px-3 py-2">{row.projectType || '-'}</td>
-                    <td className="px-3 py-2">{row.project?.name || '-'}</td>
-                    <td className="px-3 py-2">{row.titleOfWork || '-'}</td>
-                    <td className="px-3 py-2">{row.party?.name || '-'}</td>
-                    <td className="px-3 py-2 text-indigo-600">{row.ledger?.name || '-'}</td>
-                    <td className="px-3 py-2">{row.creditLedgerLabel || 'TBA'}</td>
-                    <td className="px-3 py-2">{row.code}</td>
-                    <td className="px-3 py-2">{row.date}</td>
-                    <td className="px-3 py-2 font-medium">{num(row.totalPayable).toLocaleString()}</td>
-                    <td className="px-3 py-2">{num(row.paid).toLocaleString()}</td>
-                    <td className="px-3 py-2">{num(row.due).toLocaleString()}</td>
-                    <td className="px-3 py-2">{row.addedBy || '-'}</td>
-                    <td className="px-3 py-2">
-                      {(row.approvals || []).map((a, idx) => (
-                        <div key={idx} className={`text-xs ${a.approved ? 'text-emerald-600' : 'text-red-500'}`}>
-                          {a.approved ? '✓' : '✗'} {a.name}
-                        </div>
-                      ))}
-                    </td>
-                    <td className="px-3 py-2">
-                      {row.attachment ? <a href={row.attachment} target="_blank" rel="noreferrer" className="text-indigo-600 underline">File</a> : '-'}
-                    </td>
-                    <td className="px-3 py-2 relative">
-                      <button
-                        onClick={() => setOpenActionId(openActionId === row._id ? null : row._id)}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded text-xs"
-                      >
-                        <span className="sr-only">Actions</span>
-                        <ChevronDown size={12} />
-                      </button>
-                      {openActionId === row._id && (
-                        <div className="absolute right-3 mt-1 w-32 bg-white border border-gray-200 rounded-md shadow-lg z-10">
-                          <button onClick={() => { navigate(`/service/labor-worker-bill-add/${row._id}`); setOpenActionId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50">Edit</button>
-                          <button onClick={() => { navigate(`/service/labor-worker-bill-add/${row._id}`); setOpenActionId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50">View</button>
-                          <button onClick={() => handleDelete(row)} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-            {filtered.length > 0 && (
-              <tfoot>
-                <tr className="border-t border-gray-200 font-medium">
-                  <td colSpan={9} className="px-3 py-2 text-right">TOTAL:</td>
-                  <td className="px-3 py-2">{totals.grandTotal.toLocaleString()}</td>
-                  <td className="px-3 py-2">{totals.paid.toLocaleString()}</td>
-                  <td className="px-3 py-2">{totals.due.toLocaleString()}</td>
-                  <td colSpan={4}></td>
+        {/* Table card */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-5">
+          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-slate-500">Show</span>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+              >
+                {[10, 25, 50].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <span className="text-slate-500">entries</span>
+            </div>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                placeholder="Search bills..."
+                className="border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 w-64"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
+                  {['ID', 'Project Type', 'Project', 'Title/Name of Work', 'Worker/Contractor/Supplier', 'DR Ledger',
+                    'Credit Ledger', 'Code', 'Date', 'Grand Total', 'Paid', 'Due', 'Added By', 'Approve', 'Attachment', 'Action'].map((h) => (
+                    <th key={h} className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">{h}</th>
+                  ))}
                 </tr>
-              </tfoot>
-            )}
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  <tr><td colSpan={16} className="text-center py-10 text-slate-400 text-sm">Loading…</td></tr>
+                ) : paged.length === 0 ? (
+                  <tr><td colSpan={16} className="text-center py-10 text-slate-400 text-sm">No data available in table</td></tr>
+                ) : (
+                  paged.map((row, i) => (
+                    <tr key={row.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap align-top">
+                      <td className="px-4 py-3 text-slate-500">{(page - 1) * pageSize + i + 1}</td>
+                      <td className="px-4 py-3 text-slate-700">{row.projectType || '-'}</td>
+                      <td className="px-4 py-3 text-slate-700">{row.project?.name || '-'}</td>
+                      <td className="px-4 py-3 text-slate-700">{row.titleOfWork || '-'}</td>
+                      <td className="px-4 py-3 text-slate-700">{row.party?.name || '-'}</td>
+                      <td className="px-4 py-3 text-indigo-600">{row.ledger?.name || '-'}</td>
+                      <td className="px-4 py-3 text-slate-700">{row.creditLedgerLabel || 'TBA'}</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-block bg-indigo-50 text-indigo-700 text-xs font-medium px-2.5 py-1 rounded-md font-mono">{row.code}</span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">{row.date}</td>
+                      <td className="px-4 py-3 font-medium text-slate-900">{num(row.totalPayable).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-slate-700">{num(row.paid).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-slate-700">{num(row.due).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-slate-700">{row.addedBy || '-'}</td>
+                      <td className="px-4 py-3">
+                        {(row.approvals || []).map((a, idx) => (
+                          <div key={idx} className={`text-xs ${a.approved ? 'text-emerald-600' : 'text-red-500'}`}>
+                            {a.approved ? '✓' : '✗'} {a.name}
+                          </div>
+                        ))}
+                      </td>
+                      <td className="px-4 py-3">
+                        {row.attachment ? <a href={row.attachment} target="_blank" rel="noreferrer" className="text-indigo-600 underline">File</a> : '-'}
+                      </td>
+                      <td className="px-4 py-3 relative">
+                        <button
+                          onClick={() => setOpenActionId(openActionId === row.id ? null : row.id)}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs transition-colors"
+                        >
+                          <span className="sr-only">Actions</span>
+                          <ChevronDown size={12} />
+                        </button>
+                        {openActionId === row.id && (
+                          <div className="absolute right-4 mt-1 w-32 bg-white border border-slate-200 rounded-lg shadow-lg z-10 overflow-hidden">
+                            <button onClick={() => { navigate(`/service/labor-worker-bill-add/${row.id}`); setOpenActionId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50">Edit</button>
+                            <button onClick={() => { navigate(`/service/labor-worker-bill-add/${row.id}`); setOpenActionId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50">View</button>
+                            <button onClick={() => handleDelete(row)} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {filtered.length > 0 && (
+                <tfoot>
+                  <tr className="border-t border-slate-200 font-medium bg-slate-50/50">
+                    <td colSpan={9} className="px-4 py-3 text-right text-slate-700">TOTAL:</td>
+                    <td className="px-4 py-3 text-slate-900">{totals.grandTotal.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-slate-900">{totals.paid.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-slate-900">{totals.due.toLocaleString()}</td>
+                    <td colSpan={4}></td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
         </div>
 
-        <div className="flex items-center justify-between mt-3">
-          <span className="text-sm text-gray-500">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-slate-500">
             Showing {filtered.length === 0 ? 0 : (page - 1) * pageSize + 1} to {Math.min(page * pageSize, filtered.length)} of {filtered.length} entries
           </span>
           <div className="flex gap-2">
-            <button disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="px-3 py-1.5 rounded-md text-sm bg-gray-100 text-gray-500 disabled:opacity-50">Previous</button>
-            <span className="px-3 py-1.5 rounded-md text-sm bg-indigo-500 text-white">{page}</span>
-            <button disabled={page === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-3 py-1.5 rounded-md text-sm bg-gray-100 text-gray-500 disabled:opacity-50">Next</button>
+            <button
+              disabled={page === 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-white transition-colors"
+            >
+              Previous
+            </button>
+            <span className="px-3 py-1.5 rounded-lg text-sm bg-indigo-600 text-white font-medium">{page}</span>
+            <button
+              disabled={page === totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-white transition-colors"
+            >
+              Next
+            </button>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, valueCls = 'text-slate-900' }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+      <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1.5">{label}</p>
+      <p className={`text-2xl font-semibold ${valueCls}`}>{value}</p>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-slate-500 mb-1.5">{label}</label>
+      {children}
     </div>
   );
 }

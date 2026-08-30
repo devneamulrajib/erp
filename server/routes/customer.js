@@ -30,6 +30,7 @@ router.get('/', auth, async (req, res) => {
     });
     res.json(customers);
   } catch (err) {
+    console.error('GET /api/customers failed:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -42,6 +43,7 @@ router.get('/:id', auth, async (req, res) => {
     if (!customer) return res.status(404).json({ message: 'Not found' });
     res.json(customer);
   } catch (err) {
+    console.error('GET /api/customers/:id failed:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -78,6 +80,7 @@ router.post('/', auth, async (req, res) => {
     const populated = await Customer.findByPk(customer.id, { include: [{ model: CustomerNominee }] });
     res.status(201).json(populated);
   } catch (err) {
+    console.error('POST /api/customers failed:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -107,6 +110,7 @@ router.put('/:id', auth, async (req, res) => {
     const populated = await Customer.findByPk(customer.id, { include: [{ model: CustomerNominee }] });
     res.json(populated);
   } catch (err) {
+    console.error('PUT /api/customers/:id failed:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -117,6 +121,7 @@ router.delete('/:id', auth, async (req, res) => {
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {
+    console.error('DELETE /api/customers/:id failed:', err);
     res.status(500).json({ message: err.message });
   }
 });

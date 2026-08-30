@@ -1,299 +1,360 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Pencil, Trash2, Printer, Mail, Eye, Copy } from 'lucide-react';
-import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
-import Breadcrumb from '../components/Breadcrumb';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
-import { getJournalVouchers, deleteJournalVoucher, duplicateJournalVoucher } from '../api/journalVoucher';
-import { getChartOfAccounts } from '../api/chartOfAccounts';
+import Topbar from '../components/Topbar';
+import Breadcrumb from '../components/Breadcrumb';
+import Modal from '../components/Modal';
+import { Trash2 } from 'lucide-react';
+import {
+  getJournalVoucher, getNextJournalVoucherCode, createJournalVoucher, updateJournalVoucher,
+} from '../api/journalVoucher';
+import { getChartOfAccounts, createChartOfAccount } from '../api/chartOfAccounts';
+import { getChartOfGroupOptions } from '../api/chartOfGroup';
 
-export default function JournalVoucherListPage() {
+function num(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+const TYPE_OPTIONS = ['Debit', 'Credit'];
+
+export default function JournalVoucherPage() {
   const navigate = useNavigate();
-  const [vouchers, setVouchers] = useState([]);
-  const [accounts, setAccounts] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [sites, setSites] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { id } = useParams();
+  const isEdit = !!id;
 
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [debitAccount, setDebitAccount] = useState('');
-  const [creditAccount, setCreditAccount] = useState('');
-  const [project, setProject] = useState('');
+  const [projects, setProjects] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
+  const [sites, setSites] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [groupOptions, setGroupOptions] = useState([]);
+
+  const [voucherNo, setVoucherNo] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [projectType, setProjectType] = useState('');
   const [titleOfWork, setTitleOfWork] = useState('');
+  const [project, setProject] = useState('');
   const [site, setSite] = useState('');
   const [task, setTask] = useState('');
 
-  const [search, setSearch] = useState('');
-  const [pageSize, setPageSize] = useState(10);
-  const [page, setPage] = useState(1);
+  const [rowType, setRowType] = useState('');
+  const [rowAccount, setRowAccount] = useState('');
+  const [rowAmount, setRowAmount] = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await getJournalVouchers({
-        from: fromDate || undefined,
-        to: toDate || undefined,
-        debitAccount: debitAccount || undefined,
-        creditAccount: creditAccount || undefined,
-        project: project || undefined,
-        titleOfWork: titleOfWork || undefined,
-        site: site || undefined,
-        task: task || undefined,
-      });
-      setVouchers(data);
-    } catch (err) {
-      console.error('Failed to load journal vouchers', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [fromDate, toDate, debitAccount, creditAccount, project, titleOfWork, site, task]);
+  const [lines, setLines] = useState([]);
+  const [comment, setComment] = useState('');
+  const [attachmentFile, setAttachmentFile] = useState(null);
 
-  useEffect(() => { load(); }, [load]);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddForm, setQuickAddForm] = useState({ chartOfGroup: '', code: '', name: '' });
+  const [quickAddSaving, setQuickAddSaving] = useState(false);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  function reloadAccounts() {
+    getChartOfAccounts().then((res) => setAccounts(res?.data ?? res ?? [])).catch(() => setAccounts([]));
+  }
 
   useEffect(() => {
-    getChartOfAccounts().then((res) => setAccounts(res.data)).catch(console.error);
-    api.get('/projects').then((res) => setProjects(res.data)).catch(console.error);
-    api.get('/sites').then((res) => setSites(res.data)).catch(console.error);
+    api.get('/projects').then((res) => setProjects(res.data ?? [])).catch(() => setProjects([]));
+    api.get('/project-types').then((res) => setProjectTypes(res.data ?? [])).catch(() => setProjectTypes([]));
+    api.get('/sites').then((res) => setSites(res.data ?? [])).catch(() => setSites([]));
+    reloadAccounts();
+    getChartOfGroupOptions().then((res) => setGroupOptions(res?.data ?? res ?? [])).catch(() => setGroupOptions([]));
   }, []);
 
-  const filtered = vouchers.filter((v) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (v.voucherNo || '').toLowerCase().includes(q) || (v.titleOfWork || '').toLowerCase().includes(q);
-  });
+  useEffect(() => {
+    if (isEdit) return;
+    getNextJournalVoucherCode().then(setVoucherNo).catch(() => {});
+  }, [isEdit]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
-
-  async function handleDelete(id) {
-    if (!window.confirm('Delete this journal voucher?')) return;
-    try {
-      await deleteJournalVoucher(id);
-      await load();
-    } catch (err) {
-      window.alert(err.response?.data?.message || 'Failed to delete');
-    }
-  }
-
-  async function handleDuplicate(id) {
-    try {
-      await duplicateJournalVoucher(id);
-      await load();
-    } catch (err) {
-      window.alert(err.response?.data?.message || 'Failed to duplicate');
-    }
-  }
-
-  function handleSendMail(v) {
-    const subject = encodeURIComponent(`Journal Voucher ${v.voucherNo}`);
-    const body = encodeURIComponent(`Journal Voucher: ${v.voucherNo}\nTotal Debit: ${v.totalDebit}\nTotal Credit: ${v.totalCredit}`);
-    window.location.href = `mailto:?subject=${subject}&body=${body}`;
-  }
-
-  function handlePrint() {
-    window.print();
-  }
-
-  function exportCsv() {
-    const headers = ['SL', 'Date', 'Title/Name of Work', 'Type', 'Code', 'Debit', 'Credit', 'Total', 'Comment', 'Added By', 'Status'];
-    const rows = filtered.map((v, i) => {
-      const debitLines = (v.lines || []).filter((l) => l.debit > 0).map((l) => l.account).join(', ');
-      const creditLines = (v.lines || []).filter((l) => l.credit > 0).map((l) => l.account).join(', ');
-      return [i + 1, new Date(v.date).toLocaleDateString(), v.titleOfWork, 'Journal', v.voucherNo, debitLines, creditLines, v.totalDebit, v.comment, v.addedBy, v.status];
+  useEffect(() => {
+    if (!isEdit) return;
+    getJournalVoucher(id).then((v) => {
+      setVoucherNo(v.voucherNo || '');
+      setDate(v.date ? new Date(v.date).toISOString().slice(0, 10) : '');
+      setProjectType(v.projectType || '');
+      setTitleOfWork(v.titleOfWork || '');
+      setProject(v.project || '');
+      setSite(v.site || '');
+      setTask(v.task || '');
+      setLines(v.lines || []);
+      setComment(v.comment || '');
+    }).catch((err) => {
+      console.error(err);
+      setError('Failed to load journal voucher.');
     });
-    const csv = [headers, ...rows].map((r) => r.map((c) => `"${c ?? ''}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'journal_voucher_list.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+  }, [id, isEdit]);
+
+  const totalDebit = useMemo(() => (lines || []).reduce((sum, l) => sum + num(l.debit), 0), [lines]);
+  const totalCredit = useMemo(() => (lines || []).reduce((sum, l) => sum + num(l.credit), 0), [lines]);
+  const balanced = Math.abs(totalDebit - totalCredit) < 0.01;
+
+  function addLine() {
+    if (!rowType || !rowAccount || num(rowAmount) <= 0) return;
+    setLines((prev) => [...(prev || []), {
+      account: rowAccount,
+      debit: rowType === 'Debit' ? num(rowAmount) : 0,
+      credit: rowType === 'Credit' ? num(rowAmount) : 0,
+      chequeReceiptNo: '',
+      note: '',
+    }]);
+    setRowType('');
+    setRowAccount('');
+    setRowAmount('');
   }
 
-  function copyToClipboard() {
-    const text = filtered.map((v) => `${v.voucherNo}\t${v.titleOfWork}\t${v.totalDebit}`).join('\n');
-    navigator.clipboard.writeText(text).catch(() => {});
+  function updateLine(i, key, value) {
+    setLines((prev) => (prev || []).map((l, idx) => (idx === i ? { ...l, [key]: value } : l)));
+  }
+  function removeLine(i) {
+    setLines((prev) => (prev || []).filter((_, idx) => idx !== i));
   }
 
-  const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
+  async function handleQuickAddSubmit(e) {
+    e.preventDefault();
+    if (!quickAddForm.chartOfGroup || !quickAddForm.name) return;
+    setQuickAddSaving(true);
+    try {
+      const res = await createChartOfAccount(quickAddForm);
+      const data = res?.data ?? res;
+      reloadAccounts();
+      setRowAccount(data.name);
+      setQuickAddOpen(false);
+      setQuickAddForm({ chartOfGroup: '', code: '', name: '' });
+    } catch (err) {
+      console.error('Failed to create account', err);
+    } finally {
+      setQuickAddSaving(false);
+    }
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    if ((lines || []).length < 2) {
+      setError('Add at least two account lines (one Debit, one Credit)');
+      return;
+    }
+    if (!balanced) {
+      setError(`Voucher does not balance: Debit ${totalDebit.toFixed(2)} vs Credit ${totalCredit.toFixed(2)}`);
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const payload = {
+        voucherNo, date, projectType, project, titleOfWork, site, task,
+        lines, comment, attachmentFile,
+      };
+      if (isEdit) {
+        await updateJournalVoucher(id, payload);
+      } else {
+        await createJournalVoucher(payload);
+      }
+      navigate('/accounts-module/journal_list');
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to save journal voucher');
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div className="min-h-screen w-full bg-gray-50 text-left">
       <Topbar />
-      <ModuleNav />
 
       <div className="flex items-center justify-between pr-4">
         <Breadcrumb
           items={[
             { label: 'Home', to: '/dashboard' },
             { label: 'Accounts Module', to: '/dashboard' },
-            { label: 'Journal Voucher List' },
+            { label: 'Journal Voucher' },
           ]}
         />
         <button
-          onClick={() => navigate('/accounts-module/journal_list_add?type=Journal')}
-          className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-md"
+          type="button"
+          onClick={() => navigate('/accounts-module/journal_list')}
+          className="bg-gray-800 hover:bg-gray-900 text-white text-sm font-medium px-4 py-2 rounded-md"
         >
-          + Add New
+          Back to previous
         </button>
       </div>
 
-      <div className="px-4 pb-6">
-        <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Field label="Select Date">
-              <div className="flex gap-2">
-                <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="input" />
-                <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="input" />
-              </div>
+      <form onSubmit={handleSubmit} className="px-4 pb-10">
+        {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-4">{error}</div>}
+
+        <div className="bg-white border border-gray-200 rounded-md p-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-4">
+            <Field label="Voucher No">
+              <input value={voucherNo} readOnly className="input bg-gray-50" />
             </Field>
-            <Field label="Debit Accounts">
-              <select value={debitAccount} onChange={(e) => setDebitAccount(e.target.value)} className="input">
-                <option value="">Select Chart Of Account</option>
-                {accounts.map((a) => <option key={a._id} value={a.name}>{a.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Credit Accounts">
-              <select value={creditAccount} onChange={(e) => setCreditAccount(e.target.value)} className="input">
-                <option value="">Select Chart Of Account</option>
-                {accounts.map((a) => <option key={a._id} value={a.name}>{a.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Select Project">
+            <Field label="Project">
               <select value={project} onChange={(e) => setProject(e.target.value)} className="input">
                 <option value="">Select Project</option>
-                {projects.map((p) => <option key={p._id} value={p.name}>{p.name}</option>)}
+                {(projects || []).map((p) => <option key={p._id ?? p.id} value={p.name}>{p.name}</option>)}
               </select>
             </Field>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-            <Field label="Title/Name of Work">
-              <input value={titleOfWork} onChange={(e) => setTitleOfWork(e.target.value)} className="input" placeholder="Select Title/Name of Work" />
+            <Field label="Date">
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
             </Field>
             <Field label="Site">
               <select value={site} onChange={(e) => setSite(e.target.value)} className="input">
                 <option value="">Select Site</option>
-                {sites.map((s) => <option key={s._id} value={s.name}>{s.name}</option>)}
+                {(sites || []).map((s) => <option key={s._id ?? s.id} value={s.name}>{s.name}</option>)}
               </select>
             </Field>
-            <Field label="Task">
-              <select value={task} onChange={(e) => setTask(e.target.value)} className="input">
-                <option value="">Select Task</option>
+            <Field label="Project Type">
+              <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
+                <option value="">Select Project Type</option>
+                {(projectTypes || []).map((pt) => <option key={pt._id ?? pt.id} value={pt.name}>{pt.name}</option>)}
               </select>
             </Field>
+            <Field label="If Task">
+              <input value={task} onChange={(e) => setTask(e.target.value)} className="input" placeholder="Select Task" />
+            </Field>
+            <Field label="Title/Name of Work">
+              <input value={titleOfWork} onChange={(e) => setTitleOfWork(e.target.value)} className="input" placeholder="Select Title/Name of Work" />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <Field label="Select Type">
+              <select value={rowType} onChange={(e) => setRowType(e.target.value)} className="input">
+                <option value="">Select Type</option>
+                {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </Field>
+            <Field label="Select Chart Of Account">
+              <div className="flex gap-2">
+                <select value={rowAccount} onChange={(e) => setRowAccount(e.target.value)} className="input flex-1">
+                  <option value="">Select Chart Of Account</option>
+                  {(accounts || []).map((a) => <option key={a._id ?? a.id} value={a.name}>{a.name}</option>)}
+                </select>
+                <button type="button" onClick={() => setQuickAddOpen(true)} className="px-3 rounded-md bg-emerald-500 hover:bg-emerald-600 text-white font-bold">+</button>
+              </div>
+            </Field>
+            <Field label="Amount">
+              <input type="number" value={rowAmount} onChange={(e) => setRowAmount(e.target.value)} className="input" placeholder="Amount" />
+            </Field>
+            <button
+              type="button"
+              onClick={addLine}
+              className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-4 py-2.5 rounded-md"
+            >
+              Add
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <button onClick={copyToClipboard} className="bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-medium px-4 py-2 rounded-md">Copy</button>
-            <button onClick={exportCsv} className="bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium px-4 py-2 rounded-md">CSV</button>
-            <div className="flex items-center gap-2 text-sm ml-4">
-              Show
-              <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="border border-gray-300 rounded-md px-2 py-1">
-                {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-              entries
-            </div>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            Search:
-            <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="border border-gray-300 rounded-md px-3 py-1.5" />
-          </div>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+        <div className="bg-white border border-gray-200 rounded-md overflow-hidden mb-2">
           <table className="w-full text-xs">
             <thead>
-              <tr className="bg-indigo-500 text-white whitespace-nowrap">
-                {['SL', 'Date', 'Title/Name of Work', 'Type', 'Code', 'Debit', 'Credit', 'Total',
-                  'Comment', 'Added By', 'Edited By', 'Approve', 'Attachment', 'Status', 'Action'].map((h) => (
+              <tr className="bg-indigo-500 text-white">
+                {['Accounts', 'Debit', 'Credit', 'Chq/Receipt', 'Note', 'Action'].map((h) => (
                   <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr><td colSpan={15} className="text-center py-6 text-gray-400">Loading...</td></tr>
-              ) : pageRows.length === 0 ? (
-                <tr><td colSpan={15} className="text-center py-6 text-gray-400">No entries found</td></tr>
-              ) : pageRows.map((v, i) => {
-                const debitLines = (v.lines || []).filter((l) => l.debit > 0).map((l) => l.account);
-                const creditLines = (v.lines || []).filter((l) => l.credit > 0).map((l) => l.account);
-                return (
-                  <tr key={v._id} className="border-t border-gray-100">
-                    <td className="px-3 py-2">{(page - 1) * pageSize + i + 1}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{fmtDate(v.date)}</td>
-                    <td className="px-3 py-2">{v.titleOfWork}</td>
-                    <td className="px-3 py-2">Journal</td>
-                    <td className="px-3 py-2">{v.voucherNo}</td>
-                    <td className="px-3 py-2 text-indigo-600">{debitLines.join(', ')}</td>
-                    <td className="px-3 py-2 text-indigo-600">{creditLines.join(', ')}</td>
-                    <td className="px-3 py-2">{Number(v.totalDebit || 0).toFixed(2)}</td>
-                    <td className="px-3 py-2">{v.comment}</td>
-                    <td className="px-3 py-2">{v.addedBy}</td>
-                    <td className="px-3 py-2">{v.editedBy}</td>
-                    <td className="px-3 py-2">
-                      {(v.approvals || []).length === 0 ? (
-                        <span className="text-gray-400">-</span>
-                      ) : (
-                        v.approvals.map((a, idx) => (
-                          <div key={idx} className={a.approved ? 'text-emerald-600' : 'text-red-500'}>
-                            {a.approved ? '✓' : '✗'} {a.name}
-                          </div>
-                        ))
-                      )}
+              {(lines || []).length === 0 ? (
+                <tr><td colSpan={6} className="text-center py-4 text-gray-400">No accounts added</td></tr>
+              ) : (
+                (lines || []).map((l, i) => (
+                  <tr key={i} className="border-t border-gray-100">
+                    <td className="px-3 py-1.5 text-indigo-600">{l.account}</td>
+                    <td className="px-3 py-1.5">{num(l.debit).toFixed(2)}</td>
+                    <td className="px-3 py-1.5">{num(l.credit).toFixed(2)}</td>
+                    <td className="px-3 py-1.5">
+                      <input value={l.chequeReceiptNo} onChange={(e) => updateLine(i, 'chequeReceiptNo', e.target.value)} className="w-full border border-gray-200 rounded px-2 py-1" />
                     </td>
-                    <td className="px-3 py-2">
-                      {v.attachment ? (
-                        <a href={v.attachment} target="_blank" rel="noreferrer" className="text-indigo-600 underline">View</a>
-                      ) : ''}
+                    <td className="px-3 py-1.5">
+                      <input value={l.note} onChange={(e) => updateLine(i, 'note', e.target.value)} className="w-full border border-gray-200 rounded px-2 py-1" />
                     </td>
-                    <td className="px-3 py-2 capitalize">{v.status}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex gap-1.5 flex-wrap">
-                        <button onClick={() => navigate(`/accounts-module/journal_list_add/${v._id}`)} className="bg-indigo-500 hover:bg-indigo-600 text-white p-1.5 rounded" title="Edit">
-                          <Pencil size={13} />
-                        </button>
-                        <button onClick={() => handleDelete(v._id)} className="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded" title="Delete">
-                          <Trash2 size={13} />
-                        </button>
-                        <button onClick={handlePrint} className="bg-indigo-500 hover:bg-indigo-600 text-white p-1.5 rounded" title="Print">
-                          <Printer size={13} />
-                        </button>
-                        <button onClick={() => handleSendMail(v)} className="bg-gray-500 hover:bg-gray-600 text-white p-1.5 rounded" title="Mail">
-                          <Mail size={13} />
-                        </button>
-                        <button onClick={() => navigate(`/accounts-module/journal_list_add/${v._id}`)} className="bg-emerald-500 hover:bg-emerald-600 text-white p-1.5 rounded" title="View">
-                          <Eye size={13} />
-                        </button>
-                        <button onClick={() => handleDuplicate(v._id)} className="bg-cyan-500 hover:bg-cyan-600 text-white p-1.5 rounded" title="Duplicate">
-                          <Copy size={13} />
-                        </button>
-                      </div>
+                    <td className="px-3 py-1.5">
+                      <button type="button" onClick={() => removeLine(i)} className="text-red-500 hover:text-red-700">
+                        <Trash2 size={14} />
+                      </button>
                     </td>
                   </tr>
-                );
-              })}
+                ))
+              )}
+              {(lines || []).length > 0 && (
+                <tr className="border-t border-gray-200 font-medium">
+                  <td className="px-3 py-1.5">Total</td>
+                  <td className="px-3 py-1.5">{totalDebit.toFixed(2)}</td>
+                  <td className="px-3 py-1.5">{totalCredit.toFixed(2)}</td>
+                  <td colSpan={3} className={balanced ? 'px-3 py-1.5 text-emerald-600' : 'px-3 py-1.5 text-red-600'}>
+                    {balanced ? 'Balanced' : `Out of balance by ${Math.abs(totalDebit - totalCredit).toFixed(2)}`}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
 
-        <div className="flex items-center justify-between mt-3 text-sm text-gray-500">
-          <div>
-            Showing {pageRows.length === 0 ? 0 : (page - 1) * pageSize + 1} to{' '}
-            {(page - 1) * pageSize + pageRows.length} of {filtered.length} entries
+        <div className="bg-white border border-gray-200 rounded-md p-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <Field label="Comment">
+              <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} className="input" />
+            </Field>
+            <Field label="Attachment">
+              <input type="file" onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)} className="input" />
+            </Field>
           </div>
-          <div className="flex gap-1">
-            <button disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-40">Previous</button>
-            <span className="px-3 py-1.5 rounded-md bg-indigo-500 text-white">{page}</span>
-            <button disabled={page === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-40">Next</button>
+          <div className="flex justify-center">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="bg-indigo-500 hover:bg-indigo-600 text-white font-medium px-10 py-2.5 rounded-md disabled:opacity-50"
+            >
+              {submitting ? 'Saving...' : 'Submit'}
+            </button>
           </div>
         </div>
-      </div>
+      </form>
+
+      <Modal open={quickAddOpen} title="Quick Add Chart of Account" onClose={() => setQuickAddOpen(false)}>
+        <form onSubmit={handleQuickAddSubmit}>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Chart of Group</label>
+              <select
+                required
+                value={quickAddForm.chartOfGroup}
+                onChange={(e) => setQuickAddForm((f) => ({ ...f, chartOfGroup: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              >
+                <option value="">Select value</option>
+                {(groupOptions || []).map((g) => <option key={g._id ?? g.id} value={g._id ?? g.id}>{g.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Code</label>
+              <input
+                value={quickAddForm.code}
+                onChange={(e) => setQuickAddForm((f) => ({ ...f, code: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Account Name</label>
+              <input
+                required
+                value={quickAddForm.name}
+                onChange={(e) => setQuickAddForm((f) => ({ ...f, name: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-6">
+            <button type="button" onClick={() => setQuickAddOpen(false)} className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-medium px-5 py-2 rounded-md">Close</button>
+            <button type="submit" disabled={quickAddSaving} className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-5 py-2 rounded-md disabled:opacity-50">
+              {quickAddSaving ? 'Saving...' : 'Submit'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

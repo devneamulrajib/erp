@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import api from '../api/axios';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import ExpenseDonut from '../components/ExpenseDonut';
 import InflowOutflowChart from '../components/InflowOutflowChart';
 import CommentsTable from '../components/CommentsTable';
@@ -68,7 +67,6 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen w-full bg-neutral-50 text-left">
       <Topbar />
-      <ModuleNav />
 
       <div className="p-8 flex flex-col gap-6">
         {/* Greeting + range filter */}

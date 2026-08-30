@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Pencil, Trash2, Printer, Mail, Eye } from 'lucide-react';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
 import api from '../api/axios';
 import { getContraVouchers, deleteContraVoucher } from '../api/contraVoucher';
@@ -51,7 +50,7 @@ export default function ContraVoucherListPage() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    getChartOfAccounts().then((res) => setAccounts(res.data)).catch(console.error);
+    getChartOfAccounts().then((data) => setAccounts(data)).catch(console.error);
     api.get('/projects').then((res) => setProjects(res.data)).catch(console.error);
     api.get('/sites').then((res) => setSites(res.data)).catch(console.error);
   }, []);
@@ -90,7 +89,6 @@ export default function ContraVoucherListPage() {
   return (
     <div className="min-h-screen w-full bg-gray-50 text-left">
       <Topbar />
-      <ModuleNav />
 
       <div className="flex items-center justify-between pr-4">
         <Breadcrumb

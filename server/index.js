@@ -72,6 +72,9 @@ app.use('/api/journal-vouchers', require('./routes/journalVoucher'));
 app.use('/api/contra-vouchers', require('./routes/contraVoucher'));
 app.use('/api/contractor-bill-report', require('./routes/contractorBillReport'));
 app.use('/api/contractor-bill', require('./routes/contractorBill'));
+app.use('/api/employee', require('./routes/employee'));
+app.use('/api/party-list', require('./routes/partyList'));
+app.use('/api/vouchers', require('./routes/voucher'));
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

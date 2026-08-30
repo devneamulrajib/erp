@@ -10,9 +10,8 @@ import { getUnits } from '../api/unit';
 import { createItem } from '../api/item';
 import { getBill, getNextBillCode, createBill, updateBill } from '../api/bill';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
-import { Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2, X, ListOrdered, UserPlus, ShoppingBag } from 'lucide-react';
 
 function num(v) {
   const n = Number(v);
@@ -21,6 +20,8 @@ function num(v) {
 function genTxnId() {
   return 'TXN' + Math.floor(100000 + Math.random() * 900000);
 }
+// works for both MongoDB (_id) and SQL (id)
+function getId(obj) { return obj?.id ?? obj?._id ?? ''; }
 
 export default function BillPage() {
   const navigate = useNavigate();
@@ -35,6 +36,7 @@ export default function BillPage() {
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [units, setUnits] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [customer, setCustomer] = useState('');
@@ -64,19 +66,25 @@ export default function BillPage() {
 
   const [showItemModal, setShowItemModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
-
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    getCustomers().then(setCustomers).catch(() => {});
-    getChartOfAccounts().then((res) => setLedgers(res.data || res)).catch(() => {});
-    getChartOfGroups().then((res) => setChartGroups(res.data || res)).catch(() => {});
-    api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
-    api.get('/sites').then((res) => setSites(res.data)).catch(() => {});
-    getCategories().then(setCategories).catch(() => {});
-    getBrands().then((res) => setBrands(res.data || res)).catch(() => {});
-    getUnits().then((res) => setUnits(res.data || res)).catch(() => {});
+    getCustomers()
+      .then((data) => setCustomers(Array.isArray(data) ? data : (data?.rows || [])))
+      .catch(() => {});
+    getChartOfAccounts()
+      .then((data) => setLedgers(Array.isArray(data) ? data : (data?.rows || [])))
+      .catch(() => {});
+    getChartOfGroups()
+      .then((data) => setChartGroups(Array.isArray(data) ? data : (data?.rows || [])))
+      .catch(() => {});
+    api.get('/projects').then((res) => setProjects(Array.isArray(res.data) ? res.data : [])).catch(() => {});
+    api.get('/sites').then((res) => setSites(Array.isArray(res.data) ? res.data : [])).catch(() => {});
+    api.get('/project-types').then((res) => setProjectTypes(Array.isArray(res.data) ? res.data : [])).catch(() => {});
+    getCategories().then((data) => setCategories(Array.isArray(data) ? data : [])).catch(() => {});
+    getBrands().then((data) => setBrands(Array.isArray(data) ? data : [])).catch(() => {});
+    getUnits().then((data) => setUnits(Array.isArray(data) ? data : [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -88,12 +96,12 @@ export default function BillPage() {
     if (!isEdit) return;
     getBill(id).then((b) => {
       setDate(b.date || '');
-      setCustomer(b.customer?._id || b.customer || '');
-      setLedger(b.ledger?._id || b.ledger || '');
+      setCustomer(getId(b.customer) || b.customer || '');
+      setLedger(getId(b.ledger) || b.ledger || '');
       setCode(b.code || '');
       setProjectType(b.projectType || '');
-      setProject(b.project?._id || b.project || '');
-      setSite(b.site?._id || b.site || '');
+      setProject(getId(b.project) || b.project || '');
+      setSite(getId(b.site) || b.site || '');
       setRefWoNo(b.refWoNo || '');
       setContentBody(b.contentBody || '');
       setRows(b.items || []);
@@ -121,9 +129,7 @@ export default function BillPage() {
   const due = grandTotal - paid;
 
   function addRow() {
-    setRows((prev) => [...prev, {
-      itemName: '', description: '', unit: '', quantity: 0, rate: 0, image: '', amount: 0,
-    }]);
+    setRows((prev) => [...prev, { itemName: '', description: '', unit: '', quantity: 0, rate: 0, image: '', amount: 0 }]);
   }
   function updateRow(i, key, value) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
@@ -135,15 +141,10 @@ export default function BillPage() {
   function addPayment() {
     if (num(payAmount) <= 0) return;
     setPayments((prev) => [...prev, {
-      transactionId: genTxnId(),
-      paymentMethod: payMethod,
-      isCheque: payIsCheque,
-      chequeReceiptNo: payChequeNo,
-      amount: num(payAmount),
-      date: payDate,
+      transactionId: genTxnId(), paymentMethod: payMethod, isCheque: payIsCheque,
+      chequeReceiptNo: payChequeNo, amount: num(payAmount), date: payDate,
     }]);
-    setPayChequeNo('');
-    setPayAmount(0);
+    setPayChequeNo(''); setPayAmount(0);
   }
   function removePayment(i) {
     setPayments((prev) => prev.filter((_, idx) => idx !== i));
@@ -152,24 +153,16 @@ export default function BillPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
-    if (!customer) {
-      setError('Customer is required');
-      return;
-    }
+    if (!customer) { setError('Customer is required'); return; }
     setSubmitting(true);
     try {
       const payload = {
         code, date, customer, ledger, projectType, project, site, refWoNo, contentBody,
         items: rows.map((r) => ({ ...r, amount: num(r.rate) * num(r.quantity) })),
-        attachment: attachmentName,
-        vatIncluded, vatPercent, aitIncluded, aitPercent, interestRate,
-        payments,
+        attachment: attachmentName, vatIncluded, vatPercent, aitIncluded, aitPercent,
+        interestRate, payments,
       };
-      if (isEdit) {
-        await updateBill(id, payload);
-      } else {
-        await createBill(payload);
-      }
+      if (isEdit) { await updateBill(id, payload); } else { await createBill(payload); }
       navigate('/billing/bill_list');
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to save bill');
@@ -179,256 +172,304 @@ export default function BillPage() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-gray-50 text-left">
+    <div className="min-h-screen w-full bg-slate-50 text-left">
       <Topbar />
-      <ModuleNav />
 
-      <div className="flex items-center justify-between pr-4">
-        <Breadcrumb
-          items={[
-            { label: 'Home', to: '/dashboard' },
-            { label: 'Billing', to: '/billing/bill_list' },
-            { label: 'Invoice/Bill List' },
-          ]}
-        />
-        <div className="flex gap-2">
-          <button type="button" onClick={() => setShowItemModal(true)}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2 rounded-md">
-            Item Add
-          </button>
-          <button type="button" onClick={() => setShowCustomerModal(true)}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2 rounded-md">
-            Contacts Add
-          </button>
-          <button type="button" onClick={() => navigate('/billing/bill_list')}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2 rounded-md">
-            Bill List
-          </button>
-        </div>
-      </div>
-
-      <form onSubmit={handleSubmit} className="px-4 pb-10">
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-4">{error}</div>}
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-          <Field label="Date">
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
-          </Field>
-          <Field label="Customer" required>
-            <select value={customer} onChange={(e) => setCustomer(e.target.value)} className="input">
-              <option value="">Select One Option</option>
-              {customers.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Ledger">
-            <select value={ledger} onChange={(e) => setLedger(e.target.value)} className="input">
-              <option value="">Select Ledger</option>
-              {ledgers.map((l) => <option key={l._id} value={l._id}>{l.code ? `${l.code}-${l.name}` : l.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Code">
-            <input value={code} readOnly className="input bg-gray-50" />
-          </Field>
-          <Field label="Project Type">
-            <input value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input" placeholder="Select value" />
-          </Field>
-          <Field label="Project">
-            <select value={project} onChange={(e) => setProject(e.target.value)} className="input">
-              <option value="">Select Project</option>
-              {projects.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Site">
-            <select value={site} onChange={(e) => setSite(e.target.value)} className="input">
-              <option value="">Select Site</option>
-              {sites.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Ref W/O No.">
-            <input value={refWoNo} onChange={(e) => setRefWoNo(e.target.value)} className="input" placeholder="PO No." />
-          </Field>
-        </div>
-
-        <Field label="Content Body">
-          <textarea
-            value={contentBody}
-            onChange={(e) => setContentBody(e.target.value)}
-            rows={5}
-            className="input w-full"
-          />
-        </Field>
-
-        <div className="bg-white border border-gray-200 rounded-md overflow-x-auto mt-4 mb-4">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-indigo-500 text-white whitespace-nowrap">
-                {['Item Name', 'Description', 'Unit', 'Quantity', 'Rate', 'Image', 'Amount'].map((h) => (
-                  <th key={h} className="px-2 py-2 text-left font-medium">{h}</th>
-                ))}
-                <th className="px-2 py-2 text-left font-medium">
-                  Action
-                  <button type="button" onClick={addRow} className="ml-2 inline-flex bg-white/20 hover:bg-white/30 rounded p-0.5">
-                    <Plus size={12} />
-                  </button>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr><td colSpan={8} className="text-center py-4 text-gray-400">No items added</td></tr>
-              ) : (
-                rows.map((r, i) => (
-                  <tr key={i} className="border-t border-gray-100">
-                    <td className="px-2 py-1.5">
-                      <input value={r.itemName} onChange={(e) => updateRow(i, 'itemName', e.target.value)} className="w-32 border border-gray-200 rounded px-2 py-1" />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input value={r.description} onChange={(e) => updateRow(i, 'description', e.target.value)} className="w-40 border border-gray-200 rounded px-2 py-1" />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input value={r.unit} onChange={(e) => updateRow(i, 'unit', e.target.value)} className="w-16 border border-gray-200 rounded px-2 py-1" />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input type="number" value={r.quantity} onChange={(e) => updateRow(i, 'quantity', e.target.value)} className="w-16 border border-gray-200 rounded px-2 py-1" />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input type="number" value={r.rate} onChange={(e) => updateRow(i, 'rate', e.target.value)} className="w-20 border border-gray-200 rounded px-2 py-1" />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input type="file" onChange={(e) => updateRow(i, 'image', e.target.files?.[0]?.name || '')} className="w-28 text-[10px]" />
-                    </td>
-                    <td className="px-2 py-1.5 font-medium">{(num(r.rate) * num(r.quantity)).toLocaleString()}</td>
-                    <td className="px-2 py-1.5">
-                      <button type="button" onClick={() => removeRow(i)} className="text-red-500 hover:text-red-700">
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <Field label="Attachment">
-          <input type="file" onChange={(e) => setAttachmentName(e.target.files?.[0]?.name || '')} className="input" />
-        </Field>
-
-        <div className="bg-white border border-gray-200 rounded-md p-4 my-4">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <Field label="Subtotal">
-              <input value={subtotal.toLocaleString()} readOnly className="input bg-gray-50" />
-            </Field>
-            <Field label="VAT(%)">
-              <div className="flex items-center gap-2">
-                <input type="number" value={vatPercent} onChange={(e) => setVatPercent(e.target.value)} className="input" />
-                <label className="flex items-center gap-1 text-xs text-gray-600 whitespace-nowrap">
-                  <input type="checkbox" checked={vatIncluded} onChange={(e) => setVatIncluded(e.target.checked)} /> Include
-                </label>
-              </div>
-            </Field>
-            <Field label="VAT Amount">
-              <input value={vatAmount.toLocaleString()} readOnly className="input bg-gray-50" />
-            </Field>
-            <Field label="AIT(%)">
-              <div className="flex items-center gap-2">
-                <input type="number" value={aitPercent} onChange={(e) => setAitPercent(e.target.value)} className="input" />
-                <label className="flex items-center gap-1 text-xs text-gray-600 whitespace-nowrap">
-                  <input type="checkbox" checked={aitIncluded} onChange={(e) => setAitIncluded(e.target.checked)} /> Include
-                </label>
-              </div>
-            </Field>
-            <Field label="AIT Amount">
-              <input value={aitAmount.toLocaleString()} readOnly className="input bg-gray-50" />
-            </Field>
-            <Field label="Interest Rate(%)">
-              <input type="number" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} className="input" />
-            </Field>
-            <Field label="Interest Amount">
-              <input value={interestAmount.toLocaleString()} readOnly className="input bg-gray-50" />
-            </Field>
-            <Field label="Grand Total">
-              <input value={grandTotal.toLocaleString()} readOnly className="input bg-gray-50 font-medium" />
-            </Field>
-            <Field label="Paid">
-              <input value={paid.toLocaleString()} readOnly className="input bg-gray-50" />
-            </Field>
-            <Field label="Due">
-              <input value={due.toLocaleString()} readOnly className="input bg-gray-50" />
-            </Field>
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+          <div>
+            <Breadcrumb
+              items={[
+                { label: 'Home', to: '/dashboard' },
+                { label: 'Billing', to: '/billing/bill_list' },
+                { label: 'Invoice/Bill List' },
+              ]}
+            />
+            <h1 className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">
+              {isEdit ? 'Edit Bill / Invoice' : 'New Bill / Invoice'}
+            </h1>
+            <p className="text-sm text-slate-500 mt-0.5">
+              Fill in the details below to {isEdit ? 'update the' : 'create a new'} bill
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setShowItemModal(true)}
+              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors">
+              <ShoppingBag size={15} /> Item Add
+            </button>
+            <button type="button" onClick={() => setShowCustomerModal(true)}
+              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors">
+              <UserPlus size={15} /> Contacts Add
+            </button>
+            <button type="button" onClick={() => navigate('/billing/bill_list')}
+              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors">
+              <ListOrdered size={15} /> Bill List
+            </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-          <div className="bg-white border border-gray-200 rounded-md overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-indigo-500 text-white whitespace-nowrap">
-                  {['Transaction ID', 'Payment Method', 'Cheque Receipt No', 'Amount', 'Date', 'Action'].map((h) => (
-                    <th key={h} className="px-2 py-2 text-left font-medium">{h}</th>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4">{error}</div>
+          )}
+
+          {/* Main fields */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-5">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Field label="Date">
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
+              </Field>
+              <Field label="Customer" required>
+                <select value={customer} onChange={(e) => setCustomer(e.target.value)} className="input">
+                  <option value="">Select One Option</option>
+                  {customers.map((c) => (
+                    <option key={getId(c)} value={getId(c)}>{c.name}</option>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {payments.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center py-4 text-gray-400">No payments added</td></tr>
-                ) : (
-                  payments.map((p, i) => (
-                    <tr key={i} className="border-t border-gray-100">
-                      <td className="px-2 py-1.5">{p.transactionId}</td>
-                      <td className="px-2 py-1.5">{p.paymentMethod}</td>
-                      <td className="px-2 py-1.5">{p.chequeReceiptNo || '-'}</td>
-                      <td className="px-2 py-1.5">{num(p.amount).toLocaleString()}</td>
-                      <td className="px-2 py-1.5">{p.date}</td>
-                      <td className="px-2 py-1.5">
-                        <button type="button" onClick={() => removePayment(i)} className="text-red-500 hover:text-red-700">
-                          <Trash2 size={14} />
+                </select>
+              </Field>
+              <Field label="Ledger">
+                <select value={ledger} onChange={(e) => setLedger(e.target.value)} className="input">
+                  <option value="">Select Ledger</option>
+                  {ledgers.map((l) => (
+                    <option key={getId(l)} value={getId(l)}>
+                      {l.code ? `${l.code}-${l.name}` : l.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Code">
+                <input value={code} readOnly className="input bg-slate-50 text-slate-500 font-mono" />
+              </Field>
+              <Field label="Project Type">
+                <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
+                  <option value="">Select Project Type</option>
+                  {projectTypes.map((pt) => (
+                    <option key={getId(pt)} value={pt.name}>{pt.name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Project">
+                <select value={project} onChange={(e) => setProject(e.target.value)} className="input">
+                  <option value="">Select Project</option>
+                  {projects.map((p) => (
+                    <option key={getId(p)} value={getId(p)}>{p.name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Site">
+                <select value={site} onChange={(e) => setSite(e.target.value)} className="input">
+                  <option value="">Select Site</option>
+                  {sites.map((s) => (
+                    <option key={getId(s)} value={getId(s)}>{s.name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Ref W/O No.">
+                <input value={refWoNo} onChange={(e) => setRefWoNo(e.target.value)} className="input" placeholder="PO No." />
+              </Field>
+            </div>
+            <div className="mt-4">
+              <Field label="Content Body">
+                <textarea value={contentBody} onChange={(e) => setContentBody(e.target.value)} rows={4} className="input w-full" />
+              </Field>
+            </div>
+          </div>
+
+          {/* Line items */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50/50">
+              <h2 className="text-sm font-semibold text-slate-700">Line Items</h2>
+              <button type="button" onClick={addRow}
+                className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
+                <Plus size={13} /> Add Row
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
+                    {['Item Name', 'Description', 'Unit', 'Quantity', 'Rate', 'Image', 'Amount', 'Action'].map((h) => (
+                      <th key={h} className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {rows.length === 0 ? (
+                    <tr><td colSpan={8} className="text-center py-10 text-slate-400 text-sm">No items added</td></tr>
+                  ) : rows.map((r, i) => (
+                    <tr key={i} className="hover:bg-slate-50/60">
+                      <td className="px-4 py-2">
+                        <input value={r.itemName} onChange={(e) => updateRow(i, 'itemName', e.target.value)}
+                          className="w-32 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30" />
+                      </td>
+                      <td className="px-4 py-2">
+                        <input value={r.description} onChange={(e) => updateRow(i, 'description', e.target.value)}
+                          className="w-40 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30" />
+                      </td>
+                      <td className="px-4 py-2">
+                        <input value={r.unit} onChange={(e) => updateRow(i, 'unit', e.target.value)}
+                          className="w-16 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30" />
+                      </td>
+                      <td className="px-4 py-2">
+                        <input type="number" value={r.quantity} onChange={(e) => updateRow(i, 'quantity', e.target.value)}
+                          className="w-16 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30" />
+                      </td>
+                      <td className="px-4 py-2">
+                        <input type="number" value={r.rate} onChange={(e) => updateRow(i, 'rate', e.target.value)}
+                          className="w-20 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30" />
+                      </td>
+                      <td className="px-4 py-2">
+                        <input type="file" onChange={(e) => updateRow(i, 'image', e.target.files?.[0]?.name || '')}
+                          className="w-28 text-xs text-slate-500" />
+                      </td>
+                      <td className="px-4 py-2 font-semibold text-slate-700">
+                        {(num(r.rate) * num(r.quantity)).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-2">
+                        <button type="button" onClick={() => removeRow(i)}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 hover:bg-red-100 text-red-500 transition-colors">
+                          <Trash2 size={13} />
                         </button>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-md p-4">
-            <div className="grid grid-cols-2 gap-4 mb-3">
-              <Field label="Payment Method" required>
+          {/* Attachment */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4">
+            <Field label="Attachment">
+              <input type="file" onChange={(e) => setAttachmentName(e.target.files?.[0]?.name || '')}
+                className="block w-full text-sm text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-600 hover:file:bg-indigo-100 transition" />
+            </Field>
+          </div>
+
+          {/* Totals */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-5">
+            <h2 className="text-sm font-semibold text-slate-700 mb-4">Totals</h2>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <Field label="Subtotal">
+                <input value={subtotal.toLocaleString()} readOnly className="input bg-slate-50 text-slate-500 font-semibold" />
+              </Field>
+              <Field label="VAT(%)">
                 <div className="flex items-center gap-2">
-                  <input value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className="input" />
-                  <label className="flex items-center gap-1 text-xs text-gray-600 whitespace-nowrap">
-                    <input type="checkbox" checked={payIsCheque} onChange={(e) => setPayIsCheque(e.target.checked)} /> if Cheque
+                  <input type="number" value={vatPercent} onChange={(e) => setVatPercent(e.target.value)} className="input" />
+                  <label className="flex items-center gap-1 text-xs text-slate-500 whitespace-nowrap">
+                    <input type="checkbox" checked={vatIncluded} onChange={(e) => setVatIncluded(e.target.checked)} className="accent-indigo-600" /> Include
                   </label>
                 </div>
               </Field>
-              <Field label="Payment Date">
-                <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} className="input" />
+              <Field label="VAT Amount">
+                <input value={vatAmount.toLocaleString()} readOnly className="input bg-slate-50 text-slate-500" />
               </Field>
-              <Field label="Cheque Receipt No">
-                <input value={payChequeNo} onChange={(e) => setPayChequeNo(e.target.value)} className="input" placeholder="Cheque Receipt No" />
+              <Field label="AIT(%)">
+                <div className="flex items-center gap-2">
+                  <input type="number" value={aitPercent} onChange={(e) => setAitPercent(e.target.value)} className="input" />
+                  <label className="flex items-center gap-1 text-xs text-slate-500 whitespace-nowrap">
+                    <input type="checkbox" checked={aitIncluded} onChange={(e) => setAitIncluded(e.target.checked)} className="accent-indigo-600" /> Include
+                  </label>
+                </div>
               </Field>
-              <Field label="Amount" required>
-                <input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} className="input" />
+              <Field label="AIT Amount">
+                <input value={aitAmount.toLocaleString()} readOnly className="input bg-slate-50 text-slate-500" />
               </Field>
-            </div>
-            <div className="flex items-center justify-between">
-              <button type="button" onClick={addPayment} className="bg-indigo-500 hover:bg-indigo-600 text-white font-medium px-6 py-2 rounded-md">
-                Add Payment
-              </button>
-              <button type="submit" disabled={submitting} className="bg-emerald-500 hover:bg-emerald-600 text-white font-medium px-8 py-2.5 rounded-md disabled:opacity-50">
-                {submitting ? 'Saving...' : 'Submit'}
-              </button>
+              <Field label="Interest Rate(%)">
+                <input type="number" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} className="input" />
+              </Field>
+              <Field label="Interest Amount">
+                <input value={interestAmount.toLocaleString()} readOnly className="input bg-slate-50 text-slate-500" />
+              </Field>
+              <Field label="Grand Total">
+                <input value={grandTotal.toLocaleString()} readOnly className="input bg-slate-50 font-bold text-slate-800" />
+              </Field>
+              <Field label="Paid">
+                <input value={paid.toLocaleString()} readOnly className="input bg-slate-50 text-emerald-600 font-semibold" />
+              </Field>
+              <Field label="Due">
+                <input value={due.toLocaleString()} readOnly className="input bg-slate-50 text-red-500 font-semibold" />
+              </Field>
             </div>
           </div>
-        </div>
-      </form>
+
+          {/* Payments */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/50">
+                <h2 className="text-sm font-semibold text-slate-700">Payment History</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
+                      {['Transaction ID', 'Method', 'Cheque No', 'Amount', 'Date', ''].map((h) => (
+                        <th key={h} className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {payments.length === 0 ? (
+                      <tr><td colSpan={6} className="text-center py-8 text-slate-400 text-sm">No payments added</td></tr>
+                    ) : payments.map((p, i) => (
+                      <tr key={i} className="hover:bg-slate-50/60 whitespace-nowrap">
+                        <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{p.transactionId}</td>
+                        <td className="px-4 py-2.5">{p.paymentMethod}</td>
+                        <td className="px-4 py-2.5">{p.chequeReceiptNo || '—'}</td>
+                        <td className="px-4 py-2.5 font-semibold text-slate-700">{num(p.amount).toLocaleString()}</td>
+                        <td className="px-4 py-2.5 text-slate-500">{p.date}</td>
+                        <td className="px-4 py-2.5">
+                          <button type="button" onClick={() => removePayment(i)}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 hover:bg-red-100 text-red-500 transition-colors">
+                            <Trash2 size={13} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-5">
+              <h2 className="text-sm font-semibold text-slate-700 mb-4">Add Payment</h2>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <Field label="Payment Method" required>
+                  <div className="flex items-center gap-2">
+                    <input value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className="input flex-1" />
+                    <label className="flex items-center gap-1 text-xs text-slate-500 whitespace-nowrap">
+                      <input type="checkbox" checked={payIsCheque} onChange={(e) => setPayIsCheque(e.target.checked)} className="accent-indigo-600" /> Cheque
+                    </label>
+                  </div>
+                </Field>
+                <Field label="Payment Date">
+                  <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} className="input" />
+                </Field>
+                <Field label="Cheque Receipt No">
+                  <input value={payChequeNo} onChange={(e) => setPayChequeNo(e.target.value)} className="input" placeholder="Cheque Receipt No" />
+                </Field>
+                <Field label="Amount" required>
+                  <input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} className="input" />
+                </Field>
+              </div>
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                <button type="button" onClick={addPayment}
+                  className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-5 py-2.5 rounded-lg transition-colors text-sm">
+                  <Plus size={15} /> Add Payment
+                </button>
+                <button type="submit" disabled={submitting}
+                  className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-medium px-7 py-2.5 rounded-lg disabled:opacity-50 transition-colors text-sm">
+                  {submitting ? 'Saving...' : 'Submit'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
 
       {showItemModal && (
         <ItemAddModal
-          categories={categories}
-          brands={brands}
-          units={units}
+          categories={categories} brands={brands} units={units}
           onBrandCreated={(b) => setBrands((prev) => [...prev, b])}
           onClose={() => setShowItemModal(false)}
           onCreated={() => setShowItemModal(false)}
@@ -438,7 +479,11 @@ export default function BillPage() {
         <CustomerAddModal
           chartGroups={chartGroups}
           onClose={() => setShowCustomerModal(false)}
-          onCreated={(c) => { setCustomers((prev) => [...prev, c]); setCustomer(c._id); setShowCustomerModal(false); }}
+          onCreated={(c) => {
+            setCustomers((prev) => [...prev, c]);
+            setCustomer(getId(c));
+            setShowCustomerModal(false);
+          }}
         />
       )}
     </div>
@@ -457,63 +502,59 @@ function ItemAddModal({ categories, brands, units, onBrandCreated, onClose, onCr
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  function getId(obj) { return obj?.id ?? obj?._id ?? ''; }
+
   async function handleAddBrand() {
     if (!newBrandName.trim()) return;
     try {
-      const res = await createBrand({ name: newBrandName.trim() });
-      const created = res.data || res;
+      const created = await createBrand({ name: newBrandName.trim() });
       onBrandCreated(created);
-      setBrand(created._id);
-      setNewBrandName('');
-      setShowBrandInput(false);
+      setBrand(getId(created));
+      setNewBrandName(''); setShowBrandInput(false);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to add brand');
     }
   }
 
   async function handleSubmit(e) {
-    e.preventDefault();
-    setError('');
-    if (!name.trim()) {
-      setError('Item Name is required');
-      return;
-    }
+    e.preventDefault(); setError('');
+    if (!name.trim()) { setError('Item Name is required'); return; }
     setSaving(true);
     try {
       await createItem({ category, brand, name: name.trim(), unit, purchasePrice, salePrice });
       onCreated();
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to add item');
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   return (
-    <Modal title="New Item" onClose={onClose}>
+    <InlineModal title="New Item" onClose={onClose}>
       <form onSubmit={handleSubmit}>
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm">{error}</div>}
+        {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 mb-4 text-sm">{error}</div>}
         <div className="grid grid-cols-2 gap-4 mb-4">
           <Field label="Category">
             <select value={category} onChange={(e) => setCategory(e.target.value)} className="input">
               <option value="">Select Category</option>
-              {categories.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+              {categories.map((c) => <option key={getId(c)} value={getId(c)}>{c.name}</option>)}
             </select>
           </Field>
           <Field label="Brand">
             <div className="flex gap-2">
               <select value={brand} onChange={(e) => setBrand(e.target.value)} className="input flex-1">
                 <option value="">Select Brand</option>
-                {brands.map((b) => <option key={b._id} value={b._id}>{b.name}</option>)}
+                {brands.map((b) => <option key={getId(b)} value={getId(b)}>{b.name}</option>)}
               </select>
-              <button type="button" onClick={() => setShowBrandInput((s) => !s)} className="px-3 rounded-md bg-indigo-500 hover:bg-indigo-600 text-white">
-                <Plus size={16} />
+              <button type="button" onClick={() => setShowBrandInput((s) => !s)}
+                className="px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors">
+                <Plus size={15} />
               </button>
             </div>
             {showBrandInput && (
               <div className="flex gap-2 mt-2">
                 <input value={newBrandName} onChange={(e) => setNewBrandName(e.target.value)} placeholder="New brand name" className="input flex-1" />
-                <button type="button" onClick={handleAddBrand} className="px-3 rounded-md bg-emerald-500 hover:bg-emerald-600 text-white text-sm">Add</button>
+                <button type="button" onClick={handleAddBrand}
+                  className="px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm transition-colors">Add</button>
               </div>
             )}
           </Field>
@@ -523,7 +564,7 @@ function ItemAddModal({ categories, brands, units, onBrandCreated, onClose, onCr
           <Field label="Unit">
             <select value={unit} onChange={(e) => setUnit(e.target.value)} className="input">
               <option value="">Select Unit</option>
-              {units.map((u) => <option key={u._id} value={u._id}>{u.name}</option>)}
+              {units.map((u) => <option key={getId(u)} value={getId(u)}>{u.name}</option>)}
             </select>
           </Field>
           <Field label="Purchase Price">
@@ -533,14 +574,14 @@ function ItemAddModal({ categories, brands, units, onBrandCreated, onClose, onCr
             <input type="number" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} placeholder="Sale Price" className="input" />
           </Field>
         </div>
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-5 py-2 rounded-md bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-medium">Close</button>
-          <button type="submit" disabled={saving} className="px-5 py-2 rounded-md bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium disabled:opacity-50">
+        <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+          <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium transition-colors">Close</button>
+          <button type="submit" disabled={saving} className="px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium disabled:opacity-50 transition-colors">
             {saving ? 'Saving...' : 'Submit'}
           </button>
         </div>
       </form>
-    </Modal>
+    </InlineModal>
   );
 }
 
@@ -557,21 +598,14 @@ function CustomerAddModal({ chartGroups, onClose, onCreated }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    getNextCustomerCode().then(setCode).catch(() => {});
-  }, []);
+  function getId(obj) { return obj?.id ?? obj?._id ?? ''; }
+
+  useEffect(() => { getNextCustomerCode().then(setCode).catch(() => {}); }, []);
 
   async function handleSubmit(e) {
-    e.preventDefault();
-    setError('');
-    if (!name.trim()) {
-      setError('Name is required');
-      return;
-    }
-    if (!chartGroup) {
-      setError('Chart Of Groups is required');
-      return;
-    }
+    e.preventDefault(); setError('');
+    if (!name.trim()) { setError('Name is required'); return; }
+    if (!chartGroup) { setError('Chart Of Groups is required'); return; }
     setSaving(true);
     try {
       const created = await createCustomer({
@@ -581,18 +615,16 @@ function CustomerAddModal({ chartGroups, onClose, onCreated }) {
       onCreated(created);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to add customer');
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   return (
-    <Modal title="Customer Add" onClose={onClose}>
+    <InlineModal title="Add Customer" onClose={onClose}>
       <form onSubmit={handleSubmit}>
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm">{error}</div>}
+        {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 mb-4 text-sm">{error}</div>}
         <div className="grid grid-cols-2 gap-4 mb-4">
           <Field label="Code">
-            <input value={code} readOnly className="input bg-gray-50" />
+            <input value={code} readOnly className="input bg-slate-50 text-slate-500 font-mono" />
           </Field>
           <Field label="Name" required>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter Name" className="input" />
@@ -618,29 +650,30 @@ function CustomerAddModal({ chartGroups, onClose, onCreated }) {
           <Field label="Chart Of Groups" required>
             <select value={chartGroup} onChange={(e) => setChartGroup(e.target.value)} className="input">
               <option value="">Select One Option</option>
-              {chartGroups.map((g) => <option key={g._id} value={g._id}>{g.name}</option>)}
+              {chartGroups.map((g) => <option key={getId(g)} value={getId(g)}>{g.name}</option>)}
             </select>
           </Field>
         </div>
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-5 py-2 rounded-md bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-medium">Close</button>
-          <button type="submit" disabled={saving} className="px-5 py-2 rounded-md bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium disabled:opacity-50">
+        <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+          <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium transition-colors">Close</button>
+          <button type="submit" disabled={saving} className="px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium disabled:opacity-50 transition-colors">
             {saving ? 'Saving...' : 'Submit'}
           </button>
         </div>
       </form>
-    </Modal>
+    </InlineModal>
   );
 }
 
-function Modal({ title, onClose, children }) {
+function InlineModal({ title, onClose, children }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 relative max-h-[90vh] overflow-y-auto">
-        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
-          <X size={18} />
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 relative max-h-[90vh] overflow-y-auto">
+        <button onClick={onClose}
+          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors">
+          <X size={16} />
         </button>
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">{title}</h2>
+        <h2 className="text-lg font-semibold text-slate-800 mb-5">{title}</h2>
         {children}
       </div>
     </div>
@@ -650,8 +683,8 @@ function Modal({ title, onClose, children }) {
 function Field({ label, required, children }) {
   return (
     <div>
-      <label className="block text-sm text-gray-700 mb-1">
-        {label}{required && <span className="text-red-500">*</span>}
+      <label className="block text-xs font-medium text-slate-500 mb-1.5">
+        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       {children}
     </div>

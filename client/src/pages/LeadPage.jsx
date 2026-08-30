@@ -4,7 +4,6 @@ import {
   Pencil, Phone, Trash2, ChevronDown, ChevronUp, Filter as FilterIcon,
   UploadCloud, Send, ArrowLeftRight, UserCheck, Gift, Plus,
 } from 'lucide-react';
-import ModuleNav from '../components/ModuleNav';
 import Modal from '../components/Modal';
 import ConfirmSelectionModal from '../components/ConfirmSelectionModal';
 import LeadDetailModal from '../components/LeadDetailModal';
@@ -442,7 +441,6 @@ export default function LeadPage() {
 
   return (
     <div>
-      <ModuleNav />
 
       <div className="px-6 py-4">
         <div className="flex items-center justify-between mb-4">

@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Pencil, Trash2, ChevronDown } from 'lucide-react';
-import ModuleNav from '../components/ModuleNav';
 import Modal from '../components/Modal';
 import {
   getLeadCategories, getNextLeadCategoryCode, createLeadCategory,
@@ -94,7 +93,6 @@ export default function LeadCategoryPage() {
 
   return (
     <div>
-      <ModuleNav />
 
       <div className="px-6 py-4">
         <div className="flex items-center justify-between mb-4">

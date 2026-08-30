@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import Topbar from '../components/Topbar';
-import ModuleNav from '../components/ModuleNav';
 import Breadcrumb from '../components/Breadcrumb';
 import SearchableSelect from '../components/SearchableSelect';
 import { getSiteWiseIncomeStatement } from '../api/reports';
+import { Search, FileSpreadsheet, FileText, LayoutGrid } from 'lucide-react';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -74,22 +74,47 @@ export default function SiteWiseIncomeStatement() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-gray-50 text-left">
+    <div className="min-h-screen w-full bg-slate-50 text-left">
       <Topbar />
-      <ModuleNav />
 
-      <Breadcrumb
-        items={[
-          { label: 'Home', to: '/dashboard' },
-          { label: 'Report', to: '/project-module/reports/site-wise-income' },
-          { label: 'Site wise Income Report' },
-        ]}
-      />
-
-      <div className="px-4 pb-6">
-        <div className="flex items-end gap-4 mb-5 flex-wrap">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+        {/* Header */}
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Project *</label>
+            <Breadcrumb
+              items={[
+                { label: 'Home', to: '/dashboard' },
+                { label: 'Report', to: '/project-module/reports/site-wise-income' },
+                { label: 'Site wise Income Report' },
+              ]}
+            />
+            <h1 className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">Site wise Income Report</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Income, expense and profit breakdown across sites</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-emerald-600/20 transition-colors"
+            >
+              <FileSpreadsheet size={16} strokeWidth={2.5} />
+              Excel
+            </button>
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              className="inline-flex items-center gap-2 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-rose-500/20 transition-colors"
+            >
+              <FileText size={16} strokeWidth={2.5} />
+              PDF
+            </button>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 mb-6">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Project*</label>
             <div className="w-64">
               <SearchableSelect
                 options={projectOptions}
@@ -99,128 +124,148 @@ export default function SiteWiseIncomeStatement() {
               />
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleExportPdf}
-              className="bg-red-500 hover:bg-red-600 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
-            >
-              PDF
-            </button>
-            <button
-              type="button"
-              onClick={handleExportExcel}
-              className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
-            >
-              Excel
-            </button>
+        </div>
+
+        {/* Summary strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Sites</div>
+            <div className="text-xl font-semibold text-slate-900">{filteredRows.length}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Total Income</div>
+            <div className="text-xl font-semibold text-slate-900">{fmt(totals.totalIncome)}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Profit</div>
+            <div className="text-xl font-semibold text-emerald-600">{fmt(totals.profit)}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Due</div>
+            <div className="text-xl font-semibold text-rose-600">{fmt(totals.due)}</div>
           </div>
         </div>
 
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <span>Show</span>
-            <select
-              value={pageSize}
-              onChange={(e) => setPageSize(Number(e.target.value))}
-              className="border border-gray-300 rounded-md px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {[10, 25, 50, 100].map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-            <span>entries</span>
+        {/* Table panel */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span>Show</span>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+              >
+                {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <span>entries</span>
+            </div>
+
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search..."
+                className="border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm w-64 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+              />
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <span>Search:</span>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-md shadow-sm overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead>
-              <tr className="bg-indigo-500 text-white">
-                <th className="px-4 py-3 font-medium">ID</th>
-                <th className="px-4 py-3 font-medium">SITE NAME</th>
-                <th className="px-4 py-3 font-medium">PROJECT</th>
-                <th className="px-4 py-3 font-medium text-right">SALES/CONTRACT</th>
-                <th className="px-4 py-3 font-medium text-right">TOTAL INCOME</th>
-                <th className="px-4 py-3 font-medium text-right">TOTAL EXPENSE</th>
-                <th className="px-4 py-3 font-medium text-right">PROFIT</th>
-                <th className="px-4 py-3 font-medium text-right">BILL SUBMISSION</th>
-                <th className="px-4 py-3 font-medium text-right">RECEIVE AMOUNT</th>
-                <th className="px-4 py-3 font-medium text-right">DUE</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
-              ) : pagedRows.length === 0 ? (
-                <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">No data available in table</td></tr>
-              ) : (
-                <>
-                  {pagedRows.map((r) => (
-                    <tr key={r.id} className="border-b border-gray-100 last:border-0">
-                      <td className="px-4 py-3">{r.id}</td>
-                      <td className="px-4 py-3">{r.siteName}</td>
-                      <td className="px-4 py-3">{r.project}</td>
-                      <td className="px-4 py-3 text-right">{r.sales}</td>
-                      <td className="px-4 py-3 text-right">{fmt(r.totalIncome)}</td>
-                      <td className="px-4 py-3 text-right">{fmt(r.totalExpense)}</td>
-                      <td className="px-4 py-3 text-right">{fmt(r.profit)}</td>
-                      <td className="px-4 py-3 text-right">{r.billSubmission}</td>
-                      <td className="px-4 py-3 text-right">{r.receiveAmount}</td>
-                      <td className="px-4 py-3 text-right">{r.due}</td>
-                    </tr>
-                  ))}
-                  <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
-                    <td colSpan={3} className="px-4 py-3">TOTAL</td>
-                    <td className="px-4 py-3 text-right">{totals.sales}</td>
-                    <td className="px-4 py-3 text-right">{fmt(totals.totalIncome)}</td>
-                    <td className="px-4 py-3 text-right">{fmt(totals.totalExpense)}</td>
-                    <td className="px-4 py-3 text-right">{fmt(totals.profit)}</td>
-                    <td className="px-4 py-3 text-right">{totals.billSubmission}</td>
-                    <td className="px-4 py-3 text-right">{totals.receiveAmount}</td>
-                    <td className="px-4 py-3 text-right">{totals.due}</td>
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
+                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">ID</th>
+                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Site Name</th>
+                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Project</th>
+                  <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Sales/Contract</th>
+                  <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Total Income</th>
+                  <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Total Expense</th>
+                  <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Profit</th>
+                  <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Bill Submission</th>
+                  <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Receive Amount</th>
+                  <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Due</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  <tr><td colSpan={10} className="text-center py-16 text-slate-400">Loading...</td></tr>
+                ) : pagedRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="text-center py-16">
+                      <div className="flex flex-col items-center gap-2 text-slate-400">
+                        <LayoutGrid size={28} strokeWidth={1.5} />
+                        <p className="text-sm">No data available in table</p>
+                      </div>
+                    </td>
                   </tr>
-                </>
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  <>
+                    {pagedRows.map((r) => (
+                      <tr key={r.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
+                        <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">#{r.id}</td>
+                        <td className="px-5 py-3.5 font-medium text-slate-700">{r.siteName}</td>
+                        <td className="px-5 py-3.5 text-slate-600">{r.project}</td>
+                        <td className="px-5 py-3.5 text-right font-mono text-slate-700">{r.sales}</td>
+                        <td className="px-5 py-3.5 text-right font-mono text-slate-700">{fmt(r.totalIncome)}</td>
+                        <td className="px-5 py-3.5 text-right font-mono text-slate-700">{fmt(r.totalExpense)}</td>
+                        <td className="px-5 py-3.5 text-right font-mono text-emerald-600">{fmt(r.profit)}</td>
+                        <td className="px-5 py-3.5 text-right font-mono text-slate-700">{r.billSubmission}</td>
+                        <td className="px-5 py-3.5 text-right font-mono text-slate-700">{r.receiveAmount}</td>
+                        <td className="px-5 py-3.5 text-right font-mono text-rose-600">{r.due}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-slate-50 font-semibold whitespace-nowrap">
+                      <td colSpan={3} className="px-5 py-3.5 text-slate-700">Total</td>
+                      <td className="px-5 py-3.5 text-right font-mono text-slate-700">{totals.sales}</td>
+                      <td className="px-5 py-3.5 text-right font-mono text-slate-700">{fmt(totals.totalIncome)}</td>
+                      <td className="px-5 py-3.5 text-right font-mono text-slate-700">{fmt(totals.totalExpense)}</td>
+                      <td className="px-5 py-3.5 text-right font-mono text-emerald-600">{fmt(totals.profit)}</td>
+                      <td className="px-5 py-3.5 text-right font-mono text-slate-700">{totals.billSubmission}</td>
+                      <td className="px-5 py-3.5 text-right font-mono text-slate-700">{totals.receiveAmount}</td>
+                      <td className="px-5 py-3.5 text-right font-mono text-rose-600">{totals.due}</td>
+                    </tr>
+                  </>
+                )}
+              </tbody>
+            </table>
+          </div>
 
-        <div className="flex items-center justify-between mt-3 text-sm text-gray-600">
-          <span>
-            Showing {filteredRows.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} to{' '}
-            {Math.min(currentPage * pageSize, filteredRows.length)} of {filteredRows.length} entries
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-40 hover:bg-gray-50"
-            >
-              Previous
-            </button>
-            <button type="button" className="px-3 py-1.5 rounded-md border border-indigo-500 bg-indigo-500 text-white">
-              {currentPage}
-            </button>
-            <button
-              type="button"
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-40 hover:bg-gray-50"
-            >
-              Next
-            </button>
+          {/* Pagination */}
+          <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100">
+            <span className="text-sm text-slate-500">
+              Showing <span className="font-medium text-slate-700">{filteredRows.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}</span> to{' '}
+              <span className="font-medium text-slate-700">{Math.min(currentPage * pageSize, filteredRows.length)}</span> of{' '}
+              <span className="font-medium text-slate-700">{filteredRows.length}</span> entries
+            </span>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                className="w-9 h-9 rounded-lg text-sm font-medium bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"
+              >
+                {currentPage}
+              </button>
+              <button
+                type="button"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors"
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -32,7 +32,7 @@ router.get('/', auth, async (req, res) => {
 router.get('/options', auth, async (req, res) => {
   try {
     const groups = await ChartOfGroup.findAll({
-      attributes: ['code', 'name', 'underId'],
+      attributes: ['id', 'code', 'name', 'underId'],
       order: [['code', 'ASC']],
     });
     res.json(groups);
