@@ -17,6 +17,7 @@ const Project = sequelize.define('Project', {
   totalTask: { type: DataTypes.INTEGER, defaultValue: 0 },
   completeTask: { type: DataTypes.INTEGER, defaultValue: 0 },
   sales: { type: DataTypes.FLOAT, defaultValue: 0 },
+  image: { type: DataTypes.TEXT('long') },
 }, { timestamps: true });
 
 module.exports = Project;

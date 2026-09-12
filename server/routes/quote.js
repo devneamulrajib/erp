@@ -162,4 +162,19 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+router.patch('/:id/status', auth, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const allowed = ['Submitted', 'Under Review', 'Sent', 'Accepted', 'Rejected', 'Expired'];
+    if (!allowed.includes(status)) return res.status(400).json({ message: 'Invalid status' });
+    const quote = await Quote.findByPk(req.params.id);
+    if (!quote) return res.status(404).json({ message: 'Not found' });
+    quote.status = status;
+    await quote.save();
+    res.json(quote);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;

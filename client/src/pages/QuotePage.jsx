@@ -2,12 +2,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
-import { getCustomers, createCustomer, getNextCustomerCode } from '../api/customer';
 import { getChartOfGroups } from '../api/chartOfGroup';
 import { getCategories } from '../api/category';
 import { getBrands, createBrand } from '../api/brand';
 import { getUnits } from '../api/unit';
-import { createItem } from '../api/item';
+import { getItems, createItem } from '../api/item';
 import {
   getQuote, getNextQuoteCode,
   createQuote, updateQuote,
@@ -43,6 +42,7 @@ export default function QuotePage() {
   const [brands, setBrands] = useState([]);
   const [units, setUnits] = useState([]);
   const [projectTypes, setProjectTypes] = useState([]);
+  const [catalogItems, setCatalogItems] = useState([]);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [customer, setCustomer] = useState('');
@@ -67,7 +67,11 @@ export default function QuotePage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    getCustomers().then(setCustomers).catch(() => {});
+    // Customers live in the Chart Of Accounts table (contactType: 'Customer'),
+    // same table backing the Customer Accounts page — not the old Customer model.
+    api.get('/chart-of-accounts', { params: { contactType: 'Customer' } })
+      .then((res) => setCustomers(res.data))
+      .catch(() => {});
     getChartOfGroups().then((res) => setChartGroups(res.data || res)).catch(() => {});
     api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
     api.get('/sites').then((res) => setSites(res.data)).catch(() => {});
@@ -75,6 +79,7 @@ export default function QuotePage() {
     getBrands().then((res) => setBrands(res.data || res)).catch(() => {});
     getUnits().then((res) => setUnits(res.data || res)).catch(() => {});
     api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
+    getItems().then(setCatalogItems).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -113,11 +118,27 @@ export default function QuotePage() {
 
   function addRow() {
     setRows((prev) => [...prev, {
-      itemName: '', unit: '', quantity: 0, rate: 0, details: '', image: '', amount: 0,
+      itemId: '', itemName: '', unit: '', quantity: 0, rate: 0, details: '', image: '', amount: 0,
     }]);
   }
   function updateRow(i, key, value) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
+  }
+  // Called when the Item Name dropdown selects a catalog item — pulls that
+  // item's unit and sale price in as a starting point (still editable after).
+  function selectRowItem(i, itemId) {
+    const found = catalogItems.find((it) => String(it.id) === String(itemId));
+    setRows((prev) => prev.map((r, idx) => {
+      if (idx !== i) return r;
+      if (!found) return { ...r, itemId: '', itemName: '' };
+      return {
+        ...r,
+        itemId: found.id,
+        itemName: found.name,
+        unit: found.unit || r.unit,
+        rate: found.salePrice || r.rate,
+      };
+    }));
   }
   function removeRow(i) {
     setRows((prev) => prev.filter((_, idx) => idx !== i));
@@ -283,7 +304,16 @@ export default function QuotePage() {
                     rows.map((r, i) => (
                       <tr key={i} className="hover:bg-slate-50/70 transition-colors">
                         <td className="px-4 py-2.5">
-                          <input value={r.itemName} onChange={(e) => updateRow(i, 'itemName', e.target.value)} className={`${inputSmCls} w-32`} />
+                          <select
+                            value={r.itemId || ''}
+                            onChange={(e) => selectRowItem(i, e.target.value)}
+                            className={`${inputSmCls} w-36`}
+                          >
+                            <option value="">Select item</option>
+                            {catalogItems.map((it) => (
+                              <option key={it.id} value={it.id}>{it.name}</option>
+                            ))}
+                          </select>
                         </td>
                         <td className="px-4 py-2.5">
                           <input value={r.unit} onChange={(e) => updateRow(i, 'unit', e.target.value)} className={`${inputSmCls} w-16`} />
@@ -495,7 +525,10 @@ function CustomerAddModal({ chartGroups, onClose, onCreated }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    getNextCustomerCode().then(setCode).catch(() => {});
+    // Chart Of Accounts codes are scoped by contactType (CUS/SUP/INV prefixes).
+    api.get('/chart-of-accounts/next-code', { params: { contactType: 'Customer' } })
+      .then((res) => setCode(res.data.code))
+      .catch(() => {});
   }, []);
 
   async function handleSubmit(e) {
@@ -511,11 +544,25 @@ function CustomerAddModal({ chartGroups, onClose, onCreated }) {
     }
     setSaving(true);
     try {
-      const created = await createCustomer({
-        code, name: name.trim(), mobile, buyerReference, address,
-        creditLimit, dueDate, openingBalance, chartGroup,
+      // This modal writes into the Chart Of Accounts table (contactType: 'Customer'),
+      // the same table the Customer Accounts page reads from/writes to. Keeping this
+      // in sync is what makes newly-added customers show up in the dropdown above.
+      const fd = new FormData();
+      fd.append('code', code);
+      fd.append('name', name.trim());
+      fd.append('mobile', mobile);
+      fd.append('buyerReference', buyerReference);
+      fd.append('address', address);
+      fd.append('creditLimit', creditLimit);
+      fd.append('dueDate', dueDate);
+      fd.append('openingBalance', openingBalance);
+      fd.append('chartOfGroup', chartGroup);
+      fd.append('contactType', 'Customer');
+
+      const res = await api.post('/chart-of-accounts', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
-      onCreated(created);
+      onCreated(res.data);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to add customer');
     } finally {

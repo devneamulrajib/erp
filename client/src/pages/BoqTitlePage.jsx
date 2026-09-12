@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Pencil, Trash2, LayoutGrid, Plus, Tag } from 'lucide-react';
+import { Pencil, Trash2, LayoutGrid, Plus, Tag, Eye } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
@@ -20,6 +20,7 @@ export default function BoqTitlePage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [viewOnly, setViewOnly] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -58,6 +59,7 @@ export default function BoqTitlePage() {
 
   function openAddModal() {
     setEditingId(null);
+    setViewOnly(false);
     setForm(EMPTY_FORM);
     setError('');
     setModalOpen(true);
@@ -65,6 +67,18 @@ export default function BoqTitlePage() {
 
   function openEditModal(item) {
     setEditingId(item._id || item.id);
+    setViewOnly(false);
+    setForm({
+      projectType: item.projectType?._id || item.projectType?.id || item.projectType || '',
+      title: item.title || '',
+    });
+    setError('');
+    setModalOpen(true);
+  }
+
+  function openViewModal(item) {
+    setEditingId(item._id || item.id);
+    setViewOnly(true);
     setForm({
       projectType: item.projectType?._id || item.projectType?.id || item.projectType || '',
       title: item.title || '',
@@ -77,6 +91,7 @@ export default function BoqTitlePage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (viewOnly) return;
     if (!form.projectType || !form.title) return;
     setSaving(true);
     setError('');
@@ -104,6 +119,9 @@ export default function BoqTitlePage() {
       window.alert(err.response?.data?.message || 'Failed to delete');
     }
   }
+
+  const fieldClass =
+    'w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition disabled:bg-slate-50 disabled:text-slate-500';
 
   return (
     <div className="min-h-screen w-full bg-slate-50 text-left">
@@ -211,7 +229,7 @@ export default function BoqTitlePage() {
                       </td>
                       <td className="px-5 py-3.5">
                         <button
-                          onClick={() => openEditModal(item)}
+                          onClick={() => openViewModal(item)}
                           className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-medium hover:underline underline-offset-2"
                         >
                           <Tag size={13} className="text-slate-400" />
@@ -220,6 +238,13 @@ export default function BoqTitlePage() {
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => openViewModal(item)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                            title="View"
+                          >
+                            <Eye size={14} />
+                          </button>
                           <button
                             onClick={() => openEditModal(item)}
                             className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors"
@@ -281,7 +306,11 @@ export default function BoqTitlePage() {
         </div>
       </div>
 
-      <Modal open={modalOpen} title={editingId ? 'Edit BOQ Title' : 'Add BOQ Title'} onClose={closeModal}>
+      <Modal
+        open={modalOpen}
+        title={viewOnly ? 'View BOQ Title' : editingId ? 'Edit BOQ Title' : 'Add BOQ Title'}
+        onClose={closeModal}
+      >
         <form onSubmit={handleSubmit}>
           {error && (
             <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
@@ -293,9 +322,10 @@ export default function BoqTitlePage() {
               <label className="block text-xs font-medium text-slate-500 mb-1.5">Project Type *</label>
               <select
                 required
+                disabled={viewOnly}
                 value={form.projectType}
                 onChange={(e) => setForm((f) => ({ ...f, projectType: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+                className={fieldClass}
               >
                 <option value="">Select Project Type</option>
                 {projectTypeOptions.map((pt) => (
@@ -307,10 +337,11 @@ export default function BoqTitlePage() {
               <label className="block text-xs font-medium text-slate-500 mb-1.5">BOQ Title *</label>
               <input
                 required
+                disabled={viewOnly}
                 placeholder="BOQ Title"
                 value={form.title}
                 onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+                className={fieldClass}
               />
             </div>
           </div>
@@ -322,13 +353,15 @@ export default function BoqTitlePage() {
             >
               Close
             </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-4 py-2.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 shadow-sm shadow-indigo-600/20 transition-colors"
-            >
-              {saving ? 'Saving...' : 'Submit'}
-            </button>
+            {!viewOnly && (
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-4 py-2.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 shadow-sm shadow-indigo-600/20 transition-colors"
+              >
+                {saving ? 'Saving...' : 'Submit'}
+              </button>
+            )}
           </div>
         </form>
       </Modal>

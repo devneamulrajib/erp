@@ -25,7 +25,7 @@ export default function BrandPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await getBrands();
+      const data = await getBrands();
       setBrands(data);
     } catch (err) {
       console.error('Failed to load brands', err);
@@ -51,7 +51,7 @@ export default function BrandPage() {
   async function openAddModal() {
     setEditingId(null);
     try {
-      const { data } = await getNextBrandCode();
+      const data = await getNextBrandCode();
       setForm({ code: data.code, name: '' });
     } catch {
       setForm({ code: '', name: '' });

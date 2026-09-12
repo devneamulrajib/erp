@@ -19,6 +19,9 @@ const PurchaseOrder = sequelize.define('PurchaseOrder', {
   grandTotal: { type: DataTypes.DECIMAL(14, 2), defaultValue: 0 },
   attachment: DataTypes.STRING,
 
+  // New: no status/timeline field existed on PurchaseOrder before.
+  status: { type: DataTypes.STRING, defaultValue: 'Submitted' },
+
   addedBy: DataTypes.STRING,
 }, {
   tableName: 'purchase_orders',

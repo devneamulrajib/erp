@@ -16,6 +16,13 @@ const ReceiptVoucher = sequelize.define('ReceiptVoucher', {
   ifCheque: { type: DataTypes.BOOLEAN, defaultValue: false },
   chequeReceiptNo: DataTypes.STRING,
 
+  // Which bank account this voucher moves money through. Nullable —
+  // vouchers with no bank set simply never appear in Bank Reconciliation,
+  // since there's nothing to match against a bank statement.
+  bankAccount: { type: DataTypes.STRING, allowNull: true },
+  chequeDate: { type: DataTypes.DATE, allowNull: true },
+  reconciliationStatus: { type: DataTypes.STRING, defaultValue: 'Pending' },
+
   amount: DataTypes.DECIMAL(14, 2),
   comment: DataTypes.TEXT,
   attachment: { type: DataTypes.STRING, defaultValue: '' },

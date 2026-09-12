@@ -8,7 +8,7 @@ const Category = sequelize.define('Category', {
     autoIncrement: true,
   },
   type: {
-    type: DataTypes.ENUM('Material', 'Product', 'Asset'),
+    type: DataTypes.ENUM('Material', 'Product', 'Asset', 'Service'),
     allowNull: false,
   },
   code: {

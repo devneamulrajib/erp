@@ -1,3 +1,5 @@
+import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Search,
   Grid2X2,
@@ -5,11 +7,33 @@ import {
   Sun,
   Settings,
   ChevronDown,
+  LogOut,
 } from 'lucide-react';
 
 import ModuleNav from './ModuleNav';
 
 export default function Topbar() {
+  const navigate = useNavigate();
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (profileRef.current && !profileRef.current.contains(e.target)) {
+        setProfileOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  function handleLogout() {
+    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
+    setProfileOpen(false);
+    navigate('/login', { replace: true });
+  }
+
   return (
     <header className="relative z-[9999] w-full">
       {/* =====================================================
@@ -564,74 +588,120 @@ export default function Topbar() {
             />
 
             {/* PROFILE */}
-            <button
-              type="button"
-              title="Profile"
-              className="
-                flex
-                items-center
-                gap-2
-                rounded-[12px]
-                border
-                border-[#e5e5e5]
-                bg-white/90
-                py-1
-                pl-1
-                pr-2
-                shadow-sm
-              "
-            >
-              <div
+            <div className="relative" ref={profileRef}>
+              <button
+                type="button"
+                title="Profile"
+                onClick={() => setProfileOpen((v) => !v)}
                 className="
-                  relative
                   flex
-                  h-[34px]
-                  w-[34px]
                   items-center
-                  justify-center
-                  rounded-[10px]
-                  bg-black
-                  text-[12px]
-                  font-bold
-                  text-white
+                  gap-2
+                  rounded-[12px]
+                  border
+                  border-[#e5e5e5]
+                  bg-white/90
+                  py-1
+                  pl-1
+                  pr-2
+                  shadow-sm
                 "
               >
-                A
+                <div
+                  className="
+                    relative
+                    flex
+                    h-[34px]
+                    w-[34px]
+                    items-center
+                    justify-center
+                    rounded-[10px]
+                    bg-black
+                    text-[12px]
+                    font-bold
+                    text-white
+                  "
+                >
+                  A
 
-                <span
+                  <span
+                    className="
+                      absolute
+                      bottom-0
+                      right-0
+                      h-[8px]
+                      w-[8px]
+                      rounded-full
+                      border-2
+                      border-white
+                      bg-[#777]
+                    "
+                  />
+                </div>
+
+                <div className="hidden text-left leading-none lg:block">
+                  <p className="text-[11px] font-bold text-black">
+                    Admin User
+                  </p>
+
+                  <p className="mt-1 text-[8px] text-[#777]">
+                    Administrator
+                  </p>
+                </div>
+
+                <ChevronDown
+                  size={14}
+                  className={`
+                    hidden
+                    text-[#555]
+                    transition-transform
+                    lg:block
+                    ${profileOpen ? 'rotate-180' : ''}
+                  `}
+                />
+              </button>
+
+              {profileOpen && (
+                <div
                   className="
                     absolute
-                    bottom-0
                     right-0
-                    h-[8px]
-                    w-[8px]
-                    rounded-full
-                    border-2
-                    border-white
-                    bg-[#777]
+                    top-[calc(100%+8px)]
+                    z-[10000]
+                    w-[190px]
+                    overflow-hidden
+                    rounded-[12px]
+                    border
+                    border-[#e5e5e5]
+                    bg-white
+                    py-1.5
+                    shadow-[0_12px_30px_rgba(0,0,0,0.12)]
                   "
-                />
-              </div>
-
-              <div className="hidden text-left leading-none lg:block">
-                <p className="text-[11px] font-bold text-black">
-                  Admin User
-                </p>
-
-                <p className="mt-1 text-[8px] text-[#777]">
-                  Administrator
-                </p>
-              </div>
-
-              <ChevronDown
-                size={14}
-                className="
-                  hidden
-                  text-[#555]
-                  lg:block
-                "
-              />
-            </button>
+                >
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="
+                      flex
+                      w-full
+                      items-center
+                      gap-2.5
+                      px-3.5
+                      py-2.5
+                      text-left
+                      text-[12px]
+                      font-medium
+                      text-red-600
+                      transition-colors
+                      hover:bg-red-50
+                    "
+                  >
+                    <LogOut size={15} />
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

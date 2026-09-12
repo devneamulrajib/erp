@@ -13,17 +13,17 @@ async function recalcValues(asset) {
 }
 
 const includeAll = [
-  { model: AssetDepreciationEntry },
-  { model: AssetMovementEntry },
-  { model: AssetRevaluationEntry },
+  { model: AssetDepreciationEntry, as: 'depreciationEntries' },
+  { model: AssetMovementEntry, as: 'movementEntries' },
+  { model: AssetRevaluationEntry, as: 'revaluationEntries' },
 ];
 
 router.get('/', auth, async (req, res) => {
   try {
     const assets = await Asset.findAll({
       include: [
-        { model: Item, attributes: ['name'] },
-        { model: Project, attributes: ['name'] },
+        { model: Item, as: 'item', attributes: ['name'] },
+        { model: Project, as: 'project', attributes: ['name'] },
       ],
       order: [['createdAt', 'DESC']],
     });
@@ -37,9 +37,9 @@ router.get('/:id', auth, async (req, res) => {
   try {
     const asset = await Asset.findByPk(req.params.id, {
       include: [
-        { model: Item, attributes: ['name'] },
-        { model: Project, attributes: ['name'] },
-        { model: ChartOfAccount, attributes: ['name'] },
+        { model: Item, as: 'item', attributes: ['name'] },
+        { model: Project, as: 'project', attributes: ['name'] },
+        { model: ChartOfAccount, as: 'expenseAccount', attributes: ['name'] },
         ...includeAll,
       ],
     });
@@ -178,12 +178,13 @@ router.post('/:id/revaluation', auth, async (req, res) => {
     const asset = await Asset.findByPk(req.params.id);
     if (!asset) return res.status(404).json({ message: 'Not found' });
 
-    const { date, newValue, note } = req.body;
+    const { date, newValue, note, revaluationType } = req.body;
     const oldValue = asset.originalValue;
     const change = Number(newValue || 0) - oldValue;
 
     await AssetRevaluationEntry.create({
-      date, oldValue, newValue: Number(newValue || 0), change, note: note || '', assetId: asset.id,
+      date, oldValue, newValue: Number(newValue || 0), change,
+      revaluationType: revaluationType || '', note: note || '', assetId: asset.id,
     });
     asset.originalValue = Number(newValue || 0);
     await recalcValues(asset);

@@ -56,8 +56,8 @@ router.post('/', auth, async (req, res) => {
       createUser, nominees,
     } = req.body;
 
-    if (!name || !mobile || !nid) {
-      return res.status(400).json({ message: 'Name, Mobile and NID are required' });
+    if (!name || !mobile) {
+      return res.status(400).json({ message: 'Name and Mobile are required' });
     }
 
     const customer = await Customer.create({

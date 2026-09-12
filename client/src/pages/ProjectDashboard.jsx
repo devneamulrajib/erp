@@ -1,13 +1,23 @@
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import Topbar from '../components/Topbar';
+import Breadcrumb from '../components/Breadcrumb';
 import ProjectSubNav from '../components/ProjectSubNav';
-import StatCard from '../components/StatCard';
 import ProjectCard from '../components/ProjectCard';
 import ProjectStatusDonut from '../components/ProjectStatusDonut';
 import WorkingFinancialChart from '../components/WorkingFinancialChart';
 import PendingVoucherPanel from '../components/PendingVoucherPanel';
 import CommentsTable from '../components/CommentsTable';
+import { FolderKanban, Activity, PackageSearch, Wrench, ListChecks, Home } from 'lucide-react';
+
+const STAT_CARDS = [
+  { key: 'totalProject', label: 'Total Project', icon: FolderKanban },
+  { key: 'runningProject', label: 'Running Project', icon: Activity },
+  { key: 'materialReq', label: 'Material Req.', icon: PackageSearch },
+  { key: 'serviceReq', label: 'Service Req.', icon: Wrench },
+  { key: 'task', label: 'Task', icon: ListChecks },
+  { key: 'unsoldFlatLand', label: 'Unsold Flat/Land', icon: Home },
+];
 
 export default function ProjectDashboard() {
   const [summary, setSummary] = useState(null);
@@ -39,10 +49,10 @@ export default function ProjectDashboard() {
 
         setSummary(summaryRes.data);
         setStatusSummary(statusRes.data);
-        setProjects(projectsRes.data);
-        setProgressChart(progressRes.data);
-        setVouchers(vouchersRes.data);
-        setComments(commentsRes.data);
+        setProjects(Array.isArray(projectsRes.data) ? projectsRes.data : []);
+        setProgressChart(Array.isArray(progressRes.data) ? progressRes.data : []);
+        setVouchers(Array.isArray(vouchersRes.data) ? vouchersRes.data : []);
+        setComments(Array.isArray(commentsRes.data) ? commentsRes.data : []);
       } catch (err) {
         console.error('Failed to load project dashboard:', err);
         setError(
@@ -58,12 +68,12 @@ export default function ProjectDashboard() {
 
   if (error) {
     return (
-      <div className="min-h-screen w-full bg-gray-50 text-left">
+      <div className="min-h-screen w-full bg-slate-50 text-left">
         <Topbar />
         <ProjectSubNav />
-        <div className="p-6">
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4">
-            <p className="font-semibold mb-1">Failed to load dashboard data</p>
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+          <div className="bg-red-50 border border-red-100 text-red-700 rounded-xl px-4 py-3">
+            <p className="font-semibold mb-1 text-sm">Failed to load dashboard data</p>
             <p className="text-sm">{error}</p>
           </div>
         </div>
@@ -71,38 +81,93 @@ export default function ProjectDashboard() {
     );
   }
 
-  if (!summary) return <div className="p-6">Loading...</div>;
+  if (!summary) {
+    return (
+      <div className="min-h-screen w-full bg-slate-50 text-left">
+        <Topbar />
+        <ProjectSubNav />
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-16 text-center text-slate-400 text-sm">
+          Loading...
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen w-full bg-gray-50 text-left">
+    <div className="min-h-screen w-full bg-slate-50 text-left">
       <Topbar />
       <ProjectSubNav />
 
-      <div className="p-4">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
-          <StatCard label="Total Project" value={summary.totalProject} colorFrom="#78350f" colorTo="#374151" />
-          <StatCard label="Running Project" value={summary.runningProject} colorFrom="#0ea5e9" colorTo="#0369a1" />
-          <StatCard label="Material Req." value={summary.materialReq} colorFrom="#065f46" colorTo="#134e4a" />
-          <StatCard label="Service Req." value={summary.serviceReq} colorFrom="#be185d" colorTo="#9d174d" />
-          <StatCard label="Task" value={summary.task} colorFrom="#f97316" colorTo="#dc2626" />
-          <StatCard label="Unsold Flat/Land" value={summary.unsoldFlatLand} colorFrom="#0ea5e9" colorTo="#0369a1" />
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+        {/* Header */}
+        <div className="mb-6">
+          <Breadcrumb items={[{ label: 'Home', to: '/dashboard' }, { label: 'Project Dashboard' }]} />
+          <h1 className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">Project Dashboard</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Overview of all active projects, requisitions, and pending work</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4 items-start">
-          <div className="max-h-[520px] overflow-y-auto pr-1">
-            {projects.length === 0 && <div className="text-gray-400 text-sm text-center py-8">No projects yet</div>}
-            {projects.map((p) => <ProjectCard key={p._id} project={p} />)}
+        {/* Summary strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+          {STAT_CARDS.map(({ key, label, icon: Icon }) => (
+            <div key={key} className="bg-white rounded-xl border border-slate-200 px-4 py-3.5">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">{label}</span>
+                <Icon size={15} className="text-indigo-400" />
+              </div>
+              <div className="text-xl font-semibold text-slate-900 font-mono">{summary[key] ?? 0}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Main grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 items-start">
+          {/* Projects list */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+              <h2 className="text-sm font-semibold text-slate-700">Projects</h2>
+            </div>
+            <div className="max-h-[460px] overflow-y-auto p-3 space-y-2">
+              {projects.length === 0 ? (
+                <div className="text-slate-400 text-sm text-center py-12">No projects yet</div>
+              ) : (
+                projects.map((p) => <ProjectCard key={p._id} project={p} />)
+              )}
+            </div>
           </div>
 
+          {/* Status + financial chart */}
           <div className="space-y-4">
-            <ProjectStatusDonut data={statusSummary} />
-            <WorkingFinancialChart data={progressChart} />
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+              <h2 className="text-sm font-semibold text-slate-700 mb-1">Project Status Summary</h2>
+              <p className="text-xs text-slate-400 mb-3">Current overview</p>
+              <ProjectStatusDonut data={statusSummary} />
+            </div>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+              <h2 className="text-sm font-semibold text-slate-700 mb-3">Working &amp; Financial Progress</h2>
+              <WorkingFinancialChart data={progressChart} />
+            </div>
           </div>
 
-          <PendingVoucherPanel vouchers={vouchers} />
+          {/* Pending vouchers */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+              <h2 className="text-sm font-semibold text-slate-700">Pending Voucher/Invoice</h2>
+            </div>
+            <div className="p-3">
+              <PendingVoucherPanel vouchers={vouchers} />
+            </div>
+          </div>
         </div>
 
-        <CommentsTable comments={comments} />
+        {/* Comments */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <h2 className="text-sm font-semibold text-slate-700">Recent Comments</h2>
+          </div>
+          <div className="p-3">
+            <CommentsTable comments={comments} />
+          </div>
+        </div>
       </div>
     </div>
   );

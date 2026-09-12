@@ -1,7 +1,22 @@
 const router = require('express').Router();
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
 const { Voucher, VoucherEntry, VoucherApproval } = require('../models/associations');
+
+const uploadDir = path.join(__dirname, '..', 'uploads', 'vouchers');
+fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `${unique}${path.extname(file.originalname)}`);
+  },
+});
+const upload = multer({ storage });
 
 const TYPE_PREFIX = {
   Journal: 'JV', Payment: 'PV', Receipt: 'RV', Contra: 'CV',
@@ -25,7 +40,7 @@ async function generateVoucherNo(type) {
   return `${fullPrefix}-${seq}`;
 }
 
-const includeAll = [{ model: VoucherEntry }, { model: VoucherApproval }];
+const includeAll = [{ model: VoucherEntry, as: 'entries' }, { model: VoucherApproval }];
 
 router.get('/next-code', auth, async (req, res) => {
   try {
@@ -81,7 +96,7 @@ router.get('/', auth, async (req, res) => {
       }
     }
 
-    const include = [
+      const include = [
       account ? { model: VoucherEntry, where: { accountId: account } } : { model: VoucherEntry },
       { model: VoucherApproval },
     ];
@@ -108,9 +123,15 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, upload.single('attachment'), async (req, res) => {
   try {
-    const { type, date, project, contact, entries, narration, reference, bank, chequeDate } = req.body;
+    const {
+      type, date, project, contact, narration, reference, bank, chequeDate,
+      projectType, titleOfWork, task, site, item, ifCheque, chequeReceiptNo,
+      paymentMethod, paymentType, installment,
+    } = req.body;
+    let entries = req.body.entries;
+    if (typeof entries === 'string') entries = JSON.parse(entries);
 
     if (!type) return res.status(400).json({ message: 'Type is required' });
     if (!Array.isArray(entries) || entries.length < 2) {
@@ -124,7 +145,7 @@ router.post('/', auth, async (req, res) => {
     }
 
     const voucherNo = req.body.voucherNo || await generateVoucherNo(type);
-    const item = await Voucher.create({
+    const created = await Voucher.create({
       voucherNo,
       type,
       date: date || new Date(),
@@ -132,9 +153,20 @@ router.post('/', auth, async (req, res) => {
       contactId: contact || null,
       bankId: bank || null,
       chequeDate: chequeDate || null,
+      ifCheque: ifCheque === 'true' || ifCheque === true,
+      chequeReceiptNo: chequeReceiptNo || '',
       narration,
       reference,
+      projectType: projectType || '',
+      titleOfWork: titleOfWork || '',
+      task: task || '',
+      site: site || '',
+      item: item || '',
+      paymentMethod: paymentMethod || '',
+      paymentType: paymentType || '',
+      installment: installment || '',
       amount: totalDebit,
+      attachment: req.file ? `/uploads/vouchers/${req.file.filename}` : '',
       addedBy: req.user?.name || 'Admin',
     });
 
@@ -144,11 +176,11 @@ router.post('/', auth, async (req, res) => {
         debit: Number(e.debit) || 0,
         credit: Number(e.credit) || 0,
         note: e.note,
-        voucherId: item.id,
+        voucherId: created.id,
       });
     }
 
-    const populated = await Voucher.findByPk(item.id, { include: includeAll });
+    const populated = await Voucher.findByPk(created.id, { include: includeAll });
     res.status(201).json(populated);
   } catch (err) {
     console.error('POST /api/vouchers failed:', err);
@@ -156,15 +188,20 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
   try {
     const item = await Voucher.findByPk(req.params.id);
     if (!item) return res.status(404).json({ message: 'Not found' });
 
     const {
-      type, date, project, contact, entries, narration, reference, status,
+      type, date, project, contact, narration, reference, status,
       bank, chequeDate, reconciliationStatus,
+      projectType, titleOfWork, task, site, ifCheque, chequeReceiptNo,
+      paymentMethod, paymentType, installment,
     } = req.body;
+    const itemField = req.body.item;
+    let entries = req.body.entries;
+    if (typeof entries === 'string') entries = JSON.parse(entries);
 
     if (entries !== undefined) {
       if (!Array.isArray(entries) || entries.length < 2) {
@@ -198,6 +235,18 @@ router.put('/:id', auth, async (req, res) => {
     if (bank !== undefined) item.bankId = bank;
     if (chequeDate !== undefined) item.chequeDate = chequeDate;
     if (reconciliationStatus !== undefined) item.reconciliationStatus = reconciliationStatus;
+    if (ifCheque !== undefined) item.ifCheque = ifCheque === 'true' || ifCheque === true;
+    if (chequeReceiptNo !== undefined) item.chequeReceiptNo = chequeReceiptNo;
+    if (projectType !== undefined) item.projectType = projectType;
+    if (titleOfWork !== undefined) item.titleOfWork = titleOfWork;
+    if (task !== undefined) item.task = task;
+    if (site !== undefined) item.site = site;
+    if (itemField !== undefined) item.item = itemField;
+    if (paymentMethod !== undefined) item.paymentMethod = paymentMethod;
+    if (paymentType !== undefined) item.paymentType = paymentType;
+    if (installment !== undefined) item.installment = installment;
+    if (req.file) item.attachment = `/uploads/vouchers/${req.file.filename}`;
+    item.editedBy = req.user?.name || item.editedBy;
 
     await item.save();
     const populated = await Voucher.findByPk(item.id, { include: includeAll });

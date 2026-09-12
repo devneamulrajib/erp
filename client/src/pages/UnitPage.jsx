@@ -25,7 +25,7 @@ export default function UnitPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await getUnits();
+      const data = await getUnits();
       setUnits(data);
     } catch (err) {
       console.error('Failed to load units', err);
@@ -51,7 +51,7 @@ export default function UnitPage() {
   async function openAddModal() {
     setEditingId(null);
     try {
-      const { data } = await getNextUnitCode();
+      const data = await getNextUnitCode();
       setForm({ code: data.code, name: '', conversionUnit: '', rate: '' });
     } catch {
       setForm(EMPTY_FORM);

@@ -1,7 +1,22 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { ContractorWorkorder, ContractorWorkorderItem, Party, Project } = require('../models/associations');
+
+const uploadDir = path.join(__dirname, '..', 'uploads', 'contractor-workorders');
+fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `${unique}${path.extname(file.originalname)}`);
+  },
+});
+const upload = multer({ storage });
 
 function generateCode() {
   return 'W/O' + Math.floor(1000000 + Math.random() * 9000000);
@@ -32,6 +47,11 @@ function computeTotals(body, items) {
   return { subtotal, vatIncluded, vatPercent, vatAmount, aitIncluded, aitPercent, aitAmount, discount, grandTotal };
 }
 
+const includeList = [
+  { model: Party, as: 'supplier', attributes: ['name'] },
+  { model: Project, as: 'project', attributes: ['name'] },
+];
+
 router.get('/next-code', auth, async (req, res) => {
   res.json({ code: generateCode() });
 });
@@ -50,10 +70,7 @@ router.get('/', auth, async (req, res) => {
 
     const orders = await ContractorWorkorder.findAll({
       where,
-      include: [
-        { model: Party, attributes: ['name'] },
-        { model: Project, attributes: ['name'] },
-      ],
+      include: includeList,
       order: [['createdAt', 'DESC']],
     });
 
@@ -66,11 +83,7 @@ router.get('/', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const order = await ContractorWorkorder.findByPk(req.params.id, {
-      include: [
-        { model: Party, attributes: ['name'] },
-        { model: Project, attributes: ['name'] },
-        { model: ContractorWorkorderItem },
-      ],
+      include: [...includeList, { model: ContractorWorkorderItem }],
     });
     if (!order) return res.status(404).json({ message: 'Not found' });
     res.json(order);
@@ -97,7 +110,6 @@ router.post('/', auth, async (req, res) => {
       categoryId: req.body.category,
       refInvoiceNo: req.body.refInvoiceNo,
       contentBody: req.body.contentBody,
-      attachment: req.body.attachment,
       ...totals,
       addedBy: req.user?.name || 'Admin',
     });
@@ -107,11 +119,7 @@ router.post('/', auth, async (req, res) => {
     }
 
     const populated = await ContractorWorkorder.findByPk(order.id, {
-      include: [
-        { model: Party, attributes: ['name'] },
-        { model: Project, attributes: ['name'] },
-        { model: ContractorWorkorderItem },
-      ],
+      include: [...includeList, { model: ContractorWorkorderItem }],
     });
 
     res.status(201).json(populated);
@@ -134,7 +142,6 @@ router.put('/:id', auth, async (req, res) => {
       categoryId: req.body.category,
       refInvoiceNo: req.body.refInvoiceNo,
       contentBody: req.body.contentBody,
-      attachment: req.body.attachment,
       vatIncluded: req.body.vatIncluded,
       vatPercent: req.body.vatPercent,
       aitIncluded: req.body.aitIncluded,
@@ -161,15 +168,35 @@ router.put('/:id', auth, async (req, res) => {
 
     await order.save();
     const populated = await ContractorWorkorder.findByPk(order.id, {
-      include: [
-        { model: Party, attributes: ['name'] },
-        { model: Project, attributes: ['name'] },
-        { model: ContractorWorkorderItem },
-      ],
+      include: [...includeList, { model: ContractorWorkorderItem }],
     });
 
     res.json(populated);
   } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Real file upload — same pattern as LabourBill's attachment endpoint.
+router.post('/:id/attachment', auth, (req, res, next) => {
+  upload.single('attachment')(req, res, (err) => {
+    if (err) {
+      console.error('Attachment upload failed:', err);
+      return res.status(400).json({ message: `File upload error: ${err.message}` });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    const order = await ContractorWorkorder.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ message: 'Not found' });
+    if (req.file) {
+      order.attachment = `/uploads/contractor-workorders/${req.file.filename}`;
+      await order.save();
+    }
+    res.json({ attachment: order.attachment });
+  } catch (err) {
+    console.error('Saving attachment failed:', err);
     res.status(500).json({ message: err.message });
   }
 });

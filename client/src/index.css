@@ -32,6 +32,15 @@
   }
 }
 
+@media print {
+  .no-print, nav, header { display: none !important; }
+  body { background: white !important; }
+  .bg-slate-50 { background: white !important; }
+  .shadow-sm, .shadow-xl { box-shadow: none !important; }
+  .rounded-2xl, .rounded-xl, .rounded-lg { border-radius: 0 !important; }
+}
+
+
 @media (prefers-color-scheme: dark) {
   :root {
     --text: #9ca3af;

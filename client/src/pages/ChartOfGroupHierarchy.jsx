@@ -72,7 +72,7 @@ export default function ChartOfGroupHierarchy() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await getChartOfGroupHierarchy();
+      const data = await getChartOfGroupHierarchy();
       setTree(data);
     } catch (err) {
       console.error('Failed to load hierarchy', err);

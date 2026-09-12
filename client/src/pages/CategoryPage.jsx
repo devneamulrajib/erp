@@ -28,7 +28,7 @@ export default function CategoryPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await getCategories();
+      const data = await getCategories();
       setCategories(data);
     } catch (err) {
       console.error('Failed to load categories', err);
@@ -55,7 +55,7 @@ export default function CategoryPage() {
   async function openAddModal() {
     setEditingId(null);
     try {
-      const { data } = await getNextCategoryCode();
+      const data = await getNextCategoryCode();
       setForm({ type: '', code: data.code, name: '' });
     } catch {
       setForm({ type: '', code: '', name: '' });

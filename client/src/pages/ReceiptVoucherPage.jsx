@@ -4,24 +4,27 @@ import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
 import {
-  Pencil, Trash2, Eye, Copy, Printer, Mail, Search, FileText, FileSpreadsheet, Plus,
+  Pencil, Trash2, Eye, Printer, Mail, Search, FileText, FileSpreadsheet, Plus,
   Receipt, Landmark, SlidersHorizontal, ChevronDown, ChevronUp, Paperclip, CheckCircle2, XCircle,
 } from 'lucide-react';
 import {
-  getReceiptVouchers, getReceiptVoucher, getNextReceiptVoucherCode,
-  createReceiptVoucher, updateReceiptVoucher, deleteReceiptVoucher, duplicateReceiptVoucher,
-} from '../api/receiptVoucher';
+  getVouchers, getVoucher, getNextVoucherCode, createVoucher, updateVoucher, deleteVoucher,
+} from '../api/voucher';
 import { getChartOfAccounts, createChartOfAccount } from '../api/chartOfAccounts';
 import { getChartOfGroupOptions } from '../api/chartOfGroup';
+import { getBankAccounts } from '../api/bankAccount';
 
 const inputClass = "w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition";
 const labelClass = "block text-xs font-medium text-slate-500 mb-1.5";
+
+const PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'Cheque', 'Card', 'Mobile Banking (bKash/Nagad)'];
 
 export default function ReceiptVoucherPage() {
   const [projects, setProjects] = useState([]);
   const [projectTypes, setProjectTypes] = useState([]);
   const [sites, setSites] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [banks, setBanks] = useState([]);
   const [groupOptions, setGroupOptions] = useState([]);
   const [vouchers, setVouchers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +40,8 @@ export default function ReceiptVoucherPage() {
   const [voucherNo, setVoucherNo] = useState('');
   const [creditAccount, setCreditAccount] = useState('');
   const [debitAccount, setDebitAccount] = useState('');
+  const [bank, setBank] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
   const [ifCheque, setIfCheque] = useState(false);
   const [chequeReceiptNo, setChequeReceiptNo] = useState('');
   const [amount, setAmount] = useState('');
@@ -57,7 +62,6 @@ export default function ReceiptVoucherPage() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [filterCredit, setFilterCredit] = useState('');
-  const [filterDebit, setFilterDebit] = useState('');
   const [filterProject, setFilterProject] = useState('');
   const [filterTitle, setFilterTitle] = useState('');
   const [filterSite, setFilterSite] = useState('');
@@ -70,28 +74,29 @@ export default function ReceiptVoucherPage() {
   const loadVouchers = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getReceiptVouchers({
+      const { data } = await getVouchers({
+        type: 'Receipt',
         from: fromDate || undefined,
         to: toDate || undefined,
-        creditAccount: filterCredit || undefined,
-        debitAccount: filterDebit || undefined,
+        account: filterCredit || undefined,
         project: filterProject || undefined,
-        titleOfWork: filterTitle || undefined,
-        site: filterSite || undefined,
-        task: filterTask || undefined,
       });
-      setVouchers(data);
+      setVouchers(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load receipt vouchers', err);
+      setVouchers([]);
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate, filterCredit, filterDebit, filterProject, filterTitle, filterSite, filterTask]);
+  }, [fromDate, toDate, filterCredit, filterProject]);
 
   useEffect(() => { loadVouchers(); }, [loadVouchers]);
 
   function reloadAccounts() {
     getChartOfAccounts().then((res) => setAccounts(res?.data ?? res ?? [])).catch(() => {});
+  }
+  function reloadBanks() {
+    getBankAccounts().then((data) => setBanks(data ?? [])).catch(() => {});
   }
 
   useEffect(() => {
@@ -99,6 +104,7 @@ export default function ReceiptVoucherPage() {
     api.get('/project-types').then((res) => setProjectTypes(res.data ?? [])).catch(() => {});
     api.get('/sites').then((res) => setSites(res.data ?? [])).catch(() => {});
     reloadAccounts();
+    reloadBanks();
     getChartOfGroupOptions().then((res) => setGroupOptions(res?.data ?? res ?? [])).catch(() => {});
     resetFormForCreate();
   }, []);
@@ -109,31 +115,45 @@ export default function ReceiptVoucherPage() {
     setEditingId(null);
     setProjectType(''); setProject(''); setTitleOfWork(''); setTask(''); setSite('');
     setDate(new Date().toISOString().slice(0, 10));
-    setCreditAccount(''); setDebitAccount(''); setIfCheque(false); setChequeReceiptNo('');
+    setCreditAccount(''); setDebitAccount(''); setBank(''); setPaymentMethod('');
+    setIfCheque(false); setChequeReceiptNo('');
     setAmount(''); setComment(''); setAttachmentFile(null);
     setInvoiceBill(''); setPaymentType(''); setInstallment('');
     setFormError('');
-    getNextReceiptVoucherCode().then(setVoucherNo).catch(() => {});
+    getNextVoucherCode('Receipt').then((res) => setVoucherNo(res.data.code)).catch(() => {});
+  }
+
+  function accountName(id) {
+    return accounts.find((a) => a.id === id)?.name || '';
+  }
+  function projectName(id) {
+    return projects.find((p) => (p._id ?? p.id) === id)?.name || '';
   }
 
   async function loadForEdit(id) {
     try {
-      const v = await getReceiptVoucher(id);
+      const { data: v } = await getVoucher(id);
+      const entries = v.entries || [];
+      const debitEntry = entries.find((e) => Number(e.debit) > 0);
+      const creditEntry = entries.find((e) => Number(e.credit) > 0);
+
       setEditingId(v.id);
       setProjectType(v.projectType || '');
-      setProject(v.project || '');
+      setProject(v.projectId ?? '');
       setTitleOfWork(v.titleOfWork || '');
       setTask(v.task || '');
       setSite(v.site || '');
       setDate(v.date ? new Date(v.date).toISOString().slice(0, 10) : '');
       setVoucherNo(v.voucherNo || '');
-      setCreditAccount(v.creditAccount || '');
-      setDebitAccount(v.debitAccount || '');
+      setCreditAccount(creditEntry?.accountId ?? '');
+      setDebitAccount(debitEntry?.accountId ?? '');
+      setBank(v.bankId ?? '');
+      setPaymentMethod(v.paymentMethod || '');
       setIfCheque(!!v.ifCheque);
       setChequeReceiptNo(v.chequeReceiptNo || '');
       setAmount(v.amount ?? '');
-      setComment(v.comment || '');
-      setInvoiceBill(v.invoiceBill || '');
+      setComment(v.narration || '');
+      setInvoiceBill(v.reference || '');
       setPaymentType(v.paymentType || '');
       setInstallment(v.installment || '');
       setFormError('');
@@ -150,7 +170,7 @@ export default function ReceiptVoucherPage() {
     try {
       const { data } = await createChartOfAccount(quickAddForm);
       reloadAccounts();
-      setCreditAccount(data.name);
+      setCreditAccount(data.id);
       setQuickAddOpen(false);
       setQuickAddForm({ chartOfGroup: '', code: '', name: '' });
     } catch (err) {
@@ -163,21 +183,33 @@ export default function ReceiptVoucherPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setFormError('');
-    if (!creditAccount || !debitAccount || !amount) {
-      setFormError('Select Accounts, Payment Method and Amount are required');
+    if (!creditAccount || !debitAccount || !paymentMethod || !amount) {
+      setFormError('Credit Account, Debit Account, Payment Method and Amount are required');
       return;
     }
     setSubmitting(true);
     try {
       const payload = {
-        projectType, project, titleOfWork, task, site, date, voucherNo,
-        creditAccount, debitAccount, ifCheque, chequeReceiptNo, amount, comment,
-        invoiceBill, paymentType, installment, attachmentFile,
+        type: 'Receipt',
+        date,
+        voucherNo,
+        project: project || undefined,
+        bank: bank || undefined,
+        entries: [
+          { account: creditAccount, debit: 0, credit: amount },
+          { account: debitAccount, debit: amount, credit: 0 },
+        ],
+        narration: comment,
+        reference: invoiceBill,
+        projectType, titleOfWork, task, site,
+        paymentMethod, paymentType, installment,
+        ifCheque, chequeReceiptNo,
+        attachmentFile,
       };
       if (editingId) {
-        await updateReceiptVoucher(editingId, payload);
+        await updateVoucher(editingId, payload);
       } else {
-        await createReceiptVoucher(payload);
+        await createVoucher(payload);
       }
       resetFormForCreate();
       await loadVouchers();
@@ -191,25 +223,16 @@ export default function ReceiptVoucherPage() {
   async function handleDelete(id) {
     if (!window.confirm('Delete this receipt voucher?')) return;
     try {
-      await deleteReceiptVoucher(id);
+      await deleteVoucher(id);
       await loadVouchers();
     } catch (err) {
       window.alert(err.response?.data?.message || 'Failed to delete');
     }
   }
 
-  async function handleDuplicate(id) {
-    try {
-      await duplicateReceiptVoucher(id);
-      await loadVouchers();
-    } catch (err) {
-      window.alert(err.response?.data?.message || 'Failed to duplicate');
-    }
-  }
-
   function handleSendMail(v) {
     const subject = encodeURIComponent(`Receipt Voucher ${v.voucherNo}`);
-    const body = encodeURIComponent(`Receipt Voucher: ${v.voucherNo}\nAmount: ${v.amount}\nCredit: ${v.creditAccount}\nDebit: ${v.debitAccount}`);
+    const body = encodeURIComponent(`Receipt Voucher: ${v.voucherNo}\nAmount: ${v.amount}`);
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
   }
 
@@ -219,10 +242,15 @@ export default function ReceiptVoucherPage() {
 
   function exportExcel() {
     const headers = ['SL', 'Date', 'Project', 'Code', 'Credit', 'Debit', 'Total', 'Ref', 'Cheque/Receipt', 'Comment', 'Added By', 'Status'];
-    const rows = filtered.map((v, i) => [
-      i + 1, new Date(v.date).toLocaleDateString(), v.project, v.voucherNo,
-      v.creditAccount, v.debitAccount, v.amount, v.titleOfWork, v.chequeReceiptNo, v.comment, v.addedBy, v.status,
-    ]);
+    const rows = filtered.map((v, i) => {
+      const entries = v.entries || [];
+      const debitEntry = entries.find((e) => Number(e.debit) > 0);
+      const creditEntry = entries.find((e) => Number(e.credit) > 0);
+      return [
+        i + 1, new Date(v.date).toLocaleDateString(), projectName(v.projectId), v.voucherNo,
+        accountName(creditEntry?.accountId), accountName(debitEntry?.accountId), v.amount, v.titleOfWork, v.chequeReceiptNo, v.narration, v.addedBy, v.status,
+      ];
+    });
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${c ?? ''}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -236,21 +264,20 @@ export default function ReceiptVoucherPage() {
   const filtered = vouchers.filter((v) => {
     if (!search) return true;
     const q = search.toLowerCase();
-    return (v.voucherNo || '').toLowerCase().includes(q) || (v.project || '').toLowerCase().includes(q);
+    return (v.voucherNo || '').toLowerCase().includes(q);
   });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
   const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
   const totalAmount = filtered.reduce((sum, v) => sum + Number(v.amount || 0), 0);
-  const activeFilterCount = [fromDate, toDate, filterCredit, filterDebit, filterProject, filterTitle, filterSite, filterTask].filter(Boolean).length;
+  const activeFilterCount = [fromDate, toDate, filterCredit, filterProject, filterTitle, filterSite, filterTask].filter(Boolean).length;
 
   return (
     <div className="min-h-screen w-full bg-slate-50 text-left">
       <Topbar />
 
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
-        {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
             <Breadcrumb
@@ -269,7 +296,6 @@ export default function ReceiptVoucherPage() {
             <p className="text-sm text-slate-500 mt-1 ml-[46px]">Record incoming payments against a credit and debit account</p>
           </div>
 
-          {/* Quick stats */}
           <div className="flex gap-3">
             <div className="bg-white rounded-xl border border-slate-200 px-4 py-2.5 min-w-[120px]">
               <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Entries</div>
@@ -289,7 +315,6 @@ export default function ReceiptVoucherPage() {
           </div>
         )}
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/60">
             <h2 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
@@ -304,7 +329,6 @@ export default function ReceiptVoucherPage() {
           </div>
 
           <div className="p-6">
-            {/* Section: Project context */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
               <Field label="Project Type">
                 <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputClass}>
@@ -315,7 +339,7 @@ export default function ReceiptVoucherPage() {
               <Field label="Project">
                 <select value={project} onChange={(e) => setProject(e.target.value)} className={inputClass}>
                   <option value="">Select Project</option>
-                  {projects.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                  {projects.map((p) => <option key={p._id ?? p.id} value={p._id ?? p.id}>{p.name}</option>)}
                 </select>
               </Field>
               <Field label="Title/Name of Work">
@@ -339,11 +363,22 @@ export default function ReceiptVoucherPage() {
               <Field label="Voucher No">
                 <input value={voucherNo} readOnly className={`${inputClass} bg-slate-50 text-slate-500 font-mono`} />
               </Field>
-              <Field label="Select Accounts" required>
+              <Field label="Bank" required>
+                <select value={bank} onChange={(e) => setBank(e.target.value)} className={inputClass}>
+                  <option value="">Select Bank Account</option>
+                  {banks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </Field>
+            </div>
+
+            <div className="h-px bg-slate-100 mb-5" />
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
+              <Field label="Credit Account" required>
                 <div className="flex gap-2">
                   <select value={creditAccount} onChange={(e) => setCreditAccount(e.target.value)} className={`${inputClass} flex-1`}>
                     <option value="">Select Chart Of Account</option>
-                    {accounts.map((a) => <option key={a.id} value={a.name}>{a.name}</option>)}
+                    {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
                   <button
                     type="button"
@@ -355,12 +390,12 @@ export default function ReceiptVoucherPage() {
                   </button>
                 </div>
               </Field>
-            </div>
-
-            <div className="h-px bg-slate-100 mb-5" />
-
-            {/* Section: Payment */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
+              <Field label="Debit Account" required>
+                <select value={debitAccount} onChange={(e) => setDebitAccount(e.target.value)} className={inputClass}>
+                  <option value="">Select Chart Of Account</option>
+                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </Field>
               <Field
                 label={
                   <span className="flex items-center gap-2">
@@ -373,13 +408,10 @@ export default function ReceiptVoucherPage() {
                 }
                 required
               >
-                <select value={debitAccount} onChange={(e) => setDebitAccount(e.target.value)} className={inputClass}>
+                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className={inputClass}>
                   <option value="">Select Payment Method</option>
-                  {accounts.map((a) => <option key={a.id} value={a.name}>{a.name}</option>)}
+                  {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
                 </select>
-              </Field>
-              <Field label="Cheque/Receipt No">
-                <input value={chequeReceiptNo} onChange={(e) => setChequeReceiptNo(e.target.value)} className={inputClass} placeholder="Enter Cheque/Receipt No" disabled={!ifCheque} />
               </Field>
               <Field label="Amount" required>
                 <div className="relative">
@@ -387,12 +419,15 @@ export default function ReceiptVoucherPage() {
                   <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputClass} pl-7`} placeholder="0.00" />
                 </div>
               </Field>
-              <Field label="Comment">
-                <input value={comment} onChange={(e) => setComment(e.target.value)} className={inputClass} placeholder="Enter Comment" />
-              </Field>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
+              <Field label="Cheque/Receipt No">
+                <input value={chequeReceiptNo} onChange={(e) => setChequeReceiptNo(e.target.value)} className={inputClass} placeholder="Enter Cheque/Receipt No" disabled={!ifCheque} />
+              </Field>
+              <Field label="Comment">
+                <input value={comment} onChange={(e) => setComment(e.target.value)} className={inputClass} placeholder="Enter Comment" />
+              </Field>
               <Field label="Attachment">
                 <label className={`${inputClass} flex items-center gap-2 cursor-pointer text-slate-500`}>
                   <Paperclip size={14} className="shrink-0 text-slate-400" />
@@ -400,20 +435,19 @@ export default function ReceiptVoucherPage() {
                   <input type="file" onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)} className="hidden" />
                 </label>
               </Field>
+              <Field label="Select Invoice/Bill">
+                <input value={invoiceBill} onChange={(e) => setInvoiceBill(e.target.value)} className={inputClass} placeholder="Select Invoice" />
+              </Field>
             </div>
 
             <div className="h-px bg-slate-100 mb-5" />
 
-            {/* Section: References */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Field label="Select Invoice/Bill">
-                <input value={invoiceBill} onChange={(e) => setInvoiceBill(e.target.value)} className={inputClass} placeholder="Select Invoice" />
-              </Field>
               <Field label="Payment Type">
                 <input value={paymentType} onChange={(e) => setPaymentType(e.target.value)} className={inputClass} placeholder="Select Payment Type" />
               </Field>
               <Field label="Select Installment">
-                <input value={installment} onChange={(e) => setInstallment(e.target.value)} className={inputClass} placeholder="Select Invoice" />
+                <input value={installment} onChange={(e) => setInstallment(e.target.value)} className={inputClass} placeholder="Select Installment" />
               </Field>
             </div>
           </div>
@@ -434,7 +468,6 @@ export default function ReceiptVoucherPage() {
           </div>
         </form>
 
-        {/* Filters */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-5">
           <button
             type="button"
@@ -463,23 +496,17 @@ export default function ReceiptVoucherPage() {
                 <Field label="Credit Accounts">
                   <select value={filterCredit} onChange={(e) => setFilterCredit(e.target.value)} className={inputClass}>
                     <option value="">Select Chart Of Account</option>
-                    {accounts.map((a) => <option key={a.id} value={a.name}>{a.name}</option>)}
+                    {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
                 </Field>
-                <Field label="Debit Accounts">
-                  <select value={filterDebit} onChange={(e) => setFilterDebit(e.target.value)} className={inputClass}>
-                    <option value="">Select Chart Of Account</option>
-                    {accounts.map((a) => <option key={a.id} value={a.name}>{a.name}</option>)}
+                <Field label="Select Project">
+                  <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)} className={inputClass}>
+                    <option value="">Select Project</option>
+                    {projects.map((p) => <option key={p._id ?? p.id} value={p._id ?? p.id}>{p.name}</option>)}
                   </select>
                 </Field>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                <Field label="Select Project">
-                  <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)} className={inputClass}>
-                    <option value="">Select Project</option>
-                    {projects.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
-                  </select>
-                </Field>
                 <Field label="Title/Name of Work">
                   <input value={filterTitle} onChange={(e) => setFilterTitle(e.target.value)} className={inputClass} placeholder="Select Title/Name of Work" />
                 </Field>
@@ -494,22 +521,20 @@ export default function ReceiptVoucherPage() {
                     <option value="">Select Task</option>
                   </select>
                 </Field>
-              </div>
-              <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
-                <button type="button" onClick={handlePrint} className="inline-flex items-center justify-center gap-1.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors">
-                  <FileText size={14} /> PDF
-                </button>
-                <button type="button" onClick={exportExcel} className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors">
-                  <FileSpreadsheet size={14} /> Excel
-                </button>
+                <div className="flex items-end gap-2">
+                  <button type="button" onClick={handlePrint} className="inline-flex items-center justify-center gap-1.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors">
+                    <FileText size={14} /> PDF
+                  </button>
+                  <button type="button" onClick={exportExcel} className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors">
+                    <FileSpreadsheet size={14} /> Excel
+                  </button>
+                </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Table panel */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          {/* Toolbar */}
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 bg-slate-50/50">
             <div className="flex items-center gap-2 text-sm text-slate-500">
               <span>Show</span>
@@ -530,13 +555,12 @@ export default function ReceiptVoucherPage() {
             </div>
           </div>
 
-          {/* Table */}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
                   {['SL', 'Date', 'Project', 'Code', 'Credit', 'Debit', 'Total', 'Ref', 'Cheque/Receipt',
-                    'Comment', 'Added By', 'Edited By', 'Approve', 'Attachment', 'Status', 'Action'].map((h) => (
+                    'Comment', 'Added By', 'Edited By', 'Attachment', 'Status', 'Action'].map((h) => (
                     <th key={h} className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -544,7 +568,7 @@ export default function ReceiptVoucherPage() {
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={16} className="text-center py-16">
+                    <td colSpan={15} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <div className="w-6 h-6 border-2 border-slate-200 border-t-indigo-500 rounded-full animate-spin" />
                         <p className="text-sm">Loading vouchers…</p>
@@ -553,79 +577,69 @@ export default function ReceiptVoucherPage() {
                   </tr>
                 ) : pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={16} className="text-center py-16">
+                    <td colSpan={15} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <Receipt size={28} strokeWidth={1.5} />
                         <p className="text-sm">No entries found. Try adjusting filters, or create a voucher above.</p>
                       </div>
                     </td>
                   </tr>
-                ) : pageRows.map((v, i) => (
-                  <tr key={v.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap align-top">
-                    <td className="px-4 py-3.5 text-slate-400 font-mono text-xs">{(page - 1) * pageSize + i + 1}</td>
-                    <td className="px-4 py-3.5 text-slate-600">{fmtDate(v.date)}</td>
-                    <td className="px-4 py-3.5 text-slate-600">{v.project}</td>
-                    <td className="px-4 py-3.5 font-medium text-slate-700">{v.voucherNo}</td>
-                    <td className="px-4 py-3.5 text-indigo-600">{v.creditAccount}</td>
-                    <td className="px-4 py-3.5 text-indigo-600">{v.debitAccount}</td>
-                    <td className="px-4 py-3.5 font-medium text-slate-800">{Number(v.amount || 0).toFixed(2)}</td>
-                    <td className="px-4 py-3.5 text-slate-600">{v.titleOfWork}</td>
-                    <td className="px-4 py-3.5 text-slate-600">{v.chequeReceiptNo}</td>
-                    <td className="px-4 py-3.5 text-slate-600">{v.comment}</td>
-                    <td className="px-4 py-3.5 text-slate-600">{v.addedBy}</td>
-                    <td className="px-4 py-3.5 text-slate-600">{v.editedBy}</td>
-                    <td className="px-4 py-3.5">
-                      {(v.approvals || []).length === 0 ? (
-                        <span className="text-slate-400">-</span>
-                      ) : (
-                        v.approvals.map((a, idx) => (
-                          <div key={idx} className={`flex items-center gap-1 ${a.approved ? 'text-emerald-600' : 'text-red-500'}`}>
-                            {a.approved ? <CheckCircle2 size={12} /> : <XCircle size={12} />} {a.name}
-                          </div>
-                        ))
-                      )}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      {v.attachment ? (
-                        <a href={v.attachment} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-indigo-600 hover:underline text-sm">
-                          <Paperclip size={12} /> View
-                        </a>
-                      ) : '-'}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <span className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-600 px-2.5 py-1 text-xs font-medium ring-1 ring-inset ring-indigo-600/10 capitalize">
-                        {v.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <button onClick={() => handleSendMail(v)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-cyan-100 text-slate-500 hover:text-cyan-600 transition-colors" title="Send Mail">
-                          <Mail size={14} />
-                        </button>
-                        <button onClick={() => loadForEdit(v.id)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors" title="Edit">
-                          <Pencil size={14} />
-                        </button>
-                        <button onClick={handlePrint} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors" title="Print">
-                          <Printer size={14} />
-                        </button>
-                        <button onClick={() => handleDuplicate(v.id)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-teal-100 text-slate-500 hover:text-teal-600 transition-colors" title="Duplicate">
-                          <Copy size={14} />
-                        </button>
-                        <button onClick={() => handleDelete(v.id)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors" title="Delete">
-                          <Trash2 size={14} />
-                        </button>
-                        <button onClick={() => loadForEdit(v.id)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-500 hover:text-emerald-600 transition-colors" title="View">
-                          <Eye size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                ) : pageRows.map((v, i) => {
+                  const entries = v.entries || [];
+                  const debitEntry = entries.find((e) => Number(e.debit) > 0);
+                  const creditEntry = entries.find((e) => Number(e.credit) > 0);
+                  return (
+                    <tr key={v.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap align-top">
+                      <td className="px-4 py-3.5 text-slate-400 font-mono text-xs">{(page - 1) * pageSize + i + 1}</td>
+                      <td className="px-4 py-3.5 text-slate-600">{fmtDate(v.date)}</td>
+                      <td className="px-4 py-3.5 text-slate-600">{projectName(v.projectId)}</td>
+                      <td className="px-4 py-3.5 font-medium text-slate-700">{v.voucherNo}</td>
+                      <td className="px-4 py-3.5 text-indigo-600">{accountName(creditEntry?.accountId)}</td>
+                      <td className="px-4 py-3.5 text-indigo-600">{accountName(debitEntry?.accountId)}</td>
+                      <td className="px-4 py-3.5 font-medium text-slate-800">{Number(v.amount || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3.5 text-slate-600">{v.titleOfWork}</td>
+                      <td className="px-4 py-3.5 text-slate-600">{v.chequeReceiptNo}</td>
+                      <td className="px-4 py-3.5 text-slate-600">{v.narration}</td>
+                      <td className="px-4 py-3.5 text-slate-600">{v.addedBy}</td>
+                      <td className="px-4 py-3.5 text-slate-600">{v.editedBy}</td>
+                      <td className="px-4 py-3.5">
+                        {v.attachment ? (
+                          <a href={v.attachment} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-indigo-600 hover:underline text-sm">
+                            <Paperclip size={12} /> View
+                          </a>
+                        ) : '-'}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <span className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-600 px-2.5 py-1 text-xs font-medium ring-1 ring-inset ring-indigo-600/10 capitalize">
+                          {v.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <button onClick={() => handleSendMail(v)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-cyan-100 text-slate-500 hover:text-cyan-600 transition-colors" title="Send Mail">
+                            <Mail size={14} />
+                          </button>
+                          <button onClick={() => loadForEdit(v.id)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors" title="Edit">
+                            <Pencil size={14} />
+                          </button>
+                          <button onClick={handlePrint} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors" title="Print">
+                            <Printer size={14} />
+                          </button>
+                          <button onClick={() => handleDelete(v.id)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors" title="Delete">
+                            <Trash2 size={14} />
+                          </button>
+                          <button onClick={() => loadForEdit(v.id)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-500 hover:text-emerald-600 transition-colors" title="View">
+                            <Eye size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
-          {/* Pagination */}
           <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100">
             <span className="text-sm text-slate-500">
               Showing <span className="font-medium text-slate-700">{pageRows.length === 0 ? 0 : (page - 1) * pageSize + 1}</span> to{' '}

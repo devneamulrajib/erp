@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Pencil, Trash2, LayoutGrid, Plus, Tag } from 'lucide-react';
+import { Pencil, Trash2, LayoutGrid, Plus, Tag, Eye } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
@@ -29,6 +29,8 @@ export default function BillItemPage() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+
+  const [viewItem, setViewItem] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -97,6 +99,14 @@ export default function BillItemPage() {
   }
 
   function closeModal() { setModalOpen(false); }
+
+  function openViewModal(item) {
+    setViewItem(item);
+  }
+
+  function closeViewModal() {
+    setViewItem(null);
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -239,7 +249,7 @@ export default function BillItemPage() {
                       </td>
                       <td className="px-5 py-3.5">
                         <button
-                          onClick={() => openEditModal(item)}
+                          onClick={() => openViewModal(item)}
                           className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-medium hover:underline underline-offset-2"
                         >
                           <Tag size={13} className="text-slate-400" />
@@ -260,6 +270,13 @@ export default function BillItemPage() {
                       <td className="px-5 py-3.5 text-slate-500 max-w-[180px] truncate">{item.description || '—'}</td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => openViewModal(item)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                            title="View"
+                          >
+                            <Eye size={14} />
+                          </button>
                           <button
                             onClick={() => openEditModal(item)}
                             className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors"
@@ -426,6 +443,62 @@ export default function BillItemPage() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal open={!!viewItem} title="Bill Item Details" onClose={closeViewModal}>
+        {viewItem && (
+          <div>
+            <div className="flex items-center gap-3 mb-5 pb-4 border-b border-slate-100">
+              <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-500">
+                <Tag size={18} />
+              </div>
+              <div>
+                <div className="text-lg font-semibold text-slate-900">{viewItem.name}</div>
+                <span className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-600 px-2.5 py-1 text-xs font-mono font-medium ring-1 ring-inset ring-indigo-600/10 mt-1">
+                  {viewItem.code}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <div>
+                <div className="text-xs text-slate-400 mb-0.5">Category</div>
+                <div className="text-sm text-slate-800">{viewItem.category?.name || '—'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-400 mb-0.5">Brand</div>
+                <div className="text-sm text-slate-800">{viewItem.brand?.name || '—'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-400 mb-0.5">Unit</div>
+                <div className="text-sm text-slate-800">{viewItem.unit?.name || '—'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-400 mb-0.5">Purchase Price</div>
+                <div className="text-sm text-slate-800">{viewItem.purchasePrice ?? '—'}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-400 mb-0.5">Sale Price</div>
+                <div className="text-sm text-slate-800">{viewItem.salePrice ?? '—'}</div>
+              </div>
+            </div>
+
+            <div className="mb-2">
+              <div className="text-xs text-slate-400 mb-0.5">Description</div>
+              <div className="text-sm text-slate-800 whitespace-pre-wrap">{viewItem.description || '—'}</div>
+            </div>
+
+            <div className="flex justify-end pt-4 mt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={closeViewModal}
+                className="px-4 py-2.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

@@ -1,31 +1,36 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../api/axios';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import { getBankReconciliation, updateReconciliationStatus } from '../api/voucher';
-import { getChartOfAccounts } from '../api/chartOfAccounts';
+import { getBankAccounts } from '../api/bankAccount';
 import { Search, Landmark, CheckCircle2, XCircle, Clock } from 'lucide-react';
 
 const VOUCHER_TYPES = ['Payment', 'Receipt', 'Contra'];
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
+function toLocalDateStr(d) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
 function monthStart() {
   const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+  return toLocalDateStr(new Date(d.getFullYear(), d.getMonth(), 1));
 }
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+function todayStr() { return toLocalDateStr(new Date()); }
 
 export default function BankReconciliationPage() {
   const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [accounts, setAccounts] = useState([]);
+  const [banks, setBanks] = useState([]);
   const [updatingId, setUpdatingId] = useState(null);
 
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(todayStr());
-  const [account, setAccount] = useState('');
+  const [bank, setBank] = useState('');
   const [type, setType] = useState('');
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
@@ -35,7 +40,7 @@ export default function BankReconciliationPage() {
     setLoading(true);
     try {
       const { data } = await getBankReconciliation({
-        from, to, account: account || undefined, type: type || undefined,
+        from, to, account: bank || undefined, type: type || undefined,
       });
       setRows(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -44,20 +49,20 @@ export default function BankReconciliationPage() {
     } finally {
       setLoading(false);
     }
-  }, [from, to, account, type]);
+  }, [from, to, bank, type]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    getChartOfAccounts()
-      .then((data) => setAccounts(Array.isArray(data) ? data : []))
-      .catch(() => setAccounts([]));
+    getBankAccounts()
+      .then((data) => setBanks(Array.isArray(data) ? data : []))
+      .catch(() => setBanks([]));
   }, []);
 
   async function handleStatusChange(row, status) {
-    setUpdatingId(row._id);
+    setUpdatingId(row.id);
     try {
-      const { data } = await updateReconciliationStatus(row._id, status);
-      setRows((prev) => prev.map((r) => (r._id === row._id ? data : r)));
+      const { data } = await updateReconciliationStatus(row.id, status);
+      setRows((prev) => prev.map((r) => (r.id === row.id ? data : r)));
     } catch (err) {
       alert(err.response?.data?.message || err.message || 'Failed to update status');
     } finally {
@@ -68,7 +73,7 @@ export default function BankReconciliationPage() {
   const filtered = useMemo(() => rows.filter((r) => {
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
-    return [r.voucherNo, r.contact?.name, r.bank?.name, r.narration]
+    return [r.voucherNo, r.bank?.name, r.narration]
       .filter(Boolean)
       .some((v) => String(v).toLowerCase().includes(q));
   }), [rows, search]);
@@ -91,7 +96,6 @@ export default function BankReconciliationPage() {
       <Topbar />
 
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
-        {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
             <Breadcrumb
@@ -106,7 +110,6 @@ export default function BankReconciliationPage() {
           </div>
         </div>
 
-        {/* Summary strip */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
             <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Total Vouchers</div>
@@ -126,7 +129,6 @@ export default function BankReconciliationPage() {
           </div>
         </div>
 
-        {/* Filters panel */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 mb-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
             <div>
@@ -147,14 +149,14 @@ export default function BankReconciliationPage() {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Chart Of Account</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">Bank Account</label>
               <select
-                value={account}
-                onChange={(e) => setAccount(e.target.value)}
+                value={bank}
+                onChange={(e) => setBank(e.target.value)}
                 className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-full bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               >
                 <option value="">Select value</option>
-                {accounts.map((a) => <option key={a._id} value={a._id}>{a.name}</option>)}
+                {banks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
             <div>
@@ -180,9 +182,7 @@ export default function BankReconciliationPage() {
           </div>
         </div>
 
-        {/* Table panel */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          {/* Toolbar */}
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 bg-slate-50/50">
             <div className="flex items-center gap-2 text-sm text-slate-500">
               <span>Show</span>
@@ -207,7 +207,6 @@ export default function BankReconciliationPage() {
             </div>
           </div>
 
-          {/* Table */}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -236,17 +235,17 @@ export default function BankReconciliationPage() {
                     </td>
                   </tr>
                 ) : pageRows.map((row, i) => (
-                  <tr key={row._id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
+                  <tr key={row.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
                     <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">{(page - 1) * pageSize + i + 1}</td>
                     <td className="px-5 py-3.5">
                       <button
-                        onClick={() => navigate(`/accounts-module/receipt-list/add?id=${row._id}`)}
+                        onClick={() => navigate(`/accounts-module/receipt-list/add?id=${row.id}`)}
                         className="text-indigo-600 font-medium hover:underline underline-offset-2 font-mono text-xs"
                       >
                         {row.voucherNo}
                       </button>
                     </td>
-                    <td className="px-5 py-3.5 text-slate-700">{row.contact?.name || '-'}</td>
+                    <td className="px-5 py-3.5 text-slate-700">{row.narration || '-'}</td>
                     <td className="px-5 py-3.5 text-slate-700">{row.bank?.name || '-'}</td>
                     <td className="px-5 py-3.5 text-slate-500">
                       {new Date(row.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
@@ -255,11 +254,11 @@ export default function BankReconciliationPage() {
                       {row.chequeDate ? new Date(row.chequeDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
                     </td>
                     <td className="px-5 py-3.5 text-right font-mono font-medium text-slate-900">{formatMoney(row.amount)}</td>
-                    <td className="px-5 py-3.5 text-slate-500">{row.narration || ''}</td>
+                    <td className="px-5 py-3.5 text-slate-500">{row.chequeReceiptNo || ''}</td>
                     <td className="px-5 py-3.5">
                       <div className="flex gap-1.5">
                         <button
-                          disabled={updatingId === row._id}
+                          disabled={updatingId === row.id}
                           onClick={() => handleStatusChange(row, 'Honour')}
                           title="Honour"
                           className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors disabled:opacity-50 ${
@@ -271,7 +270,7 @@ export default function BankReconciliationPage() {
                           <CheckCircle2 size={14} />
                         </button>
                         <button
-                          disabled={updatingId === row._id}
+                          disabled={updatingId === row.id}
                           onClick={() => handleStatusChange(row, 'DisHonour')}
                           title="DisHonour"
                           className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors disabled:opacity-50 ${
@@ -295,7 +294,6 @@ export default function BankReconciliationPage() {
             </table>
           </div>
 
-          {/* Pagination */}
           <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100">
             <span className="text-sm text-slate-500">
               Showing <span className="font-medium text-slate-700">{filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}</span> to{' '}

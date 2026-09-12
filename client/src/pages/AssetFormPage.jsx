@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   getAsset, createAsset, updateAsset,
   addDepreciationEntry, addMovementEntry, addRevaluationEntry,
-  getItemOptions, getProjectOptions,
+  getItemOptions, getProjectOptions, getSiteOptions,
 } from '../api/asset';
 import { getChartOfAccounts } from '../api/chartOfAccounts';
+import { getJournalVouchers } from '../api/journalVoucher';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import { Plus } from 'lucide-react';
@@ -19,6 +20,40 @@ const EMPTY_FORM = {
   method: '', duration: '', computation: '', notDepreciableValue: '',
   expenseAccount: '', voucherNo: '',
 };
+
+function asArray(res) {
+  const body = res?.data ?? res;
+  if (Array.isArray(body)) return body;
+  return body?.rows || body?.data || [];
+}
+
+function computeSuggestedDepreciation(asset) {
+  if (!asset) return '';
+  const original = Number(asset.originalValue) || 0;
+  const notDepreciable = Number(asset.notDepreciableValue) || 0;
+  const duration = Number(asset.duration) || 0;
+  if (!duration) return '';
+
+  const periodsPerYear = asset.computation === 'Monthly' ? 12 : 1;
+  const totalPeriods = duration * periodsPerYear;
+  if (!totalPeriods) return '';
+
+  if (asset.method === 'Declining Balance' || asset.method === 'Double Declining Balance') {
+    const rateMultiplier = asset.method === 'Double Declining Balance' ? 2 : 1;
+    const periodRate = (rateMultiplier / duration) / periodsPerYear;
+    const currentBookValue = Number(asset.bookValue ?? original);
+    const amount = currentBookValue * periodRate;
+    return amount > 0 ? Math.round(amount * 100) / 100 : 0;
+  }
+
+  // Straight Line (default)
+  const depreciableBase = original - notDepreciable;
+  const amount = depreciableBase / totalPeriods;
+  return amount > 0 ? Math.round(amount * 100) / 100 : 0;
+}
+
+const REVALUATION_TYPE_OPTIONS = ['Appraisal', 'Insurance Valuation', 'Market Adjustment', 'Other'];
+const REVALUATION_REASON_OPTIONS = ['Market Reappraisal', 'Damage', 'Upgrade', 'Depreciation Correction', 'Insurance Claim', 'Other'];
 
 const inputClass = "w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition";
 const readOnlyClass = "w-40 border border-slate-200 bg-slate-50 rounded-lg px-3 py-2.5 text-sm text-right text-slate-500";
@@ -39,6 +74,8 @@ export default function AssetFormPage() {
   const [itemOptions, setItemOptions] = useState([]);
   const [projectOptions, setProjectOptions] = useState([]);
   const [accountOptions, setAccountOptions] = useState([]);
+  const [siteOptions, setSiteOptions] = useState([]);
+  const [journalVoucherOptions, setJournalVoucherOptions] = useState([]);
 
   const loadAsset = useCallback(async () => {
     if (!isEdit) return;
@@ -65,9 +102,11 @@ export default function AssetFormPage() {
   useEffect(() => { loadAsset(); }, [loadAsset]);
 
   useEffect(() => {
-    getItemOptions().then((res) => setItemOptions(res?.data ?? res ?? [])).catch(console.error);
-    getProjectOptions().then((res) => setProjectOptions(res?.data ?? res ?? [])).catch(console.error);
-    getChartOfAccounts().then((res) => setAccountOptions(res?.data ?? res ?? [])).catch(console.error);
+    getItemOptions().then((res) => setItemOptions(asArray(res))).catch((err) => console.error('Failed to load items', err));
+    getProjectOptions().then((res) => setProjectOptions(asArray(res))).catch((err) => console.error('Failed to load projects', err));
+    getChartOfAccounts().then((res) => setAccountOptions(asArray(res))).catch((err) => console.error('Failed to load accounts', err));
+    getSiteOptions().then((res) => setSiteOptions(asArray(res))).catch((err) => console.error('Failed to load sites', err));
+    getJournalVouchers().then((res) => setJournalVoucherOptions(asArray(res))).catch((err) => console.error('Failed to load journal vouchers', err));
   }, []);
 
   async function handleSave() {
@@ -148,10 +187,16 @@ export default function AssetFormPage() {
               />
             )}
             {activeTab === 'Depreciation Board' && (
-              <DepreciationBoardTab assetId={id} asset={asset} reload={loadAsset} fmtDate={fmtDate} />
+              <DepreciationBoardTab
+                assetId={id}
+                asset={asset}
+                reload={loadAsset}
+                fmtDate={fmtDate}
+                journalVoucherOptions={journalVoucherOptions}
+              />
             )}
             {activeTab === 'Movement History' && (
-              <MovementHistoryTab assetId={id} asset={asset} reload={loadAsset} fmtDate={fmtDate} />
+              <MovementHistoryTab assetId={id} asset={asset} reload={loadAsset} fmtDate={fmtDate} siteOptions={siteOptions} />
             )}
             {activeTab === 'Revaluations History' && (
               <RevaluationsHistoryTab assetId={id} asset={asset} reload={loadAsset} fmtDate={fmtDate} />
@@ -339,19 +384,32 @@ function AssetTab({
   );
 }
 
-function DepreciationBoardTab({ assetId, asset, reload, fmtDate }) {
+function DepreciationBoardTab({ assetId, asset, reload, fmtDate, journalVoucherOptions }) {
   const [form, setForm] = useState({ date: '', reference: '', depreciation: '', journalEntry: '' });
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  const suggested = useMemo(() => computeSuggestedDepreciation(asset), [asset]);
+
+  useEffect(() => {
+    if (!asset) return;
+    setForm((f) => (f.depreciation === '' ? { ...f, depreciation: suggested } : f));
+  }, [asset, suggested]);
 
   async function handleAdd(e) {
     e.preventDefault();
-    if (!form.date || !form.depreciation) return;
+    setFormError('');
+    if (!form.date || !form.depreciation) {
+      setFormError('Date and Depreciation are required');
+      return;
+    }
     setSaving(true);
     try {
       await addDepreciationEntry(assetId, form);
       setForm({ date: '', reference: '', depreciation: '', journalEntry: '' });
       await reload();
     } catch (err) {
+      setFormError(err.response?.data?.message || 'Failed to add entry');
       console.error('Failed to add depreciation entry', err);
     } finally {
       setSaving(false);
@@ -360,6 +418,7 @@ function DepreciationBoardTab({ assetId, asset, reload, fmtDate }) {
 
   return (
     <div>
+      {formError && <div className="mb-3 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{formError}</div>}
       <form onSubmit={handleAdd} className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5 items-end">
         <div>
           <label className={labelClass}>Date</label>
@@ -370,12 +429,20 @@ function DepreciationBoardTab({ assetId, asset, reload, fmtDate }) {
           <input value={form.reference} onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))} className={inputClass} />
         </div>
         <div>
-          <label className={labelClass}>Depreciation</label>
+          <label className={labelClass}>
+            Depreciation
+            {suggested !== '' && <span className="text-slate-400 font-normal ml-1">(suggested: {suggested})</span>}
+          </label>
           <input type="number" value={form.depreciation} onChange={(e) => setForm((f) => ({ ...f, depreciation: e.target.value }))} className={inputClass} />
         </div>
         <div>
           <label className={labelClass}>Journal Entry</label>
-          <input value={form.journalEntry} onChange={(e) => setForm((f) => ({ ...f, journalEntry: e.target.value }))} className={inputClass} />
+          <select value={form.journalEntry} onChange={(e) => setForm((f) => ({ ...f, journalEntry: e.target.value }))} className={inputClass}>
+            <option value="">Select voucher</option>
+            {journalVoucherOptions.map((v) => (
+              <option key={v.id} value={v.code || v.voucherNo || v.id}>{v.code || v.voucherNo || v.id}</option>
+            ))}
+          </select>
         </div>
         <button type="submit" disabled={saving} className="inline-flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 disabled:opacity-50 transition-colors">
           <Plus size={14} strokeWidth={2.5} /> Add
@@ -414,19 +481,25 @@ function DepreciationBoardTab({ assetId, asset, reload, fmtDate }) {
   );
 }
 
-function MovementHistoryTab({ assetId, asset, reload, fmtDate }) {
+function MovementHistoryTab({ assetId, asset, reload, fmtDate, siteOptions }) {
   const [form, setForm] = useState({ date: '', from: '', to: '' });
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
 
   async function handleAdd(e) {
     e.preventDefault();
-    if (!form.date || !form.to) return;
+    setFormError('');
+    if (!form.date || !form.to) {
+      setFormError('Date and To are required');
+      return;
+    }
     setSaving(true);
     try {
       await addMovementEntry(assetId, form);
       setForm({ date: '', from: '', to: '' });
       await reload();
     } catch (err) {
+      setFormError(err.response?.data?.message || 'Failed to add entry');
       console.error('Failed to add movement entry', err);
     } finally {
       setSaving(false);
@@ -435,6 +508,7 @@ function MovementHistoryTab({ assetId, asset, reload, fmtDate }) {
 
   return (
     <div>
+      {formError && <div className="mb-3 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{formError}</div>}
       <form onSubmit={handleAdd} className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 items-end">
         <div>
           <label className={labelClass}>Date</label>
@@ -442,11 +516,17 @@ function MovementHistoryTab({ assetId, asset, reload, fmtDate }) {
         </div>
         <div>
           <label className={labelClass}>From</label>
-          <input value={form.from} onChange={(e) => setForm((f) => ({ ...f, from: e.target.value }))} className={inputClass} />
+          <select value={form.from} onChange={(e) => setForm((f) => ({ ...f, from: e.target.value }))} className={inputClass}>
+            <option value="">Select site</option>
+            {siteOptions.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+          </select>
         </div>
         <div>
           <label className={labelClass}>To</label>
-          <input value={form.to} onChange={(e) => setForm((f) => ({ ...f, to: e.target.value }))} className={inputClass} />
+          <select value={form.to} onChange={(e) => setForm((f) => ({ ...f, to: e.target.value }))} className={inputClass}>
+            <option value="">Select site</option>
+            {siteOptions.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+          </select>
         </div>
         <button type="submit" disabled={saving} className="inline-flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 disabled:opacity-50 transition-colors">
           <Plus size={14} strokeWidth={2.5} /> Add
@@ -482,18 +562,30 @@ function MovementHistoryTab({ assetId, asset, reload, fmtDate }) {
 }
 
 function RevaluationsHistoryTab({ assetId, asset, reload, fmtDate }) {
-  const [form, setForm] = useState({ date: '', newValue: '', note: '' });
+  const [form, setForm] = useState({ date: '', newValue: '', revaluationType: '', noteReason: '', customNote: '' });
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
 
   async function handleAdd(e) {
     e.preventDefault();
-    if (!form.date || !form.newValue) return;
+    setFormError('');
+    if (!form.date || !form.newValue) {
+      setFormError('Date and New Value are required');
+      return;
+    }
     setSaving(true);
     try {
-      await addRevaluationEntry(assetId, form);
-      setForm({ date: '', newValue: '', note: '' });
+      const note = form.noteReason === 'Other' ? form.customNote : form.noteReason;
+      await addRevaluationEntry(assetId, {
+        date: form.date,
+        newValue: form.newValue,
+        revaluationType: form.revaluationType,
+        note,
+      });
+      setForm({ date: '', newValue: '', revaluationType: '', noteReason: '', customNote: '' });
       await reload();
     } catch (err) {
+      setFormError(err.response?.data?.message || 'Failed to add entry');
       console.error('Failed to add revaluation entry', err);
     } finally {
       setSaving(false);
@@ -502,7 +594,8 @@ function RevaluationsHistoryTab({ assetId, asset, reload, fmtDate }) {
 
   return (
     <div>
-      <form onSubmit={handleAdd} className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 items-end">
+      {formError && <div className="mb-3 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{formError}</div>}
+      <form onSubmit={handleAdd} className="grid grid-cols-2 sm:grid-cols-6 gap-3 mb-5 items-end">
         <div>
           <label className={labelClass}>Date</label>
           <input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className={inputClass} />
@@ -512,9 +605,25 @@ function RevaluationsHistoryTab({ assetId, asset, reload, fmtDate }) {
           <input type="number" value={form.newValue} onChange={(e) => setForm((f) => ({ ...f, newValue: e.target.value }))} className={inputClass} />
         </div>
         <div>
-          <label className={labelClass}>Note</label>
-          <input value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} className={inputClass} />
+          <label className={labelClass}>Type</label>
+          <select value={form.revaluationType} onChange={(e) => setForm((f) => ({ ...f, revaluationType: e.target.value }))} className={inputClass}>
+            <option value="">Select type</option>
+            {REVALUATION_TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
         </div>
+        <div>
+          <label className={labelClass}>Note</label>
+          <select value={form.noteReason} onChange={(e) => setForm((f) => ({ ...f, noteReason: e.target.value }))} className={inputClass}>
+            <option value="">Select reason</option>
+            {REVALUATION_REASON_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </div>
+        {form.noteReason === 'Other' && (
+          <div>
+            <label className={labelClass}>Custom Note</label>
+            <input value={form.customNote} onChange={(e) => setForm((f) => ({ ...f, customNote: e.target.value }))} className={inputClass} placeholder="Describe reason" />
+          </div>
+        )}
         <button type="submit" disabled={saving} className="inline-flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 disabled:opacity-50 transition-colors">
           <Plus size={14} strokeWidth={2.5} /> Add
         </button>
@@ -529,12 +638,13 @@ function RevaluationsHistoryTab({ assetId, asset, reload, fmtDate }) {
               <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Old Value</th>
               <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">New Value</th>
               <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Change</th>
+              <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Type</th>
               <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Note</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {(!asset?.revaluationEntries || asset.revaluationEntries.length === 0) ? (
-              <tr><td colSpan={6} className="text-center py-10 text-slate-400 text-sm">No entries found</td></tr>
+              <tr><td colSpan={7} className="text-center py-10 text-slate-400 text-sm">No entries found</td></tr>
             ) : asset.revaluationEntries.map((e, i) => (
               <tr key={e.id} className="hover:bg-slate-50/70 transition-colors">
                 <td className="px-4 py-3 text-slate-400 font-mono text-xs">{i + 1}</td>
@@ -542,6 +652,7 @@ function RevaluationsHistoryTab({ assetId, asset, reload, fmtDate }) {
                 <td className="px-4 py-3 text-slate-600">{e.oldValue}</td>
                 <td className="px-4 py-3 text-slate-600">{e.newValue}</td>
                 <td className="px-4 py-3 text-slate-600">{e.change}</td>
+                <td className="px-4 py-3 text-slate-600">{e.revaluationType}</td>
                 <td className="px-4 py-3 text-slate-600">{e.note}</td>
               </tr>
             ))}

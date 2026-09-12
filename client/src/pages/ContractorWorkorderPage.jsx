@@ -1,4 +1,3 @@
-// client/src/pages/ContractorWorkorderPage.jsx
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
@@ -11,6 +10,7 @@ import { getUnits } from '../api/unit';
 import {
   getContractorWorkorder, getNextContractorWorkorderCode,
   createContractorWorkorder, updateContractorWorkorder,
+  uploadContractorWorkorderAttachment,
 } from '../api/contractorWorkorder';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
@@ -55,6 +55,8 @@ export default function ContractorWorkorderPage() {
   const [selectedItemId, setSelectedItemId] = useState('');
   const [contentBody, setContentBody] = useState('');
   const [attachmentName, setAttachmentName] = useState('');
+  const [attachmentFile, setAttachmentFile] = useState(null);
+  const [existingAttachment, setExistingAttachment] = useState('');
 
   const [rows, setRows] = useState([]);
 
@@ -105,6 +107,7 @@ export default function ContractorWorkorderPage() {
       setVatPercent(o.vatPercent || 0);
       setAitIncluded(!!o.aitIncluded);
       setAitPercent(o.aitPercent || 0);
+      setExistingAttachment(o.attachment || '');
     }).catch((err) => {
       console.error(err);
       setError('Failed to load contractor work order.');
@@ -153,14 +156,17 @@ export default function ContractorWorkorderPage() {
       const payload = {
         code, date, supplier, projectType, project, site, category, contentBody,
         items: rows.map((r) => ({ ...r, amount: num(r.rate) * num(r.quantity) })),
-        attachment: attachmentName,
         vatIncluded, vatPercent, aitIncluded, aitPercent,
       };
-      if (isEdit) {
-        await updateContractorWorkorder(id, payload);
-      } else {
-        await createContractorWorkorder(payload);
+
+      const result = isEdit
+        ? await updateContractorWorkorder(id, payload)
+        : await createContractorWorkorder(payload);
+
+      if (attachmentFile) {
+        await uploadContractorWorkorderAttachment(isEdit ? id : result.id, attachmentFile);
       }
+
       navigate('/billing/contractor-work-order-list');
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to save work order');
@@ -256,12 +262,25 @@ export default function ContractorWorkorderPage() {
                 </select>
               </Field>
               <Field label="Attachment">
-                <label className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white text-slate-500 cursor-pointer hover:bg-slate-50 transition">
-                  <Upload size={14} className="text-slate-400" />
-                  <span className="truncate">{attachmentName || 'Choose File'}</span>
-                  <input type="file" className="hidden" onChange={(e) => setAttachmentName(e.target.files?.[0]?.name || '')} />
-                </label>
-              </Field>
+  <label className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white text-slate-500 cursor-pointer hover:bg-slate-50 transition">
+    <Upload size={14} className="text-slate-400" />
+    <span className="truncate">{attachmentName || 'Choose File'}</span>
+    <input
+      type="file"
+      className="hidden"
+      onChange={(e) => {
+        const f = e.target.files ? e.target.files[0] : null;
+        setAttachmentFile(f);
+        setAttachmentName(f ? f.name : '');
+      }}
+    />
+  </label>
+  {(!attachmentName && existingAttachment) ? (
+    <a href={existingAttachment} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline mt-1 inline-block">
+      View current file
+    </a>
+  ) : null}
+</Field>
               <Field label="Category">
                 <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
                   <option value="">Select Category</option>

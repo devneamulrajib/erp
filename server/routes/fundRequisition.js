@@ -9,11 +9,11 @@ function generateReference() {
 }
 
 const includeList = [
-  { model: Project, attributes: ['name'] },
-  { model: Site, attributes: ['name'] },
-  { model: User, as: 'From', attributes: ['name', 'code'] },
-  { model: FundRequisitionPayment },
-  { model: FundRequisitionApproval },
+  { model: Project, as: 'project', attributes: ['name'] },
+  { model: Site, as: 'site', attributes: ['name'] },
+  { model: User, as: 'from', attributes: ['name'] },
+  { model: FundRequisitionPayment, as: 'payments' },
+  { model: FundRequisitionApproval, as: 'approvals' },
 ];
 
 router.get('/', auth, async (req, res) => {
@@ -25,9 +25,9 @@ router.get('/', auth, async (req, res) => {
     let requisitions = await FundRequisition.findAll({ where, include: includeList, order: [['createdAt', 'DESC']] });
 
     if (approveStatus === 'Approved') {
-      requisitions = requisitions.filter((r) => r.FundRequisitionApprovals.length > 0 && r.FundRequisitionApprovals.every((a) => a.approved));
+      requisitions = requisitions.filter((r) => r.approvals.length > 0 && r.approvals.every((a) => a.approved));
     } else if (approveStatus === 'Pending Approval') {
-      requisitions = requisitions.filter((r) => r.FundRequisitionApprovals.length === 0 || r.FundRequisitionApprovals.some((a) => !a.approved));
+      requisitions = requisitions.filter((r) => r.approvals.length === 0 || r.approvals.some((a) => !a.approved));
     }
 
     res.json(requisitions);

@@ -6,6 +6,7 @@ const AssetRevaluationEntry = sequelize.define('AssetRevaluationEntry', {
   oldValue: { type: DataTypes.FLOAT, defaultValue: 0 },
   newValue: { type: DataTypes.FLOAT, defaultValue: 0 },
   change: { type: DataTypes.FLOAT, defaultValue: 0 },
+  revaluationType: { type: DataTypes.STRING, defaultValue: '' },
   note: { type: DataTypes.STRING, defaultValue: '' },
 }, { timestamps: false });
 

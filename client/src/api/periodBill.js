@@ -24,3 +24,11 @@ export async function deletePeriodBill(id) {
   const res = await api.delete(`/period-bill/${id}`);
   return res.data;
 }
+export async function uploadPeriodBillAttachment(id, file) {
+  const fd = new FormData();
+  fd.append('attachment', file);
+  const res = await api.post(`/period-bill/${id}/attachment`, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+}

@@ -31,8 +31,8 @@ function sameId(a, b) {
   return a !== '' && a != null && b !== '' && b != null && String(a) === String(b);
 }
 
-const inputCls = 'w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition';
-const inputReadOnlyCls = 'w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-slate-50 text-slate-500';
+const inputCls = 'w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition';
+const inputReadOnlyCls = 'w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm bg-slate-50 text-slate-500';
 
 export default function LabourWorkerBillPage() {
   const navigate = useNavigate();
@@ -89,7 +89,6 @@ export default function LabourWorkerBillPage() {
 
   useEffect(() => {
     getItems(category ? { category } : {}).then((res) => setItems(asArray(res))).catch((err) => console.error('Failed to load items', err));
-    // Category changed, so any previously selected item no longer applies.
     setSelectedItemId('');
   }, [category]);
 
@@ -160,8 +159,6 @@ export default function LabourWorkerBillPage() {
     }]);
     setSelectedItemId('');
   }
-  // After a row is added, jump straight into its Qty/Days field so the user
-  // can type the real value without hunting for it.
   useEffect(() => {
     if (rows.length === 0) return;
     const lastInput = qtyInputRefs.current[rows.length - 1];
@@ -214,95 +211,85 @@ export default function LabourWorkerBillPage() {
     <div className="min-h-screen w-full bg-slate-50 text-left">
       <Topbar />
 
-      <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-6">
+      <div className="max-w-[1300px] mx-auto px-4 sm:px-6 py-5">
         {/* Header */}
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
           <div>
             <Breadcrumb
               items={[
                 { label: 'Home', to: '/dashboard' },
                 { label: 'Labour/Worker Bill', to: '/service/labor-worker-bill-list' },
-                { label: isEdit ? 'Labour/Worker Bill Edit' : 'Labour/Worker Bill Add' },
+                { label: isEdit ? 'Edit' : 'Add' },
               ]}
             />
-            <h1 className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">
+            <h1 className="text-xl font-semibold text-slate-900 mt-1 tracking-tight">
               {isEdit ? 'Edit Labour/Worker Bill' : 'New Labour/Worker Bill'}
             </h1>
-            <p className="text-sm text-slate-500 mt-0.5">Record work items, security, and payment for a labourer or worker</p>
+            <p className="text-xs text-slate-500 mt-0.5">Record work items, security, and payment for a labourer or worker</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setShowItemModal(true)}
-              className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors"
+              className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-medium px-3.5 py-2 rounded-lg shadow-sm transition-colors"
             >
-              <Plus size={16} strokeWidth={2.5} />
+              <Plus size={15} />
               Item Add
             </button>
             <button
               type="button"
               onClick={() => navigate('/service/labor-worker-bill-list')}
-              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 transition-colors"
+              className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-3.5 py-2 rounded-lg shadow-sm shadow-indigo-600/20 transition-colors"
             >
-              Labour/Worker Bill List
+              Bill List
             </button>
           </div>
         </div>
 
         <form onSubmit={handleSubmit}>
           {error && (
-            <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-5">{error}</div>
+            <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>
           )}
 
-          {/* Main details card */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-5">
-            <h2 className="text-sm font-semibold text-slate-800 mb-4">Bill Details</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Main details card — condensed into fewer, denser rows */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               <Field label="Date">
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
               </Field>
               <Field label="Contractor" required>
                 <select value={party} onChange={(e) => setParty(e.target.value)} className={inputCls}>
-                  <option value="">Select One Option</option>
+                  <option value="">Select</option>
                   {parties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
-                {parties.length === 0 && (
-                  <p className="text-xs text-amber-600 mt-1.5">No contractors/workers found yet.</p>
-                )}
               </Field>
               <Field label="Ledger">
                 <select value={ledger} onChange={(e) => setLedger(e.target.value)} className={inputCls}>
-                  <option value="">Select Ledger</option>
+                  <option value="">Select</option>
                   {ledgers.map((l) => <option key={l.id} value={l.id}>{l.code ? `${l.code}-${l.name}` : l.name}</option>)}
                 </select>
               </Field>
               <Field label="Code">
                 <input value={code} readOnly className={`${inputReadOnlyCls} font-mono`} />
               </Field>
-            </div>
-
-            <div className="border-t border-slate-100 my-5" />
-
-            <h2 className="text-sm font-semibold text-slate-800 mb-4">Project &amp; Work Reference</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <Field label="Project Type">
                 <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
-                  <option value="">Select value</option>
+                  <option value="">Select</option>
                   {projectTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
               </Field>
               <Field label="Project">
                 <select value={project} onChange={(e) => setProject(e.target.value)} className={inputCls}>
-                  <option value="">Select Project</option>
+                  <option value="">Select</option>
                   {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </Field>
               <Field label="Title/Name of Work">
-                <input value={titleOfWork} onChange={(e) => setTitleOfWork(e.target.value)} className={inputCls} placeholder="Select Title/Name of Work" />
+                <input value={titleOfWork} onChange={(e) => setTitleOfWork(e.target.value)} className={inputCls} placeholder="Title of work" />
               </Field>
               <Field label="Site">
                 <select value={site} onChange={(e) => setSite(e.target.value)} className={inputCls}>
-                  <option value="">Select Site</option>
+                  <option value="">Select</option>
                   {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </Field>
@@ -310,24 +297,25 @@ export default function LabourWorkerBillPage() {
                 <input value={refWoNo} onChange={(e) => setRefWoNo(e.target.value)} className={inputCls} placeholder="PO No." />
               </Field>
               <Field label="If Task">
-                <input value={task} onChange={(e) => setTask(e.target.value)} className={inputCls} placeholder="Select Task" />
+                <input value={task} onChange={(e) => setTask(e.target.value)} className={inputCls} placeholder="Task" />
               </Field>
             </div>
 
-            <div className="border-t border-slate-100 my-5" />
+            <div className="border-t border-slate-100 my-4" />
 
-            <h2 className="text-sm font-semibold text-slate-800 mb-1 flex items-center gap-1.5">
-              <Package size={15} className="text-slate-400" /> Add Items
+            <h2 className="text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+              <Package size={13} className="text-slate-400" /> Add Items
             </h2>
-            <p className="text-xs text-slate-400 mb-4">Pick a category to narrow the list, choose an item, then click + to add it to the table below.</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <p className="text-[11px] text-slate-400 mb-3">Pick a category, choose an item, then click + to add it below.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="Category">
                 <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
                   <option value="">All Categories</option>
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </Field>
-              <Field label="Select Item">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-medium text-slate-500 mb-1">Select Item</label>
                 <div className="flex gap-2">
                   <select
                     value={selectedItemId}
@@ -342,43 +330,44 @@ export default function LabourWorkerBillPage() {
                     onClick={addItemRow}
                     disabled={!selectedItemId}
                     title={selectedItemId ? 'Add this item to the bill' : 'Select an item first'}
-                    className="w-10 h-10 flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                    className="w-9 h-9 flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
                   >
-                    <Plus size={16} />
+                    <Plus size={15} />
                   </button>
                 </div>
-                <p className="text-xs text-slate-400 mt-1.5">
+                <p className="text-[11px] text-slate-400 mt-1">
                   {items.length === 0
-                    ? (category ? 'No items in this category yet — use "Item Add" above to create one.' : 'No items yet — use "Item Add" above to create one.')
-                    : (category ? `Showing items in "${selectedCategoryName || 'this category'}"` : 'Showing all items — pick a category to narrow this list')}
+                    ? (category ? 'No items in this category yet — use "Item Add" above.' : 'No items yet — use "Item Add" above.')
+                    : (category ? `Showing items in "${selectedCategoryName || 'this category'}"` : 'Showing all items')}
                 </p>
-                {itemNotice && <p className="text-xs text-red-500 mt-1">{itemNotice}</p>}
-              </Field>
+                {itemNotice && <p className="text-[11px] text-red-500 mt-1">{itemNotice}</p>}
+              </div>
             </div>
           </div>
 
-          {/* Items table */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-5">
-            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                <ListChecks size={15} className="text-slate-400" /> Bill Items
+          {/* Items table — tighter row height, smaller font, horizontal
+              scroll on narrow screens rather than squeezing columns unreadably */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-4">
+            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                <ListChecks size={13} className="text-slate-400" /> Bill Items
               </h3>
-              <span className="text-xs font-medium text-slate-500 bg-slate-100 rounded-full px-2.5 py-1">{rows.length} added</span>
+              <span className="text-[11px] font-medium text-slate-500 bg-slate-100 rounded-full px-2 py-0.5">{rows.length} added</span>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
-                    {['Labour/Worker', 'Description', 'Unit', 'Qty/Days', 'Rate', 'Gross', 'Security', 'Net Payable', 'Action'].map((h) => (
-                      <th key={h} className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">{h}</th>
+                    {['Labour/Worker', 'Description', 'Unit', 'Qty/Days', 'Rate', 'Gross', 'Security', 'Net Payable', ''].map((h) => (
+                      <th key={h} className="px-3 py-2 text-left font-medium uppercase tracking-wide">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="text-center py-10 text-slate-400 text-sm">
-                        No items added yet — choose a category and item above, then click <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-indigo-600 text-white align-middle mx-0.5"><Plus size={11} /></span> to add it here.
+                      <td colSpan={9} className="text-center py-8 text-slate-400 text-xs">
+                        No items added yet — pick a category and item above, then click + to add it here.
                       </td>
                     </tr>
                   ) : (
@@ -387,55 +376,55 @@ export default function LabourWorkerBillPage() {
                       const netPayable = gross - num(r.security);
                       return (
                         <tr key={i} className="hover:bg-slate-50/70 transition-colors">
-                          <td className="px-5 py-3 text-slate-700 font-medium">{r.itemName}</td>
-                          <td className="px-5 py-3">
+                          <td className="px-3 py-2 text-slate-700 font-medium whitespace-nowrap">{r.itemName}</td>
+                          <td className="px-3 py-2">
                             <input
                               value={r.description}
                               onChange={(e) => updateRow(i, 'description', e.target.value)}
                               placeholder="Optional note"
-                              className="w-44 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                              className="w-36 border border-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                             />
                           </td>
-                          <td className="px-5 py-3 text-slate-700">{r.unit}</td>
-                          <td className="px-5 py-3">
+                          <td className="px-3 py-2 text-slate-700 whitespace-nowrap">{r.unit}</td>
+                          <td className="px-3 py-2">
                             <input
                               ref={(el) => (qtyInputRefs.current[i] = el)}
                               type="number"
                               min="0"
                               value={r.qtyDays}
                               onChange={(e) => updateRow(i, 'qtyDays', e.target.value)}
-                              className="w-20 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                              className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                             />
                           </td>
-                          <td className="px-5 py-3">
+                          <td className="px-3 py-2">
                             <input
                               type="number"
                               min="0"
                               step="0.01"
                               value={r.rate}
                               onChange={(e) => updateRow(i, 'rate', e.target.value)}
-                              className="w-24 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                              className="w-20 border border-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                             />
                           </td>
-                          <td className="px-5 py-3 font-medium text-slate-900">{gross.toLocaleString()}</td>
-                          <td className="px-5 py-3">
+                          <td className="px-3 py-2 font-medium text-slate-900 whitespace-nowrap">{gross.toLocaleString()}</td>
+                          <td className="px-3 py-2">
                             <input
                               type="number"
                               min="0"
                               value={r.security}
                               onChange={(e) => updateRow(i, 'security', e.target.value)}
-                              className="w-20 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                              className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                             />
                           </td>
-                          <td className="px-5 py-3 font-medium text-slate-900">{netPayable.toLocaleString()}</td>
-                          <td className="px-5 py-3">
+                          <td className="px-3 py-2 font-medium text-slate-900 whitespace-nowrap">{netPayable.toLocaleString()}</td>
+                          <td className="px-3 py-2">
                             <button
                               type="button"
                               onClick={() => removeRow(i)}
                               title="Remove item"
-                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors"
+                              className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={13} />
                             </button>
                           </td>
                         </tr>
@@ -447,18 +436,18 @@ export default function LabourWorkerBillPage() {
             </div>
           </div>
 
-          {/* Totals card */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-5">
-            <h2 className="text-sm font-semibold text-slate-800 mb-4">Totals</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {/* Totals card — 4-across grid instead of the previous sprawl */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-4">
+            <h2 className="text-xs font-semibold text-slate-700 mb-3">Totals</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Field label="Subtotal">
                 <input value={subtotal.toLocaleString()} readOnly className={inputReadOnlyCls} />
               </Field>
-              <Field label="VAT(%)">
-                <div className="flex items-center gap-2">
+              <Field label="VAT (%)">
+                <div className="flex items-center gap-1.5">
                   <input type="number" min="0" value={vatPercent} onChange={(e) => setVatPercent(e.target.value)} className={inputCls} />
-                  <label className="flex items-center gap-1.5 text-xs text-slate-600 whitespace-nowrap">
-                    <input type="checkbox" checked={vatIncluded} onChange={(e) => setVatIncluded(e.target.checked)} className="rounded border-slate-300" /> Include
+                  <label className="flex items-center gap-1 text-[11px] text-slate-600 whitespace-nowrap">
+                    <input type="checkbox" checked={vatIncluded} onChange={(e) => setVatIncluded(e.target.checked)} className="rounded border-slate-300" /> Inc.
                   </label>
                 </div>
               </Field>
@@ -480,14 +469,20 @@ export default function LabourWorkerBillPage() {
               <Field label="Payment Method">
                 <input value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className={inputCls} />
               </Field>
-              <Field label="Attachment">
-                <input
-                  type="file"
-                  onChange={(e) => setAttachmentName(e.target.files?.[0]?.name || '')}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:bg-slate-100 file:text-slate-600 file:text-xs file:font-medium hover:file:bg-slate-200 transition"
-                />
-                {attachmentName && <p className="text-xs text-slate-500 mt-1.5 truncate">Selected: {attachmentName}</p>}
-              </Field>
+              <div className="col-span-2 sm:col-span-4">
+                <Field label="Attachment">
+                  <input
+                    type="file"
+                    onChange={(e) => setAttachmentName(e.target.files?.[0]?.name || '')}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs bg-white file:mr-3 file:px-2.5 file:py-1 file:rounded-md file:border-0 file:bg-slate-100 file:text-slate-600 file:text-xs file:font-medium hover:file:bg-slate-200 transition"
+                  />
+                  {attachmentName && (
+                    <p className="text-[11px] text-amber-600 mt-1">
+                      Selected: {attachmentName} — note: this file is not yet uploaded to the server (only its name is saved). Ask if you want this wired up properly.
+                    </p>
+                  )}
+                </Field>
+              </div>
             </div>
           </div>
 
@@ -579,9 +574,9 @@ function ItemAddModal({ categories, brands, units, onBrandCreated, onClose, onCr
               <button
                 type="button"
                 onClick={() => setShowBrandInput((s) => !s)}
-                className="w-10 h-10 flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white flex-shrink-0"
+                className="w-9 h-9 flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white flex-shrink-0"
               >
-                <Plus size={16} />
+                <Plus size={15} />
               </button>
             </div>
             {showBrandInput && (
@@ -635,7 +630,7 @@ function Modal({ title, onClose, children }) {
 function Field({ label, required, children }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-slate-500 mb-1.5">
+      <label className="block text-xs font-medium text-slate-500 mb-1">
         {label}{required && <span className="text-red-500">*</span>}
       </label>
       {children}

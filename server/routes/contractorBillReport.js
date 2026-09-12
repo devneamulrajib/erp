@@ -21,8 +21,8 @@ router.get('/', auth, async (req, res) => {
     const bills = await LabourBill.findAll({
       where,
       include: [
-        { model: Party, attributes: ['name'] },       // default alias: Party
-        { model: Project, attributes: ['name'] },      // default alias: Project
+        { model: Party, as: 'party', attributes: ['name'] },
+        { model: Project, as: 'project', attributes: ['name'] },
         { model: LabourBillItem },                     // default alias: LabourBillItems
       ],
       order: [['date', 'DESC']],
@@ -33,7 +33,7 @@ router.get('/', auth, async (req, res) => {
       (bill.LabourBillItems || []).forEach((item) => {
         rows.push({
           invoiceNo: bill.code,
-          contractor: bill.Party?.name || '',
+          contractor: bill.party?.name || '',
           labourWorker: item.itemName || '',
           particulars: item.description || '',
           qtyDays: item.qtyDays || 0,

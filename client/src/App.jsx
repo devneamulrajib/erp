@@ -7,6 +7,7 @@ import ProjectType from './pages/ProjectType'
 import Project from './pages/Project'
 import AgreementList from './pages/AgreementList'
 import AgreementForm from './pages/AgreementForm'
+import AgreementView from './pages/AgreementView'
 import PartyList from './pages/PartyList'
 import Site from './pages/Site'
 import Flat from './pages/Flat'
@@ -101,137 +102,205 @@ import MaterialUsageReportPage from './pages/MaterialUsageReportPage';
 import PurchaseDetailsReportPage from './pages/PurchaseDetailsReportPage';
 import PurchaseOrderReceiveReportPage from './pages/PurchaseOrderReceiveReportPage';
 import AccountsDashboard from './pages/AccountsDashboard'
+import CashBankBookPage from './pages/CashBankBookPage'
+import BankAccountPage from './pages/BankAccountPage'
+import GeneralLedgerPage from './pages/GeneralLedgerPage'
+import CashFlowStatementPage from './pages/CashFlowStatementPage'
+import IncomeStatementPage from './pages/IncomeStatementPage'
+import TrialBalancePage from './pages/TrialBalancePage'
+import BalanceSheetPage from './pages/BalanceSheetPage'
+import PortalInvoices from './portal/pages/PortalInvoices'
+import PortalQuotesPage from './portal/pages/PortalQuotesPage'
+import PortalOrdersPage from './portal/pages/PortalOrdersPage'
+import PortalRequestsPage from './portal/pages/PortalRequestsPage'
+import WorkorderInvoice from './pages/WorkorderInvoice';
 import './App.css'
+
+// --- Portal (new) ---
+import PortalLogin from './portal/pages/PortalLogin'
+import PortalDashboard from './portal/pages/PortalDashboard'
+import PortalProtectedRoute from './portal/components/PortalProtectedRoute'
+
+// Guards any route that requires login: no token -> kick to /login,
+// and remember where they were trying to go so we could send them
+// back after logging in (not wired up on the Login page yet, but
+// the location is preserved here if you want that later).
+function ProtectedRoute({ children }) {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+}
+
+// Keeps a logged-in user from seeing the login page again if they
+// navigate to /login directly (or land there after a stale bookmark).
+function PublicOnlyRoute({ children }) {
+  const token = localStorage.getItem('token');
+  if (token) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
+}
+
+// Same idea as PublicOnlyRoute, but for the portal's own token —
+// completely independent of the ERP session above.
+function PortalPublicOnlyRoute({ children }) {
+  const token = localStorage.getItem('portalToken');
+  if (token) {
+    return <Navigate to="/portal/dashboard" replace />;
+  }
+  return children;
+}
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/dashboard/project" element={<ProjectDashboard />} />
-        <Route path="/dashboard/inventory" element={<InventoryDashboard />} />
-        <Route path="/project-module/project-type" element={<ProjectType />} />
-        <Route path="/project-module/projects" element={<Project />} />
-        <Route path="/accounts-module/agreement_list" element={<AgreementList />} />
-        <Route path="/accounts-module/agreement_list_add" element={<AgreementForm />} />
-        <Route path="/accounts-module/agreement_list_add/:id" element={<AgreementForm />} />
-        <Route path="/accounts-module/party_list" element={<PartyList />} />
-        <Route path="/project-module/site" element={<Site />} />
-        <Route path="/inventory-module/flat" element={<Flat />} />
-        <Route path="/inventory-module/flat-sale" element={<FlatSaleList />} />
-        <Route path="/inventory-module/flat-sale/add" element={<FlatSaleForm />} />
-        <Route path="/inventory-module/flat-sale/add/:id" element={<FlatSaleForm />} />
-        <Route path="/inventory-module/installment-report" element={<InstallmentReport />} />
-        <Route path="/project-module/share-project/assign-share" element={<AssignShare />} />
-        <Route path="/project-module/share-project/share-report" element={<ShareReport />} />
-        <Route path="/project-module/share-project/penalty-report" element={<PenaltyReport />} />
-        <Route path="/project-module/share-project/configuration" element={<ProjectShareConfiguration />} />
-        <Route path="/project-module/reports/project-summary" element={<ProjectSummaryReport />} />
-        <Route path="/project-module/reports/project-progress" element={<ProjectProgressReport />} />
-        <Route path="/project-module/reports/project-wise-income" element={<ProjectWiseIncomeStatement />} />
-        <Route path="/project-module/reports/site-wise-income" element={<SiteWiseIncomeStatement />} />
-        <Route path="/project-module/reports/amount-usage" element={<AmountUsageReport />} />
-        <Route path="/inventory-module/products/category" element={<CategoryPage />} />
-        <Route path="/inventory-module/products/brand" element={<BrandPage />} />
-        <Route path="/inventory-module/products/unit" element={<UnitPage />} />
-        <Route path="/inventory-module/products/item-entry" element={<ItemPage />} />
-        <Route path="/inventory-module/purchase" element={<PurchasePage />} />
-        <Route path="/inventory-module/purchase/:id" element={<PurchasePage />} />
-        <Route path="/inventory-module/purchase-list" element={<PurchaseList />} />
-        <Route path="/procurement-module/purchase-order" element={<PurchaseOrderPage />} />
-        <Route path="/procurement-module/purchase-order/:id" element={<PurchaseOrderPage />} />
-        <Route path="/procurement-module/purchase-order-list" element={<PurchaseOrderList />} />
-        <Route path="/requisition-module/material-requisition-list" element={<MaterialRequisitionList />} />
-        <Route path="/requisition-module/material-requisition-add" element={<MaterialRequisitionPage />} />
-        <Route path="/requisition-module/material-requisition-add/:id" element={<MaterialRequisitionPage />} />
-        <Route path="/requisition-module/service-work-requisition-list" element={<ServiceRequisitionList />} />
-        <Route path="/requisition-module/service-work-requisition-add" element={<ServiceRequisitionPage />} />
-        <Route path="/requisition-module/service-work-requisition-add/:id" element={<ServiceRequisitionPage />} />
-        <Route path="/inventory-module/materialusage" element={<MaterialUsagePage />} />
-        <Route path="/inventory-module/materialusage/:id" element={<MaterialUsagePage />} />
-        <Route path="/inventory-module/material_usage" element={<MaterialUsageList />} />
-        <Route path="/inventory-module/stock_adjustment" element={<StockTransferPage />} />
-        <Route path="/inventory-module/stock_adjustment/:id" element={<StockTransferPage />} />
-        <Route path="/inventory-module/stock_adjustment_list" element={<StockTransferList />} />
-        <Route path="/crm-module/communication_status" element={<CommunicationStatusPage />} />
-        <Route path="/crm-module/lead_category" element={<LeadCategoryPage />} />
-        <Route path="/crm-module/campaign" element={<CampaignPage />} />
-        <Route path="/crm-module/profession" element={<ProfessionPage />} />
-        <Route path="/crm-module/add-lead-source" element={<LeadSourcePage />} />
-        <Route path="/crm-module/feature" element={<OfferPage />} />
-        <Route path="/crm-module/area" element={<AreaPage />} />
-        <Route path="/crm-module/lead_status" element={<LeadStagePage />} />
-        <Route path="/crm-module/lead" element={<LeadPage />} />
-        <Route path="/crm-module/call-center/follow-up" element={<FollowUp />} />
-        <Route path="/accounts-module/chart-group" element={<ChartOfGroupPage />} />
-        <Route path="/accounts-module/chart-group-hierarchy" element={<ChartOfGroupHierarchy />} />
-        <Route path="/accounts-module/chart-accounts" element={<ChartOfAccountsPage />} />
-        <Route path="/accounts-module/customer-accounts" element={<CustomerAccountsPage />} />
-        <Route path="/accounts-module/supplier-accounts" element={<SupplierAccountsPage />} />
-        <Route path="/accounts-module/investor-accounts" element={<InvestorAccountsPage />} />
-        <Route path="/accounts-module/billing/category" element={<BillingCategoryPage />} />
-        <Route path="/inventory-module/bill-item" element={<BillItemPage />} />
-        <Route path="/item/service-view" element={<ServiceWorkNamePage />} />
-        <Route path="/accounts-settings/title" element={<BoqTitlePage />} />
-        <Route path="/accounts-module/asset_list" element={<AssetListPage />} />
-        <Route path="/accounts-module/asset_list_add" element={<AssetFormPage />} />
-        <Route path="/accounts-module/asset_list_add/:id" element={<AssetFormPage />} />
-        <Route path="/requisition-module/fund-requisition" element={<FundRequisitionList />} />
-        <Route path="/billing/bill_list" element={<BillList />} />
-        <Route path="/billing/bill" element={<BillPage />} />
-        <Route path="/billing/bill/:id" element={<BillPage />} />
-        <Route path="/billing/vendor_bill_list" element={<ContractorBillList />} />
-        <Route path="/billing/contract_bill" element={<ContractorBillPage />} />
-        <Route path="/billing/contract_bill/:id" element={<ContractorBillPage />} />
-        <Route path="/service/labor-worker-bill-list" element={<LabourWorkerBillList />} />
-        <Route path="/service/labor-worker-bill-add" element={<LabourWorkerBillPage />} />
-        <Route path="/service/labor-worker-bill-add/:id" element={<LabourWorkerBillPage />} />
-        <Route path="/billing/workorder_list" element={<WorkorderList />} />
-        <Route path="/billing/workorder" element={<WorkorderPage />} />
-        <Route path="/billing/workorder/:id" element={<WorkorderPage />} />
-        <Route path="/billing/contractor-work-order-list" element={<ContractorWorkorderList />} />
-        <Route path="/billing/contractor-workorder" element={<ContractorWorkorderPage />} />
-        <Route path="/billing/contractor-workorder/:id" element={<ContractorWorkorderPage />} />
-        <Route path="/billing/percentage_bill_list" element={<PeriodBillList />} />
-        <Route path="/billing/period-bill-add" element={<PeriodBillPage />} />
-        <Route path="/billing/period-bill-add/:id" element={<PeriodBillPage />} />
-        <Route path="/billing/adjustment_bill_list" element={<AdjustmentBillList />} />
-        <Route path="/billing/adjustment-bill" element={<AdjustmentBillPage />} />
-        <Route path="/accounts-module/expense_list" element={<ExpenseListPage />} />
-        <Route path="/accounts-module/expense" element={<ExpensePage />} />
-        <Route path="/accounts-module/expense/:id" element={<ExpensePage />} />
-        <Route path="/accounts-module/receipt-list" element={<ReceiptVoucherPage />} />
-        <Route path="/accounts-module/receipt-list/add" element={<ReceiptVoucherPage />} />
-        <Route path="/billing/adjustment-bill/:id" element={<AdjustmentBillPage />} />
-        <Route path="/accounts-module/reports/payable-report" element={<PayableReportPage />} />
-        <Route path="/accounts-module/reports/expense-report" element={<ExpenseReportPage />} />
-        <Route path="/accounts-module/reports/receivable-report" element={<ReceivableReportPage />} />
-        <Route path="/accounts-module/reports/day-book" element={<DayBookPage />} />
-        <Route path="/accounts-module/reports/receive-payment-statement" element={<ReceivePaymentStatementPage />} />
-        <Route path="/accounts-module/bank-reconciliation" element={<BankReconciliationPage />} />
-        <Route path="/requisition-module/reports/fund-requisition" element={<FundRequisitionReportPage />} />
-        <Route path="/billing/item_sale_list" element={<SaleList />} />
-        <Route path="/billing/item-sale-create" element={<SalePage />} />
-        <Route path="/billing/item-sale-create/:id" element={<SalePage />} />
-        <Route path="/billing/quote-list" element={<QuoteList />} />
-        <Route path="/billing/quote" element={<QuotePage />} />
-        <Route path="/billing/quote/:id" element={<QuotePage />} />
-        <Route path="/accounts-module/payment-list" element={<PaymentVoucherPage />} />
-        <Route path="/accounts-module/payment-list/add" element={<PaymentVoucherPage />} />
-        <Route path="/billing/contractor_bill_report" element={<ContractorBillReportPage />} />
-        <Route path="/accounts-module/journal_list" element={<JournalVoucherListPage />} />
-        <Route path="/accounts-module/journal_list_add" element={<JournalVoucherPage />} />
-        <Route path="/accounts-module/contra_list" element={<ContraVoucherListPage />} />
-        <Route path="/accounts-module/contra_list_add" element={<ContraVoucherPage />} />
-        <Route path="/accounts-module/contra_list_add/:id" element={<ContraVoucherPage />} />
-        <Route path="/accounts-module/journal_list_add/:id" element={<JournalVoucherPage />} />
-        <Route path="/inventory-module/reports/stock" element={<StockReportPage />} />
-        <Route path="/hrm-module/employee" element={<EmployeeListPage />} />
-        <Route path="/dashboard/accounts" element={<AccountsDashboard />} />
-        <Route path="/inventory-module/reports/purchase-order-receive-details" element={<PurchaseOrderReceiveReportPage />} />
-        <Route path="/inventory-module/reports/material-usage" element={<MaterialUsageReportPage />} />
-        <Route path="/inventory-module/reports/purchase-details" element={<PurchaseDetailsReportPage />} />
+        <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/dashboard/project" element={<ProtectedRoute><ProjectDashboard /></ProtectedRoute>} />
+        <Route path="/dashboard/inventory" element={<ProtectedRoute><InventoryDashboard /></ProtectedRoute>} />
+        <Route path="/project-module/project-type" element={<ProtectedRoute><ProjectType /></ProtectedRoute>} />
+        <Route path="/project-module/projects" element={<ProtectedRoute><Project /></ProtectedRoute>} />
+        <Route path="/accounts-module/agreement_list" element={<ProtectedRoute><AgreementList /></ProtectedRoute>} />
+        <Route path="/accounts-module/agreement_list_add" element={<ProtectedRoute><AgreementForm /></ProtectedRoute>} />
+        <Route path="/accounts-module/agreement_list_add/:id" element={<ProtectedRoute><AgreementForm /></ProtectedRoute>} />
+        <Route path="/accounts-module/agreement_list_view/:id" element={<ProtectedRoute><AgreementView /></ProtectedRoute>} />
+        <Route path="/accounts-module/party_list" element={<ProtectedRoute><PartyList /></ProtectedRoute>} />
+        <Route path="/project-module/site" element={<ProtectedRoute><Site /></ProtectedRoute>} />
+        <Route path="/inventory-module/flat" element={<ProtectedRoute><Flat /></ProtectedRoute>} />
+        <Route path="/inventory-module/flat-sale" element={<ProtectedRoute><FlatSaleList /></ProtectedRoute>} />
+        <Route path="/inventory-module/flat-sale/add" element={<ProtectedRoute><FlatSaleForm /></ProtectedRoute>} />
+        <Route path="/inventory-module/flat-sale/add/:id" element={<ProtectedRoute><FlatSaleForm /></ProtectedRoute>} />
+        <Route path="/inventory-module/installment-report" element={<ProtectedRoute><InstallmentReport /></ProtectedRoute>} />
+        <Route path="/project-module/share-project/assign-share" element={<ProtectedRoute><AssignShare /></ProtectedRoute>} />
+        <Route path="/project-module/share-project/share-report" element={<ProtectedRoute><ShareReport /></ProtectedRoute>} />
+        <Route path="/project-module/share-project/penalty-report" element={<ProtectedRoute><PenaltyReport /></ProtectedRoute>} />
+        <Route path="/project-module/share-project/configuration" element={<ProtectedRoute><ProjectShareConfiguration /></ProtectedRoute>} />
+        <Route path="/project-module/reports/project-summary" element={<ProtectedRoute><ProjectSummaryReport /></ProtectedRoute>} />
+        <Route path="/project-module/reports/project-progress" element={<ProtectedRoute><ProjectProgressReport /></ProtectedRoute>} />
+        <Route path="/project-module/reports/project-wise-income" element={<ProtectedRoute><ProjectWiseIncomeStatement /></ProtectedRoute>} />
+        <Route path="/project-module/reports/site-wise-income" element={<ProtectedRoute><SiteWiseIncomeStatement /></ProtectedRoute>} />
+        <Route path="/project-module/reports/amount-usage" element={<ProtectedRoute><AmountUsageReport /></ProtectedRoute>} />
+        <Route path="/inventory-module/products/category" element={<ProtectedRoute><CategoryPage /></ProtectedRoute>} />
+        <Route path="/inventory-module/products/brand" element={<ProtectedRoute><BrandPage /></ProtectedRoute>} />
+        <Route path="/inventory-module/products/unit" element={<ProtectedRoute><UnitPage /></ProtectedRoute>} />
+        <Route path="/inventory-module/products/item-entry" element={<ProtectedRoute><ItemPage /></ProtectedRoute>} />
+        <Route path="/inventory-module/purchase" element={<ProtectedRoute><PurchasePage /></ProtectedRoute>} />
+        <Route path="/inventory-module/purchase/:id" element={<ProtectedRoute><PurchasePage /></ProtectedRoute>} />
+        <Route path="/inventory-module/purchase-list" element={<ProtectedRoute><PurchaseList /></ProtectedRoute>} />
+        <Route path="/procurement-module/purchase-order" element={<ProtectedRoute><PurchaseOrderPage /></ProtectedRoute>} />
+        <Route path="/procurement-module/purchase-order/:id" element={<ProtectedRoute><PurchaseOrderPage /></ProtectedRoute>} />
+        <Route path="/procurement-module/purchase-order-list" element={<ProtectedRoute><PurchaseOrderList /></ProtectedRoute>} />
+        <Route path="/requisition-module/material-requisition-list" element={<ProtectedRoute><MaterialRequisitionList /></ProtectedRoute>} />
+        <Route path="/requisition-module/material-requisition-add" element={<ProtectedRoute><MaterialRequisitionPage /></ProtectedRoute>} />
+        <Route path="/requisition-module/material-requisition-add/:id" element={<ProtectedRoute><MaterialRequisitionPage /></ProtectedRoute>} />
+        <Route path="/requisition-module/service-work-requisition-list" element={<ProtectedRoute><ServiceRequisitionList /></ProtectedRoute>} />
+        <Route path="/requisition-module/service-work-requisition-add" element={<ProtectedRoute><ServiceRequisitionPage /></ProtectedRoute>} />
+        <Route path="/requisition-module/service-work-requisition-add/:id" element={<ProtectedRoute><ServiceRequisitionPage /></ProtectedRoute>} />
+        <Route path="/inventory-module/materialusage" element={<ProtectedRoute><MaterialUsagePage /></ProtectedRoute>} />
+        <Route path="/inventory-module/materialusage/:id" element={<ProtectedRoute><MaterialUsagePage /></ProtectedRoute>} />
+        <Route path="/inventory-module/material_usage" element={<ProtectedRoute><MaterialUsageList /></ProtectedRoute>} />
+        <Route path="/inventory-module/stock_adjustment" element={<ProtectedRoute><StockTransferPage /></ProtectedRoute>} />
+        <Route path="/inventory-module/stock_adjustment/:id" element={<ProtectedRoute><StockTransferPage /></ProtectedRoute>} />
+        <Route path="/inventory-module/stock_adjustment_list" element={<ProtectedRoute><StockTransferList /></ProtectedRoute>} />
+        <Route path="/crm-module/communication_status" element={<ProtectedRoute><CommunicationStatusPage /></ProtectedRoute>} />
+        <Route path="/crm-module/lead_category" element={<ProtectedRoute><LeadCategoryPage /></ProtectedRoute>} />
+        <Route path="/crm-module/campaign" element={<ProtectedRoute><CampaignPage /></ProtectedRoute>} />
+        <Route path="/crm-module/profession" element={<ProtectedRoute><ProfessionPage /></ProtectedRoute>} />
+        <Route path="/crm-module/add-lead-source" element={<ProtectedRoute><LeadSourcePage /></ProtectedRoute>} />
+        <Route path="/crm-module/feature" element={<ProtectedRoute><OfferPage /></ProtectedRoute>} />
+        <Route path="/crm-module/area" element={<ProtectedRoute><AreaPage /></ProtectedRoute>} />
+        <Route path="/crm-module/lead_status" element={<ProtectedRoute><LeadStagePage /></ProtectedRoute>} />
+        <Route path="/crm-module/lead" element={<ProtectedRoute><LeadPage /></ProtectedRoute>} />
+        <Route path="/crm-module/call-center/follow-up" element={<ProtectedRoute><FollowUp /></ProtectedRoute>} />
+        <Route path="/accounts-module/chart-group" element={<ProtectedRoute><ChartOfGroupPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/chart-group-hierarchy" element={<ProtectedRoute><ChartOfGroupHierarchy /></ProtectedRoute>} />
+        <Route path="/accounts-module/chart-accounts" element={<ProtectedRoute><ChartOfAccountsPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/customer-accounts" element={<ProtectedRoute><CustomerAccountsPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/supplier-accounts" element={<ProtectedRoute><SupplierAccountsPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/investor-accounts" element={<ProtectedRoute><InvestorAccountsPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/billing/category" element={<ProtectedRoute><BillingCategoryPage /></ProtectedRoute>} />
+        <Route path="/inventory-module/bill-item" element={<ProtectedRoute><BillItemPage /></ProtectedRoute>} />
+        <Route path="/item/service-view" element={<ProtectedRoute><ServiceWorkNamePage /></ProtectedRoute>} />
+        <Route path="/accounts-settings/title" element={<ProtectedRoute><BoqTitlePage /></ProtectedRoute>} />
+        <Route path="/accounts-module/asset_list" element={<ProtectedRoute><AssetListPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/asset_list_add" element={<ProtectedRoute><AssetFormPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/asset_list_add/:id" element={<ProtectedRoute><AssetFormPage /></ProtectedRoute>} />
+        <Route path="/requisition-module/fund-requisition" element={<ProtectedRoute><FundRequisitionList /></ProtectedRoute>} />
+        <Route path="/billing/bill_list" element={<ProtectedRoute><BillList /></ProtectedRoute>} />
+        <Route path="/billing/bill" element={<ProtectedRoute><BillPage /></ProtectedRoute>} />
+        <Route path="/billing/bill/:id" element={<ProtectedRoute><BillPage /></ProtectedRoute>} />
+        <Route path="/billing/vendor_bill_list" element={<ProtectedRoute><ContractorBillList /></ProtectedRoute>} />
+        <Route path="/billing/contract_bill" element={<ProtectedRoute><ContractorBillPage /></ProtectedRoute>} />
+        <Route path="/billing/contract_bill/:id" element={<ProtectedRoute><ContractorBillPage /></ProtectedRoute>} />
+        <Route path="/service/labor-worker-bill-list" element={<ProtectedRoute><LabourWorkerBillList /></ProtectedRoute>} />
+        <Route path="/service/labor-worker-bill-add" element={<ProtectedRoute><LabourWorkerBillPage /></ProtectedRoute>} />
+        <Route path="/service/labor-worker-bill-add/:id" element={<ProtectedRoute><LabourWorkerBillPage /></ProtectedRoute>} />
+        <Route path="/billing/workorder_list" element={<ProtectedRoute><WorkorderList /></ProtectedRoute>} />
+        <Route path="/billing/workorder" element={<ProtectedRoute><WorkorderPage /></ProtectedRoute>} />
+        <Route path="/billing/workorder/:id" element={<ProtectedRoute><WorkorderPage /></ProtectedRoute>} />
+        <Route path="/billing/contractor-work-order-list" element={<ProtectedRoute><ContractorWorkorderList /></ProtectedRoute>} />
+        <Route path="/billing/contractor-workorder" element={<ProtectedRoute><ContractorWorkorderPage /></ProtectedRoute>} />
+        <Route path="/billing/contractor-workorder/:id" element={<ProtectedRoute><ContractorWorkorderPage /></ProtectedRoute>} />
+        <Route path="/billing/percentage_bill_list" element={<ProtectedRoute><PeriodBillList /></ProtectedRoute>} />
+        <Route path="/billing/period-bill-add" element={<ProtectedRoute><PeriodBillPage /></ProtectedRoute>} />
+        <Route path="/billing/period-bill-add/:id" element={<ProtectedRoute><PeriodBillPage /></ProtectedRoute>} />
+        <Route path="/billing/adjustment_bill_list" element={<ProtectedRoute><AdjustmentBillList /></ProtectedRoute>} />
+        <Route path="/billing/adjustment-bill" element={<ProtectedRoute><AdjustmentBillPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/expense_list" element={<ProtectedRoute><ExpenseListPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/expense" element={<ProtectedRoute><ExpensePage /></ProtectedRoute>} />
+        <Route path="/accounts-module/expense/:id" element={<ProtectedRoute><ExpensePage /></ProtectedRoute>} />
+        <Route path="/accounts-module/receipt-list" element={<ProtectedRoute><ReceiptVoucherPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/receipt-list/add" element={<ProtectedRoute><ReceiptVoucherPage /></ProtectedRoute>} />
+        <Route path="/billing/adjustment-bill/:id" element={<ProtectedRoute><AdjustmentBillPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/reports/payable-report" element={<ProtectedRoute><PayableReportPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/reports/expense-report" element={<ProtectedRoute><ExpenseReportPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/reports/receivable-report" element={<ProtectedRoute><ReceivableReportPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/reports/day-book" element={<ProtectedRoute><DayBookPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/reports/receive-payment-statement" element={<ProtectedRoute><ReceivePaymentStatementPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/bank-reconciliation" element={<ProtectedRoute><BankReconciliationPage /></ProtectedRoute>} />
+        <Route path="/requisition-module/reports/fund-requisition" element={<ProtectedRoute><FundRequisitionReportPage /></ProtectedRoute>} />
+        <Route path="/billing/item_sale_list" element={<ProtectedRoute><SaleList /></ProtectedRoute>} />
+        <Route path="/billing/item-sale-create" element={<ProtectedRoute><SalePage /></ProtectedRoute>} />
+        <Route path="/billing/item-sale-create/:id" element={<ProtectedRoute><SalePage /></ProtectedRoute>} />
+        <Route path="/billing/quote-list" element={<ProtectedRoute><QuoteList /></ProtectedRoute>} />
+        <Route path="/billing/quote" element={<ProtectedRoute><QuotePage /></ProtectedRoute>} />
+        <Route path="/billing/quote/:id" element={<ProtectedRoute><QuotePage /></ProtectedRoute>} />
+        <Route path="/accounts-module/payment-list" element={<ProtectedRoute><PaymentVoucherPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/payment-list/add" element={<ProtectedRoute><PaymentVoucherPage /></ProtectedRoute>} />
+        <Route path="/billing/contractor_bill_report" element={<ProtectedRoute><ContractorBillReportPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/journal_list" element={<ProtectedRoute><JournalVoucherListPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/journal_list_add" element={<ProtectedRoute><JournalVoucherPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/contra_list" element={<ProtectedRoute><ContraVoucherListPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/contra_list_add" element={<ProtectedRoute><ContraVoucherPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/contra_list_add/:id" element={<ProtectedRoute><ContraVoucherPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/journal_list_add/:id" element={<ProtectedRoute><JournalVoucherPage /></ProtectedRoute>} />
+        <Route path="/inventory-module/reports/stock" element={<ProtectedRoute><StockReportPage /></ProtectedRoute>} />
+        <Route path="/hrm-module/employee" element={<ProtectedRoute><EmployeeListPage /></ProtectedRoute>} />
+        <Route path="/dashboard/accounts" element={<ProtectedRoute><AccountsDashboard /></ProtectedRoute>} />
+        <Route path="/inventory-module/reports/purchase-order-receive-details" element={<ProtectedRoute><PurchaseOrderReceiveReportPage /></ProtectedRoute>} />
+        <Route path="/inventory-module/reports/material-usage" element={<ProtectedRoute><MaterialUsageReportPage /></ProtectedRoute>} />
+        <Route path="/billing/workorder/:id/invoice" element={<ProtectedRoute><WorkorderInvoice /></ProtectedRoute>} />
+        <Route path="/accounts-module/reports/cash-bank-books" element={<ProtectedRoute><CashBankBookPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/bank-accounts" element={<ProtectedRoute><BankAccountPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/reports/general-ledger" element={<ProtectedRoute><GeneralLedgerPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/reports/income-statement" element={<ProtectedRoute><IncomeStatementPage /></ProtectedRoute>} />
+        <Route path="/inventory-module/reports/purchase-details" element={<ProtectedRoute><PurchaseDetailsReportPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/reports/cash-flow-statement" element={<ProtectedRoute><CashFlowStatementPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/reports/balance-sheet" element={<ProtectedRoute><BalanceSheetPage /></ProtectedRoute>} />
+        <Route path="/portal/invoices" element={<PortalProtectedRoute><PortalInvoices /></PortalProtectedRoute>} />
+        <Route path="/portal/quotes" element={<PortalProtectedRoute><PortalQuotesPage /></PortalProtectedRoute>} />
+        <Route path="/portal/orders" element={<PortalProtectedRoute><PortalOrdersPage /></PortalProtectedRoute>} />
+        <Route path="/portal/requests" element={<PortalProtectedRoute><PortalRequestsPage /></PortalProtectedRoute>} />
+        <Route path="/accounts-module/reports/trial-balance" element={<ProtectedRoute><TrialBalancePage /></ProtectedRoute>} />
+
+        {/* --- Portal (new) --- */}
+        <Route path="/portal/login" element={<PortalPublicOnlyRoute><PortalLogin /></PortalPublicOnlyRoute>} />
+        <Route path="/portal/dashboard" element={<PortalProtectedRoute><PortalDashboard /></PortalProtectedRoute>} />
+        <Route path="/portal" element={<Navigate to="/portal/dashboard" replace />} />
+
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>

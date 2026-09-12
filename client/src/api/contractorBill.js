@@ -24,3 +24,11 @@ export async function deleteContractorBill(id) {
   const res = await api.delete(`/contractor-bill/${id}`);
   return res.data;
 }
+export async function uploadContractorBillAttachment(id, file) {
+  const formData = new FormData();
+  formData.append('attachment', file);
+  const res = await api.post(`/contractor-bill/${id}/attachment`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+}

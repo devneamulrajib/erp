@@ -4,10 +4,33 @@ import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
 import SelectColumnsDropdown from '../components/SelectColumnsDropdown';
 import { getChartOfGroupOptions } from '../api/chartOfGroup';
+import { resolveFileUrl } from '../api/axios';
 import {
-  getContacts, getNextContactCode, createContact, updateContact, deleteContact,
+  getContacts,
+  getNextContactCode,
+  createContact,
+  updateContact,
+  deleteContact,
 } from '../api/contactAccounts';
-import { Pencil, Trash2, Search, Users, Plus, User, Building2 } from 'lucide-react';
+import {
+  Pencil,
+  Trash2,
+  Search,
+  Users,
+  Plus,
+  User,
+  Building2,
+  Info,
+  X,
+  Eye,
+  Mail,
+  Phone,
+  MapPin,
+  CreditCard,
+  Tag as TagIcon,
+  KeyRound,
+} from 'lucide-react';
+import PortalAccessModal from '../components/PortalAccessModal';
 
 const COLUMNS = [
   { key: 'id', label: 'ID' },
@@ -22,18 +45,99 @@ const COLUMNS = [
   { key: 'action', label: 'Action' },
 ];
 
-const ALL_VISIBLE = COLUMNS.reduce((acc, c) => ({ ...acc, [c.key]: true }), {});
+const ALL_VISIBLE = COLUMNS.reduce(
+  (acc, c) => ({ ...acc, [c.key]: true }),
+  {}
+);
 
 const EMPTY_FORM = {
-  code: '', name: '', mobile: '', email: '', nid: '', address: '',
-  buyerReference: '', creditLimit: '', businessName: '', chartOfGroup: '',
+  code: '',
+  name: '',
+  mobile: '',
+  email: '',
+  nid: '',
+  address: '',
+  buyerReference: '',
+  creditLimit: '',
+  businessName: '',
+  chartOfGroup: '',
 };
+
+const FIELD_INFO = {
+  code: "A unique ID automatically given to this customer, like a customer number. You don't need to type it yourself.",
+  name: "The customer's full name.",
+  mobile:
+    "The customer's phone number, used to contact them about orders, payments, or updates.",
+  email:
+    "The customer's email address, for sending invoices, receipts, or updates.",
+  nid: 'A government ID (National ID, Birth Certificate, or Passport) used to verify who this customer really is. Common for high-value or legal transactions like property deals.',
+  address: "Where the customer lives or is based.",
+  buyerReference:
+    'A note on how this customer came to you, or who referred them (e.g. a company name or referral source). Helps you track where business is coming from.',
+  creditLimit:
+    "The maximum amount this customer can owe you before paying. For example, setting this to 50,000 means the system can warn or block further sales once the customer's unpaid balance reaches that amount. Leave blank if you don't want to limit credit.",
+  businessName:
+    "If the customer is buying on behalf of a company rather than as an individual, enter that company's name here.",
+  chartOfGroup:
+    "Which accounting group this customer's ledger belongs to (e.g. 'Customer Accounts'). This determines how their balance is organized in your financial reports.",
+  image:
+    'A photo of the customer or their ID document, for quick visual reference.',
+};
+
+function FieldLabel({ children, infoKey, required }) {
+  const [open, setOpen] = useState(false);
+  const info = FIELD_INFO[infoKey];
+
+  return (
+    <div className="relative flex items-center gap-1 mb-1.5">
+      <label className="block text-xs font-medium text-slate-500">
+        {children}
+        {required && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
+
+      {info && (
+        <>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="text-slate-300 hover:text-indigo-500 transition-colors"
+            title="What is this?"
+          >
+            <Info size={13} />
+          </button>
+
+          {open && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setOpen(false)}
+              />
+
+              <div className="absolute left-0 top-6 z-50 w-64 bg-slate-800 text-white text-xs leading-relaxed rounded-lg shadow-lg p-3">
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="absolute top-1.5 right-1.5 text-slate-400 hover:text-white"
+                >
+                  <X size={12} />
+                </button>
+
+                <p className="pr-3">{info}</p>
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function CustomerAccountsPage() {
   const [items, setItems] = useState([]);
   const [groupOptions, setGroupOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
@@ -46,12 +150,24 @@ export default function CustomerAccountsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [formError, setFormError] = useState('');
+  const [portalItem, setPortalItem] = useState(null);
+
+  const [viewItem, setViewItem] = useState(null);
+
+  function openViewModal(item) {
+    setViewItem(item);
+  }
+
+  function closeViewModal() {
+    setViewItem(null);
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
+
     try {
       const { data } = await getContacts('Customer');
-      setItems(data);
+      setItems(Array.isArray(data) ? data : []);
       setError(null);
     } catch (err) {
       console.error(err);
@@ -61,10 +177,16 @@ export default function CustomerAccountsPage() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   useEffect(() => {
-    getChartOfGroupOptions().then(({ data }) => setGroupOptions(data)).catch(console.error);
+    getChartOfGroupOptions()
+      .then((data) => {
+        setGroupOptions(Array.isArray(data) ? data : []);
+      })
+      .catch(console.error);
   }, []);
 
   async function openCreateModal() {
@@ -73,11 +195,19 @@ export default function CustomerAccountsPage() {
     setFormError('');
     setForm(EMPTY_FORM);
     setModalOpen(true);
+
     try {
       const { data } = await getNextContactCode('Customer');
-      setForm((f) => ({ ...f, code: data.code }));
+
+      setForm((f) => ({
+        ...f,
+        code: data.code,
+      }));
     } catch {
-      setForm((f) => ({ ...f, code: '' }));
+      setForm((f) => ({
+        ...f,
+        code: '',
+      }));
     }
   }
 
@@ -85,6 +215,7 @@ export default function CustomerAccountsPage() {
     setEditingId(item.id);
     setImageFile(null);
     setFormError('');
+
     setForm({
       code: item.code || '',
       name: item.name || '',
@@ -95,8 +226,10 @@ export default function CustomerAccountsPage() {
       buyerReference: item.buyerReference || '',
       creditLimit: item.creditLimit ?? '',
       businessName: item.businessName || '',
-      chartOfGroup: item.chartOfGroup?.id || item.chartOfGroup || '',
+      chartOfGroup:
+        item.chartOfGroup?.id || item.chartOfGroup || '',
     });
+
     setModalOpen(true);
   }
 
@@ -106,25 +239,39 @@ export default function CustomerAccountsPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+
     if (!form.name || !form.mobile || !form.chartOfGroup) return;
+
     setSubmitting(true);
     setFormError('');
+
     try {
       const fd = new FormData();
-      Object.entries(form).forEach(([key, val]) => fd.append(key, val ?? ''));
+
+      Object.entries(form).forEach(([key, val]) => {
+        fd.append(key, val ?? '');
+      });
+
       fd.append('contactType', 'Customer');
-      if (imageFile) fd.append('image', imageFile);
+
+      if (imageFile) {
+        fd.append('image', imageFile);
+      }
 
       if (editingId) {
         await updateContact(editingId, fd);
       } else {
         await createContact(fd);
       }
+
       setModalOpen(false);
       await load();
     } catch (err) {
       console.error(err);
-      setFormError(err.response?.data?.message || 'Failed to save customer.');
+
+      setFormError(
+        err.response?.data?.message || 'Failed to save customer.'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -132,24 +279,37 @@ export default function CustomerAccountsPage() {
 
   async function handleDelete(item) {
     if (!window.confirm(`Delete customer "${item.name}"?`)) return;
+
     setDeletingId(item.id);
+
     try {
       await deleteContact(item.id);
-      setItems((prev) => prev.filter((r) => r.id !== item.id));
+
+      setItems((prev) =>
+        prev.filter((r) => r.id !== item.id)
+      );
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || 'Failed to delete customer.');
+
+      alert(
+        err.response?.data?.message ||
+          'Failed to delete customer.'
+      );
     } finally {
       setDeletingId(null);
     }
   }
 
   function toggleColumn(key, checked) {
-    setVisibleColumns((prev) => ({ ...prev, [key]: checked }));
+    setVisibleColumns((prev) => ({
+      ...prev,
+      [key]: checked,
+    }));
   }
 
   const filteredRows = useMemo(() => {
     const q = search.toLowerCase();
+
     return items.filter(
       (r) =>
         r.name?.toLowerCase().includes(q) ||
@@ -163,9 +323,17 @@ export default function CustomerAccountsPage() {
     setPage(1);
   }, [search, pageSize]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredRows.length / pageSize)
+  );
+
   const pagedRows = useMemo(
-    () => filteredRows.slice((page - 1) * pageSize, page * pageSize),
+    () =>
+      filteredRows.slice(
+        (page - 1) * pageSize,
+        page * pageSize
+      ),
     [filteredRows, page, pageSize]
   );
 
@@ -180,13 +348,23 @@ export default function CustomerAccountsPage() {
             <Breadcrumb
               items={[
                 { label: 'Home', to: '/dashboard' },
-                { label: 'Contact', to: '/dashboard/accounts' },
+                {
+                  label: 'Contact',
+                  to: '/dashboard/accounts',
+                },
                 { label: 'Customer Accounts' },
               ]}
             />
-            <h1 className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">Customer Accounts</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Manage your customer contacts and account details</p>
+
+            <h1 className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">
+              Customer Accounts
+            </h1>
+
+            <p className="text-sm text-slate-500 mt-0.5">
+              Manage your customer contacts and account details
+            </p>
           </div>
+
           <button
             onClick={openCreateModal}
             className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 transition-colors"
@@ -197,38 +375,65 @@ export default function CustomerAccountsPage() {
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-5">{error}</div>
+          <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-5">
+            {error}
+          </div>
         )}
 
-        {/* Summary strip */}
+        {/* Summary */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Total Customers</div>
-            <div className="text-xl font-semibold text-slate-900">{items.length}</div>
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">
+              Total Customers
+            </div>
+
+            <div className="text-xl font-semibold text-slate-900">
+              {items.length}
+            </div>
           </div>
+
           <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 col-span-2 sm:col-span-2">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Matching Search</div>
-            <div className="text-xl font-semibold text-slate-900">{filteredRows.length}</div>
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">
+              Matching Search
+            </div>
+
+            <div className="text-xl font-semibold text-slate-900">
+              {filteredRows.length}
+            </div>
           </div>
+
           <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Showing</div>
-            <div className="text-xl font-semibold text-slate-900">{pagedRows.length} / {filteredRows.length}</div>
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">
+              Showing
+            </div>
+
+            <div className="text-xl font-semibold text-slate-900">
+              {pagedRows.length} / {filteredRows.length}
+            </div>
           </div>
         </div>
 
-        {/* Table panel */}
+        {/* Table */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           {/* Toolbar */}
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 bg-slate-50/50">
             <div className="flex items-center gap-2 text-sm text-slate-500">
               <span>Show</span>
+
               <select
                 value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value))}
+                onChange={(e) =>
+                  setPageSize(Number(e.target.value))
+                }
                 className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
               >
-                {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+                {[10, 25, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
               </select>
+
               <span>entries</span>
             </div>
 
@@ -237,13 +442,28 @@ export default function CustomerAccountsPage() {
                 columns={COLUMNS}
                 visible={visibleColumns}
                 onToggle={toggleColumn}
-                onClearAll={() => setVisibleColumns(
-                  COLUMNS.reduce((acc, c) => ({ ...acc, [c.key]: false }), {})
-                )}
-                onSelectAll={() => setVisibleColumns(ALL_VISIBLE)}
+                onClearAll={() =>
+                  setVisibleColumns(
+                    COLUMNS.reduce(
+                      (acc, c) => ({
+                        ...acc,
+                        [c.key]: false,
+                      }),
+                      {}
+                    )
+                  )
+                }
+                onSelectAll={() =>
+                  setVisibleColumns(ALL_VISIBLE)
+                }
               />
+
               <div className="relative">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Search
+                  size={15}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -259,40 +479,112 @@ export default function CustomerAccountsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
-                  {visibleColumns.id && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">ID</th>}
-                  {visibleColumns.code && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Code</th>}
-                  {visibleColumns.name && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Name</th>}
-                  {visibleColumns.business && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Business</th>}
-                  {visibleColumns.mobile && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Mobile</th>}
-                  {visibleColumns.email && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Email</th>}
-                  {visibleColumns.nid && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">NID</th>}
-                  {visibleColumns.under && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Under</th>}
-                  {visibleColumns.image && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Image</th>}
-                  {visibleColumns.action && <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Action</th>}
+                  {visibleColumns.id && (
+                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                      ID
+                    </th>
+                  )}
+
+                  {visibleColumns.code && (
+                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                      Code
+                    </th>
+                  )}
+
+                  {visibleColumns.name && (
+                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                      Name
+                    </th>
+                  )}
+
+                  {visibleColumns.business && (
+                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                      Business
+                    </th>
+                  )}
+
+                  {visibleColumns.mobile && (
+                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                      Mobile
+                    </th>
+                  )}
+
+                  {visibleColumns.email && (
+                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                      Email
+                    </th>
+                  )}
+
+                  {visibleColumns.nid && (
+                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                      NID
+                    </th>
+                  )}
+
+                  {visibleColumns.under && (
+                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                      Under
+                    </th>
+                  )}
+
+                  {visibleColumns.image && (
+                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                      Image
+                    </th>
+                  )}
+
+                  {visibleColumns.action && (
+                    <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">
+                      Action
+                    </th>
+                  )}
                 </tr>
               </thead>
+
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={COLUMNS.length} className="text-center py-16 text-slate-400">Loading...</td>
+                    <td
+                      colSpan={COLUMNS.length}
+                      className="text-center py-16 text-slate-400"
+                    >
+                      Loading...
+                    </td>
                   </tr>
                 ) : pagedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={COLUMNS.length} className="text-center py-16">
+                    <td
+                      colSpan={COLUMNS.length}
+                      className="text-center py-16"
+                    >
                       <div className="flex flex-col items-center gap-2 text-slate-400">
-                        <Users size={28} strokeWidth={1.5} />
-                        <p className="text-sm">No customers found. Try adjusting your search, or create one.</p>
+                        <Users
+                          size={28}
+                          strokeWidth={1.5}
+                        />
+
+                        <p className="text-sm">
+                          No customers found. Try adjusting
+                          your search, or create one.
+                        </p>
                       </div>
                     </td>
                   </tr>
                 ) : (
                   pagedRows.map((row, i) => (
-                    <tr key={row.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
+                    <tr
+                      key={row.id}
+                      className="hover:bg-slate-50/70 transition-colors whitespace-nowrap"
+                    >
                       {visibleColumns.id && (
                         <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">
-                          #{(page - 1) * pageSize + i + 1}
+                          #
+                          {(page - 1) * pageSize +
+                            i +
+                            1}
                         </td>
                       )}
+
                       {visibleColumns.code && (
                         <td className="px-5 py-3.5">
                           <span className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-600 px-2.5 py-1 text-xs font-mono font-medium ring-1 ring-inset ring-indigo-600/10">
@@ -300,41 +592,72 @@ export default function CustomerAccountsPage() {
                           </span>
                         </td>
                       )}
+
                       {visibleColumns.name && (
                         <td className="px-5 py-3.5">
                           <button
-                            onClick={() => openEditModal(row)}
+                            onClick={() =>
+                              openEditModal(row)
+                            }
                             className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-medium hover:underline underline-offset-2"
                           >
-                            <User size={13} className="text-slate-400" />
+                            <User
+                              size={13}
+                              className="text-slate-400"
+                            />
                             {row.name}
                           </button>
                         </td>
                       )}
+
                       {visibleColumns.business && (
-                        <td className="px-5 py-3.5 text-slate-600">{row.businessName || '-'}</td>
+                        <td className="px-5 py-3.5 text-slate-600">
+                          {row.businessName || '-'}
+                        </td>
                       )}
+
                       {visibleColumns.mobile && (
-                        <td className="px-5 py-3.5 text-slate-600">{row.mobile}</td>
+                        <td className="px-5 py-3.5 text-slate-600">
+                          {row.mobile}
+                        </td>
                       )}
+
                       {visibleColumns.email && (
-                        <td className="px-5 py-3.5 text-slate-600">{row.email || '-'}</td>
+                        <td className="px-5 py-3.5 text-slate-600">
+                          {row.email || '-'}
+                        </td>
                       )}
+
                       {visibleColumns.nid && (
-                        <td className="px-5 py-3.5 text-slate-600">{row.nid || '-'}</td>
+                        <td className="px-5 py-3.5 text-slate-600">
+                          {row.nid || '-'}
+                        </td>
                       )}
+
                       {visibleColumns.under && (
                         <td className="px-5 py-3.5">
                           <span className="inline-flex items-center gap-1.5 text-slate-600 text-xs">
-                            <Building2 size={12} className="text-slate-400" />
-                            {row.chartOfGroup?.name || '-'}
+                            <Building2
+                              size={12}
+                              className="text-slate-400"
+                            />
+
+                            {row.chartOfGroup?.name ||
+                              '-'}
                           </span>
                         </td>
                       )}
+
                       {visibleColumns.image && (
                         <td className="px-5 py-3.5">
                           {row.image ? (
-                            <img src={row.image} alt={row.name} className="w-8 h-8 rounded-lg object-cover ring-1 ring-slate-200" />
+                            <img
+                              src={resolveFileUrl(
+                                row.image
+                              )}
+                              alt={row.name}
+                              className="w-8 h-8 rounded-lg object-cover ring-1 ring-slate-200"
+                            />
                           ) : (
                             <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-300">
                               <User size={14} />
@@ -342,19 +665,47 @@ export default function CustomerAccountsPage() {
                           )}
                         </td>
                       )}
+
                       {visibleColumns.action && (
                         <td className="px-5 py-3.5">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
-                              onClick={() => openEditModal(row)}
+                              onClick={() =>
+                                openViewModal(row)
+                              }
+                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                              title="View"
+                            >
+                              <Eye size={14} />
+                            </button>
+
+                            <button
+                              onClick={() =>
+                                openEditModal(row)
+                              }
                               className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors"
                               title="Edit"
                             >
                               <Pencil size={14} />
                             </button>
+
                             <button
-                              onClick={() => handleDelete(row)}
-                              disabled={deletingId === row.id}
+                              onClick={() =>
+                                setPortalItem(row)
+                              }
+                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-500 hover:text-emerald-600 transition-colors"
+                              title="Portal Access"
+                            >
+                              <KeyRound size={14} />
+                            </button>
+
+                            <button
+                              onClick={() =>
+                                handleDelete(row)
+                              }
+                              disabled={
+                                deletingId === row.id
+                              }
                               className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors disabled:opacity-50"
                               title="Delete"
                             >
@@ -373,32 +724,61 @@ export default function CustomerAccountsPage() {
           {/* Pagination */}
           <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100">
             <span className="text-sm text-slate-500">
-              Showing <span className="font-medium text-slate-700">{filteredRows.length === 0 ? 0 : (page - 1) * pageSize + 1}</span> to{' '}
-              <span className="font-medium text-slate-700">{Math.min(page * pageSize, filteredRows.length)}</span> of{' '}
-              <span className="font-medium text-slate-700">{filteredRows.length}</span> entries
+              Showing{' '}
+              <span className="font-medium text-slate-700">
+                {filteredRows.length === 0
+                  ? 0
+                  : (page - 1) * pageSize + 1}
+              </span>{' '}
+              to{' '}
+              <span className="font-medium text-slate-700">
+                {Math.min(
+                  page * pageSize,
+                  filteredRows.length
+                )}
+              </span>{' '}
+              of{' '}
+              <span className="font-medium text-slate-700">
+                {filteredRows.length}
+              </span>{' '}
+              entries
             </span>
+
             <div className="flex gap-1.5">
               <button
                 disabled={page === 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                onClick={() =>
+                  setPage((p) => Math.max(1, p - 1))
+                }
                 className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors"
               >
                 Previous
               </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+
+              {Array.from(
+                { length: totalPages },
+                (_, i) => i + 1
+              ).map((n) => (
                 <button
                   key={n}
                   onClick={() => setPage(n)}
                   className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
-                    n === page ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
+                    n === page
+                      ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
+                      : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
                   }`}
                 >
                   {n}
                 </button>
               ))}
+
               <button
                 disabled={page === totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() =>
+                  setPage((p) =>
+                    Math.min(totalPages, p + 1)
+                  )
+                }
                 className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors"
               >
                 Next
@@ -408,7 +788,14 @@ export default function CustomerAccountsPage() {
         </div>
       </div>
 
-      <Modal open={modalOpen} title={editingId ? 'Edit Customer' : 'New Customer'} onClose={closeModal}>
+      {/* Create / Edit Modal */}
+      <Modal
+        open={modalOpen}
+        title={
+          editingId ? 'Edit Customer' : 'New Customer'
+        }
+        onClose={closeModal}
+      >
         <form onSubmit={handleSubmit}>
           {formError && (
             <div className="mb-4 text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
@@ -418,10 +805,18 @@ export default function CustomerAccountsPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Code</label>
+              <FieldLabel infoKey="code">
+                Code
+              </FieldLabel>
+
               <input
                 value={form.code}
-                onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    code: e.target.value,
+                  }))
+                }
                 readOnly={!!editingId}
                 placeholder="Code"
                 className={`w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-mono transition ${
@@ -431,22 +826,46 @@ export default function CustomerAccountsPage() {
                 }`}
               />
             </div>
+
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Name</label>
+              <FieldLabel
+                infoKey="name"
+                required
+              >
+                Name
+              </FieldLabel>
+
               <input
                 required
                 value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    name: e.target.value,
+                  }))
+                }
                 placeholder="Customer name"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
+
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Mobile</label>
+              <FieldLabel
+                infoKey="mobile"
+                required
+              >
+                Mobile
+              </FieldLabel>
+
               <input
                 required
                 value={form.mobile}
-                onChange={(e) => setForm((f) => ({ ...f, mobile: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    mobile: e.target.value,
+                  }))
+                }
                 placeholder="Mobile"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
@@ -455,28 +874,54 @@ export default function CustomerAccountsPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">E-mail</label>
+              <FieldLabel infoKey="email">
+                E-mail
+              </FieldLabel>
+
               <input
                 value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    email: e.target.value,
+                  }))
+                }
                 placeholder="Email"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
+
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">NID/Birth Cert./Passport</label>
+              <FieldLabel infoKey="nid">
+                NID/Birth Cert./Passport
+              </FieldLabel>
+
               <input
                 value={form.nid}
-                onChange={(e) => setForm((f) => ({ ...f, nid: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    nid: e.target.value,
+                  }))
+                }
                 placeholder="NID"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
+
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Address</label>
+              <FieldLabel infoKey="address">
+                Address
+              </FieldLabel>
+
               <input
                 value={form.address}
-                onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    address: e.target.value,
+                  }))
+                }
                 placeholder="Address"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
@@ -485,29 +930,55 @@ export default function CustomerAccountsPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Buyer Reference</label>
+              <FieldLabel infoKey="buyerReference">
+                Buyer Reference
+              </FieldLabel>
+
               <input
                 value={form.buyerReference}
-                onChange={(e) => setForm((f) => ({ ...f, buyerReference: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    buyerReference: e.target.value,
+                  }))
+                }
                 placeholder="Buyer reference"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
+
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Credit Limit</label>
+              <FieldLabel infoKey="creditLimit">
+                Credit Limit
+              </FieldLabel>
+
               <input
                 type="number"
                 value={form.creditLimit}
-                onChange={(e) => setForm((f) => ({ ...f, creditLimit: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    creditLimit: e.target.value,
+                  }))
+                }
                 placeholder="Credit limit"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
+
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Business/Organization</label>
+              <FieldLabel infoKey="businessName">
+                Business/Organization
+              </FieldLabel>
+
               <input
                 value={form.businessName}
-                onChange={(e) => setForm((f) => ({ ...f, businessName: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    businessName: e.target.value,
+                  }))
+                }
                 placeholder="Business name"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
@@ -516,25 +987,49 @@ export default function CustomerAccountsPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Chart Of Group</label>
+              <FieldLabel
+                infoKey="chartOfGroup"
+                required
+              >
+                Chart Of Group
+              </FieldLabel>
+
               <select
                 required
                 value={form.chartOfGroup}
-                onChange={(e) => setForm((f) => ({ ...f, chartOfGroup: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    chartOfGroup: e.target.value,
+                  }))
+                }
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               >
-                <option value="">Select one option</option>
+                <option value="">
+                  Select one option
+                </option>
+
                 {groupOptions.map((g) => (
-                  <option key={g.id} value={g.id}>{g.name}</option>
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
                 ))}
               </select>
             </div>
+
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Image</label>
+              <FieldLabel infoKey="image">
+                Image
+              </FieldLabel>
+
               <input
                 type="file"
                 accept="image/*"
-                onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+                onChange={(e) =>
+                  setImageFile(
+                    e.target.files?.[0] || null
+                  )
+                }
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
@@ -548,16 +1043,216 @@ export default function CustomerAccountsPage() {
             >
               Cancel
             </button>
+
             <button
               type="submit"
               disabled={submitting}
               className="px-4 py-2.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 shadow-sm shadow-indigo-600/20 transition-colors"
             >
-              {submitting ? 'Saving...' : editingId ? 'Save Changes' : 'Create Customer'}
+              {submitting
+                ? 'Saving...'
+                : editingId
+                ? 'Save Changes'
+                : 'Create Customer'}
             </button>
           </div>
         </form>
       </Modal>
+
+      {/* View Customer Modal */}
+      <Modal
+        open={!!viewItem}
+        title="Customer Details"
+        onClose={closeViewModal}
+      >
+        {viewItem && (
+          <div>
+            <div className="flex items-center gap-4 mb-6 pb-5 border-b border-slate-100">
+              {viewItem.image ? (
+                <img
+                  src={resolveFileUrl(viewItem.image)}
+                  alt={viewItem.name}
+                  className="w-16 h-16 rounded-xl object-cover ring-1 ring-slate-200"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-xl bg-slate-100 flex items-center justify-center text-slate-300">
+                  <User size={24} />
+                </div>
+              )}
+
+              <div>
+                <div className="text-lg font-semibold text-slate-900">
+                  {viewItem.name}
+                </div>
+
+                <span className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-600 px-2.5 py-1 text-xs font-mono font-medium ring-1 ring-inset ring-indigo-600/10 mt-1">
+                  {viewItem.code}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <div className="flex items-start gap-2.5">
+                <Phone
+                  size={15}
+                  className="text-slate-400 mt-0.5"
+                />
+
+                <div>
+                  <div className="text-xs text-slate-400 mb-0.5">
+                    Mobile
+                  </div>
+
+                  <div className="text-sm text-slate-800">
+                    {viewItem.mobile || '-'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5">
+                <Mail
+                  size={15}
+                  className="text-slate-400 mt-0.5"
+                />
+
+                <div>
+                  <div className="text-xs text-slate-400 mb-0.5">
+                    E-mail
+                  </div>
+
+                  <div className="text-sm text-slate-800">
+                    {viewItem.email || '-'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5">
+                <TagIcon
+                  size={15}
+                  className="text-slate-400 mt-0.5"
+                />
+
+                <div>
+                  <div className="text-xs text-slate-400 mb-0.5">
+                    NID/Birth Cert./Passport
+                  </div>
+
+                  <div className="text-sm text-slate-800">
+                    {viewItem.nid || '-'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5">
+                <MapPin
+                  size={15}
+                  className="text-slate-400 mt-0.5"
+                />
+
+                <div>
+                  <div className="text-xs text-slate-400 mb-0.5">
+                    Address
+                  </div>
+
+                  <div className="text-sm text-slate-800">
+                    {viewItem.address || '-'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5">
+                <User
+                  size={15}
+                  className="text-slate-400 mt-0.5"
+                />
+
+                <div>
+                  <div className="text-xs text-slate-400 mb-0.5">
+                    Buyer Reference
+                  </div>
+
+                  <div className="text-sm text-slate-800">
+                    {viewItem.buyerReference || '-'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5">
+                <CreditCard
+                  size={15}
+                  className="text-slate-400 mt-0.5"
+                />
+
+                <div>
+                  <div className="text-xs text-slate-400 mb-0.5">
+                    Credit Limit
+                  </div>
+
+                  <div className="text-sm text-slate-800">
+                    {viewItem.creditLimit ?? '-'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5">
+                <Building2
+                  size={15}
+                  className="text-slate-400 mt-0.5"
+                />
+
+                <div>
+                  <div className="text-xs text-slate-400 mb-0.5">
+                    Business/Organization
+                  </div>
+
+                  <div className="text-sm text-slate-800">
+                    {viewItem.businessName || '-'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5">
+                <Building2
+                  size={15}
+                  className="text-slate-400 mt-0.5"
+                />
+
+                <div>
+                  <div className="text-xs text-slate-400 mb-0.5">
+                    Chart Of Group
+                  </div>
+
+                  <div className="text-sm text-slate-800">
+                    {viewItem.chartOfGroup?.name || '-'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={closeViewModal}
+                className="px-4 py-2.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Portal Access */}
+      <PortalAccessModal
+        open={!!portalItem}
+        customer={portalItem}
+        onClose={() => setPortalItem(null)}
+        onSuccess={load}
+        onNeedsEmail={(c) => {
+          setPortalItem(null);
+          openEditModal(c);
+        }}
+      />
     </div>
   );
 }
