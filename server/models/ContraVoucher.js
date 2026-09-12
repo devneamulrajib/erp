@@ -13,6 +13,13 @@ const ContraVoucher = sequelize.define('ContraVoucher', {
   totalDebit: { type: DataTypes.FLOAT, defaultValue: 0 },
   totalCredit: { type: DataTypes.FLOAT, defaultValue: 0 },
 
+  // Which bank account this voucher moves money through. Nullable —
+  // vouchers with no bank set simply never appear in Bank Reconciliation,
+  // since there's nothing to match against a bank statement.
+  bankAccount: { type: DataTypes.STRING, allowNull: true },
+  chequeDate: { type: DataTypes.DATE, allowNull: true },
+  reconciliationStatus: { type: DataTypes.STRING, defaultValue: 'Pending' },
+
   comment: DataTypes.TEXT,
   attachment: { type: DataTypes.STRING, defaultValue: '' },
 

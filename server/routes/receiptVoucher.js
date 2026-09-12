@@ -75,7 +75,7 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
     const {
       projectType, project, titleOfWork, task, site,
       date, voucherNo, creditAccount, debitAccount, ifCheque, chequeReceiptNo,
-      amount, comment, invoiceBill, paymentType, installment,
+      amount, comment, invoiceBill, paymentType, installment, bankAccount, chequeDate,
     } = req.body;
 
     if (!creditAccount || !debitAccount || !amount) {
@@ -94,6 +94,8 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
       debitAccount,
       ifCheque: ifCheque === 'true' || ifCheque === true,
       chequeReceiptNo: chequeReceiptNo || '',
+      bankAccount: bankAccount || null,
+      chequeDate: chequeDate || null,
       amount: Number(amount),
       comment: comment || '',
       invoiceBill: invoiceBill || '',
@@ -117,7 +119,7 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
     const fields = [
       'projectType', 'project', 'titleOfWork', 'task', 'site', 'date', 'voucherNo',
       'creditAccount', 'debitAccount', 'chequeReceiptNo', 'amount', 'comment',
-      'invoiceBill', 'paymentType', 'installment', 'status',
+      'invoiceBill', 'paymentType', 'installment', 'status', 'bankAccount', 'chequeDate',
     ];
     fields.forEach((key) => {
       if (req.body[key] !== undefined) voucher[key] = req.body[key];
@@ -158,6 +160,7 @@ router.post('/:id/duplicate', auth, async (req, res) => {
     copy.date = Date.now();
     copy.status = 'pending';
     copy.editedBy = '';
+    copy.reconciliationStatus = 'Pending';
 
     const created = await ReceiptVoucher.create(copy);
     res.status(201).json(created);

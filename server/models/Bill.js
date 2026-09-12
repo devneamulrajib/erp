@@ -16,6 +16,8 @@ const Bill = sequelize.define('Bill', {
   contentBody: DataTypes.TEXT,
   attachment: DataTypes.STRING,
 
+  status: { type: DataTypes.STRING, defaultValue: 'Unpaid' },
+
   subtotal: { type: DataTypes.FLOAT, defaultValue: 0 },
   vatIncluded: { type: DataTypes.BOOLEAN, defaultValue: false },
   vatPercent: { type: DataTypes.FLOAT, defaultValue: 0 },

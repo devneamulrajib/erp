@@ -1,7 +1,13 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { PassThrough } = require('stream');
+const nodemailer = require('nodemailer');
 const { Bill, BillLineItem, BillPayment, BillApproval, Customer, Project } = require('../models/associations');
+const { buildBillPdf } = require('../utils/billPdf');
 
 function generateCode() {
   return 'Bill' + Math.floor(1000000 + Math.random() * 9000000);
@@ -43,6 +49,24 @@ function computeTotals(body, items) {
 }
 
 const includeAll = [{ model: BillLineItem }, { model: BillPayment }, { model: BillApproval }];
+
+// ---- File upload (attachments) ----
+const uploadDir = path.join(__dirname, '..', 'uploads', 'bills');
+fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, unique + path.extname(file.originalname));
+  },
+});
+const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
+
+router.post('/upload', auth, upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+  res.json({ url: `/uploads/bills/${req.file.filename}` });
+});
 
 router.get('/next-code', auth, async (req, res) => {
   res.json({ code: generateCode() });
@@ -92,6 +116,90 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
+// ---- PDF download ----
+router.get('/:id/pdf', auth, async (req, res) => {
+  try {
+    const bill = await Bill.findByPk(req.params.id, {
+      include: [
+        { model: Customer, attributes: ['name'] },
+        { model: Project, attributes: ['name'] },
+        ...includeAll,
+      ],
+    });
+    if (!bill) return res.status(404).json({ message: 'Not found' });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Invoice-${bill.code}.pdf"`);
+    buildBillPdf(bill, res);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ---- Status update ----
+router.patch('/:id/status', auth, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const allowed = ['Draft', 'Sent', 'Paid', 'Partially Paid', 'Unpaid', 'Overdue', 'Cancelled'];
+    if (!allowed.includes(status)) return res.status(400).json({ message: 'Invalid status' });
+
+    const bill = await Bill.findByPk(req.params.id);
+    if (!bill) return res.status(404).json({ message: 'Not found' });
+
+    bill.status = status;
+    await bill.save();
+    res.json(bill);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ---- Email invoice ----
+router.post('/:id/send-email', auth, async (req, res) => {
+  try {
+    const { to } = req.body;
+    if (!to) return res.status(400).json({ message: 'Recipient email is required' });
+
+    const bill = await Bill.findByPk(req.params.id, {
+      include: [
+        { model: Customer, attributes: ['name'] },
+        { model: Project, attributes: ['name'] },
+        ...includeAll,
+      ],
+    });
+    if (!bill) return res.status(404).json({ message: 'Not found' });
+
+    const pass = new PassThrough();
+    const chunks = [];
+    pass.on('data', (c) => chunks.push(c));
+    const pdfBuffer = await new Promise((resolve, reject) => {
+      pass.on('end', () => resolve(Buffer.concat(chunks)));
+      pass.on('error', reject);
+      buildBillPdf(bill, pass);
+    });
+
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: Number(process.env.SMTP_PORT) === 465,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    });
+
+    await transporter.sendMail({
+      from: process.env.MAIL_FROM || process.env.SMTP_USER,
+      to,
+      subject: `Invoice ${bill.code} from TRIKON`,
+      text: `Please find attached your invoice ${bill.code}.\n\nGrand Total: ${bill.grandTotal}\nDue: ${bill.due}`,
+      attachments: [{ filename: `Invoice-${bill.code}.pdf`, content: pdfBuffer }],
+    });
+
+    res.json({ sent: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.post('/', auth, async (req, res) => {
   try {
     const { customer } = req.body;
@@ -111,6 +219,7 @@ router.post('/', auth, async (req, res) => {
       refWoNo: req.body.refWoNo,
       contentBody: req.body.contentBody,
       attachment: req.body.attachment,
+      status: req.body.status || 'Unpaid',
       ...totals,
       addedBy: req.user?.name || 'Admin',
     });
@@ -150,6 +259,7 @@ router.put('/:id', auth, async (req, res) => {
       refWoNo: req.body.refWoNo,
       contentBody: req.body.contentBody,
       attachment: req.body.attachment,
+      status: req.body.status,
       vatIncluded: req.body.vatIncluded,
       vatPercent: req.body.vatPercent,
       aitIncluded: req.body.aitIncluded,

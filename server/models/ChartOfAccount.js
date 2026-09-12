@@ -20,6 +20,17 @@ const ChartOfAccount = sequelize.define('ChartOfAccount', {
   creditLimit: DataTypes.FLOAT,
   dueDate: DataTypes.DATE,
   image: DataTypes.STRING,
+
+  // --- Portal auth fields ---
+  createUser: { type: DataTypes.BOOLEAN, defaultValue: false },
+  portalPassword: { type: DataTypes.STRING, allowNull: true },
+  portalRole: {
+    type: DataTypes.ENUM('customer', 'supplier', 'vendor'),
+    allowNull: true,
+  },
+  resetPasswordToken: { type: DataTypes.STRING, allowNull: true },
+  resetPasswordExpires: { type: DataTypes.DATE, allowNull: true },
+  lastPortalLoginAt: { type: DataTypes.DATE, allowNull: true },
 }, { timestamps: true });
 
 module.exports = ChartOfAccount;

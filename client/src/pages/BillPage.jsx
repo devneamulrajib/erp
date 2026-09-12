@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
-import { getCustomers, createCustomer, getNextCustomerCode } from '../api/customer';
+import { getContacts, createContact, getNextContactCode } from '../api/contactAccounts';
 import { getChartOfAccounts } from '../api/chartOfAccounts';
 import { getChartOfGroups } from '../api/chartOfGroup';
 import { getCategories } from '../api/category';
 import { getBrands, createBrand } from '../api/brand';
 import { getUnits } from '../api/unit';
 import { createItem } from '../api/item';
-import { getBill, getNextBillCode, createBill, updateBill } from '../api/bill';
+import {
+  getBill, getNextBillCode, createBill, updateBill,
+  uploadBillAttachment, downloadBillPdf, sendBillEmail, getBillAttachmentUrl,
+} from '../api/bill';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
-import { Plus, Trash2, X, ListOrdered, UserPlus, ShoppingBag } from 'lucide-react';
+import { Plus, Trash2, X, ListOrdered, UserPlus, ShoppingBag, Download, Mail, Loader2 } from 'lucide-react';
 
 function num(v) {
   const n = Number(v);
@@ -20,8 +23,9 @@ function num(v) {
 function genTxnId() {
   return 'TXN' + Math.floor(100000 + Math.random() * 900000);
 }
-// works for both MongoDB (_id) and SQL (id)
 function getId(obj) { return obj?.id ?? obj?._id ?? ''; }
+
+const STATUS_OPTIONS = ['Draft', 'Sent', 'Paid', 'Partially Paid', 'Unpaid', 'Overdue', 'Cancelled'];
 
 export default function BillPage() {
   const navigate = useNavigate();
@@ -47,7 +51,10 @@ export default function BillPage() {
   const [site, setSite] = useState('');
   const [refWoNo, setRefWoNo] = useState('');
   const [contentBody, setContentBody] = useState('');
-  const [attachmentName, setAttachmentName] = useState('');
+  const [status, setStatus] = useState('Unpaid');
+
+  const [attachmentUrl, setAttachmentUrl] = useState('');
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
 
   const [rows, setRows] = useState([]);
 
@@ -66,12 +73,14 @@ export default function BillPage() {
 
   const [showItemModal, setShowItemModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    getCustomers()
-      .then((data) => setCustomers(Array.isArray(data) ? data : (data?.rows || [])))
+    getContacts('Customer')
+      .then(({ data }) => setCustomers(Array.isArray(data) ? data : []))
       .catch(() => {});
     getChartOfAccounts()
       .then((data) => setLedgers(Array.isArray(data) ? data : (data?.rows || [])))
@@ -96,21 +105,40 @@ export default function BillPage() {
     if (!isEdit) return;
     getBill(id).then((b) => {
       setDate(b.date || '');
-      setCustomer(getId(b.customer) || b.customer || '');
-      setLedger(getId(b.ledger) || b.ledger || '');
+      setCustomer(b.customerId || getId(b.Customer) || getId(b.customer) || '');
+      setLedger(b.ledgerId || getId(b.Ledger) || getId(b.ledger) || '');
       setCode(b.code || '');
       setProjectType(b.projectType || '');
-      setProject(getId(b.project) || b.project || '');
-      setSite(getId(b.site) || b.site || '');
+      setProject(b.projectId || getId(b.Project) || getId(b.project) || '');
+      setSite(b.siteId || getId(b.Site) || getId(b.site) || '');
       setRefWoNo(b.refWoNo || '');
       setContentBody(b.contentBody || '');
-      setRows(b.items || []);
+      setAttachmentUrl(b.attachment || '');
+      setStatus(b.status || (num(b.due) <= 0 ? 'Paid' : 'Unpaid'));
+      const items = b.BillLineItems || b.items || [];
+      setRows(items.map((it) => ({
+        itemName: it.itemName || '',
+        description: it.description || '',
+        unit: it.unit || '',
+        quantity: it.quantity || 0,
+        rate: it.rate || 0,
+        image: it.image || '',
+        amount: it.amount || 0,
+      })));
       setVatIncluded(!!b.vatIncluded);
       setVatPercent(b.vatPercent || 0);
       setAitIncluded(!!b.aitIncluded);
       setAitPercent(b.aitPercent || 0);
       setInterestRate(b.interestRate || 0);
-      setPayments(b.payments || []);
+      const pmts = b.BillPayments || b.payments || [];
+      setPayments(pmts.map((p) => ({
+        transactionId: p.transactionId || '',
+        paymentMethod: p.paymentMethod || '',
+        isCheque: !!p.isCheque,
+        chequeReceiptNo: p.chequeReceiptNo || '',
+        amount: p.amount || 0,
+        date: p.date || '',
+      })));
     }).catch((err) => {
       console.error(err);
       setError('Failed to load bill.');
@@ -127,6 +155,7 @@ export default function BillPage() {
   const grandTotal = subtotal + vatAmount + aitAmount + interestAmount;
   const paid = useMemo(() => payments.reduce((s, p) => s + num(p.amount), 0), [payments]);
   const due = grandTotal - paid;
+  const isPaid = due <= 0 && grandTotal > 0;
 
   function addRow() {
     setRows((prev) => [...prev, { itemName: '', description: '', unit: '', quantity: 0, rate: 0, image: '', amount: 0 }]);
@@ -136,6 +165,20 @@ export default function BillPage() {
   }
   function removeRow(i) {
     setRows((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  async function handleAttachmentChange(file) {
+    if (!file) return;
+    setUploadingAttachment(true);
+    setError('');
+    try {
+      const url = await uploadBillAttachment(file);
+      setAttachmentUrl(url);
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to upload attachment');
+    } finally {
+      setUploadingAttachment(false);
+    }
   }
 
   function addPayment() {
@@ -150,6 +193,18 @@ export default function BillPage() {
     setPayments((prev) => prev.filter((_, idx) => idx !== i));
   }
 
+  async function handleDownloadPdf() {
+    if (!isEdit) return;
+    setDownloading(true);
+    try {
+      await downloadBillPdf(id, `Invoice-${code}.pdf`);
+    } catch (err) {
+      alert(err.response?.data?.message || err.message || 'Failed to generate PDF');
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
@@ -159,7 +214,7 @@ export default function BillPage() {
       const payload = {
         code, date, customer, ledger, projectType, project, site, refWoNo, contentBody,
         items: rows.map((r) => ({ ...r, amount: num(r.rate) * num(r.quantity) })),
-        attachment: attachmentName, vatIncluded, vatPercent, aitIncluded, aitPercent,
+        attachment: attachmentUrl, status, vatIncluded, vatPercent, aitIncluded, aitPercent,
         interestRate, payments,
       };
       if (isEdit) { await updateBill(id, payload); } else { await createBill(payload); }
@@ -176,33 +231,57 @@ export default function BillPage() {
       <Topbar />
 
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+
+        {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
-            <Breadcrumb
-              items={[
-                { label: 'Home', to: '/dashboard' },
-                { label: 'Billing', to: '/billing/bill_list' },
-                { label: 'Invoice/Bill List' },
-              ]}
-            />
-            <h1 className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">
-              {isEdit ? 'Edit Bill / Invoice' : 'New Bill / Invoice'}
-            </h1>
+            <Breadcrumb items={[
+              { label: 'Home', to: '/dashboard' },
+              { label: 'Billing', to: '/billing/bill_list' },
+              { label: 'Invoice/Bill List' },
+            ]} />
+            <div className="flex items-center gap-3 mt-1">
+              <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">
+                {isEdit ? 'Edit Bill / Invoice' : 'New Bill / Invoice'}
+              </h1>
+              {isEdit && (
+                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${
+                  isPaid
+                    ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20'
+                    : 'bg-red-50 text-red-600 ring-red-600/20'
+                }`}>
+                  {isPaid ? '✓ Paid' : '✗ Unpaid'}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-slate-500 mt-0.5">
               Fill in the details below to {isEdit ? 'update the' : 'create a new'} bill
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {isEdit && (
+              <>
+                <button type="button" onClick={handleDownloadPdf} disabled={downloading}
+                  className="inline-flex items-center gap-2 bg-slate-900 hover:bg-black text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors disabled:opacity-50 no-print">
+                  {downloading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+                  {downloading ? 'Preparing...' : 'Download PDF'}
+                </button>
+                <button type="button" onClick={() => setShowEmailModal(true)}
+                  className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors no-print">
+                  <Mail size={15} /> Email
+                </button>
+              </>
+            )}
             <button type="button" onClick={() => setShowItemModal(true)}
-              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors">
+              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors no-print">
               <ShoppingBag size={15} /> Item Add
             </button>
             <button type="button" onClick={() => setShowCustomerModal(true)}
-              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors">
+              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors no-print">
               <UserPlus size={15} /> Contacts Add
             </button>
             <button type="button" onClick={() => navigate('/billing/bill_list')}
-              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors">
+              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors no-print">
               <ListOrdered size={15} /> Bill List
             </button>
           </div>
@@ -239,6 +318,11 @@ export default function BillPage() {
               </Field>
               <Field label="Code">
                 <input value={code} readOnly className="input bg-slate-50 text-slate-500 font-mono" />
+              </Field>
+              <Field label="Status">
+                <select value={status} onChange={(e) => setStatus(e.target.value)} className="input">
+                  {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
               </Field>
               <Field label="Project Type">
                 <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
@@ -280,7 +364,7 @@ export default function BillPage() {
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50/50">
               <h2 className="text-sm font-semibold text-slate-700">Line Items</h2>
               <button type="button" onClick={addRow}
-                className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
+                className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors no-print">
                 <Plus size={13} /> Add Row
               </button>
             </div>
@@ -325,7 +409,7 @@ export default function BillPage() {
                       <td className="px-4 py-2 font-semibold text-slate-700">
                         {(num(r.rate) * num(r.quantity)).toLocaleString()}
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-4 py-2 no-print">
                         <button type="button" onClick={() => removeRow(i)}
                           className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 hover:bg-red-100 text-red-500 transition-colors">
                           <Trash2 size={13} />
@@ -339,10 +423,27 @@ export default function BillPage() {
           </div>
 
           {/* Attachment */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 no-print">
             <Field label="Attachment">
-              <input type="file" onChange={(e) => setAttachmentName(e.target.files?.[0]?.name || '')}
-                className="block w-full text-sm text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-600 hover:file:bg-indigo-100 transition" />
+              <input
+                type="file"
+                onChange={(e) => handleAttachmentChange(e.target.files?.[0])}
+                disabled={uploadingAttachment}
+                className="block w-full text-sm text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-600 hover:file:bg-indigo-100 transition disabled:opacity-50"
+              />
+              {uploadingAttachment && (
+                <p className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5">
+                  <Loader2 size={12} className="animate-spin" /> Uploading...
+                </p>
+              )}
+              {!uploadingAttachment && attachmentUrl && (
+                <p className="mt-1.5 text-xs text-slate-500">
+                  Current:{' '}
+                  <a href={getBillAttachmentUrl(attachmentUrl)} target="_blank" rel="noreferrer" className="text-indigo-600 font-medium hover:underline">
+                    View attached file
+                  </a>
+                </p>
+              )}
             </Field>
           </div>
 
@@ -388,16 +489,22 @@ export default function BillPage() {
                 <input value={paid.toLocaleString()} readOnly className="input bg-slate-50 text-emerald-600 font-semibold" />
               </Field>
               <Field label="Due">
-                <input value={due.toLocaleString()} readOnly className="input bg-slate-50 text-red-500 font-semibold" />
+                <input value={due.toLocaleString()} readOnly className={`input bg-slate-50 font-semibold ${due > 0 ? 'text-red-500' : 'text-emerald-600'}`} />
               </Field>
             </div>
           </div>
 
           {/* Payments */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Payment history */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/50">
+              <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-slate-700">Payment History</h2>
+                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${
+                  isPaid ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' : 'bg-amber-50 text-amber-700 ring-amber-600/20'
+                }`}>
+                  {isPaid ? 'Fully Paid' : `Due: ${due.toLocaleString()}`}
+                </span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -418,7 +525,7 @@ export default function BillPage() {
                         <td className="px-4 py-2.5">{p.chequeReceiptNo || '—'}</td>
                         <td className="px-4 py-2.5 font-semibold text-slate-700">{num(p.amount).toLocaleString()}</td>
                         <td className="px-4 py-2.5 text-slate-500">{p.date}</td>
-                        <td className="px-4 py-2.5">
+                        <td className="px-4 py-2.5 no-print">
                           <button type="button" onClick={() => removePayment(i)}
                             className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 hover:bg-red-100 text-red-500 transition-colors">
                             <Trash2 size={13} />
@@ -431,7 +538,8 @@ export default function BillPage() {
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-5">
+            {/* Add payment */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-5 no-print">
               <h2 className="text-sm font-semibold text-slate-700 mb-4">Add Payment</h2>
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <Field label="Payment Method" required>
@@ -459,7 +567,7 @@ export default function BillPage() {
                 </button>
                 <button type="submit" disabled={submitting}
                   className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-medium px-7 py-2.5 rounded-lg disabled:opacity-50 transition-colors text-sm">
-                  {submitting ? 'Saving...' : 'Submit'}
+                  {submitting ? 'Saving...' : isEdit ? 'Update Bill' : 'Submit'}
                 </button>
               </div>
             </div>
@@ -486,6 +594,76 @@ export default function BillPage() {
           }}
         />
       )}
+      {showEmailModal && (
+        <EmailModal
+          billId={id}
+          code={code}
+          onClose={() => setShowEmailModal(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function EmailModal({ billId, code, onClose }) {
+  const [to, setTo] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+  const [sent, setSent] = useState(false);
+
+  async function handleSend(e) {
+    e.preventDefault();
+    if (!to.trim()) { setError('Recipient email is required'); return; }
+    setSending(true); setError('');
+    try {
+      await sendBillEmail(billId, to.trim());
+      setSent(true);
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to send email');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
+        <button onClick={onClose}
+          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors">
+          <X size={16} />
+        </button>
+        <h2 className="text-lg font-semibold text-slate-800 mb-1">Email Invoice</h2>
+        <p className="text-sm text-slate-500 mb-4">Send {code} as a PDF attachment.</p>
+
+        {sent ? (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl p-4 text-sm">
+            Invoice sent to {to}.
+          </div>
+        ) : (
+          <form onSubmit={handleSend}>
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 mb-4 text-sm">{error}</div>}
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Recipient Email</label>
+            <input
+              type="email"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              placeholder="customer@example.com"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition mb-4"
+            />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={onClose}
+                className="px-4 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium transition-colors">
+                Cancel
+              </button>
+              <button type="submit" disabled={sending}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium disabled:opacity-50 transition-colors">
+                {sending && <Loader2 size={14} className="animate-spin" />}
+                {sending ? 'Sending...' : 'Send'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
     </div>
   );
 }
@@ -552,7 +730,8 @@ function ItemAddModal({ categories, brands, units, onBrandCreated, onClose, onCr
             </div>
             {showBrandInput && (
               <div className="flex gap-2 mt-2">
-                <input value={newBrandName} onChange={(e) => setNewBrandName(e.target.value)} placeholder="New brand name" className="input flex-1" />
+                <input value={newBrandName} onChange={(e) => setNewBrandName(e.target.value)}
+                  placeholder="New brand name" className="input flex-1" />
                 <button type="button" onClick={handleAddBrand}
                   className="px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm transition-colors">Add</button>
               </div>
@@ -568,15 +747,19 @@ function ItemAddModal({ categories, brands, units, onBrandCreated, onClose, onCr
             </select>
           </Field>
           <Field label="Purchase Price">
-            <input type="number" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} placeholder="Enter Purchase Price" className="input" />
+            <input type="number" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)}
+              placeholder="Enter Purchase Price" className="input" />
           </Field>
           <Field label="Sale Price">
-            <input type="number" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} placeholder="Sale Price" className="input" />
+            <input type="number" value={salePrice} onChange={(e) => setSalePrice(e.target.value)}
+              placeholder="Sale Price" className="input" />
           </Field>
         </div>
         <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-          <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium transition-colors">Close</button>
-          <button type="submit" disabled={saving} className="px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium disabled:opacity-50 transition-colors">
+          <button type="button" onClick={onClose}
+            className="px-4 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium transition-colors">Close</button>
+          <button type="submit" disabled={saving}
+            className="px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium disabled:opacity-50 transition-colors">
             {saving ? 'Saving...' : 'Submit'}
           </button>
         </div>
@@ -589,6 +772,7 @@ function CustomerAddModal({ chartGroups, onClose, onCreated }) {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
+  const [nid, setNid] = useState('');
   const [buyerReference, setBuyerReference] = useState('');
   const [address, setAddress] = useState('');
   const [creditLimit, setCreditLimit] = useState('');
@@ -600,7 +784,9 @@ function CustomerAddModal({ chartGroups, onClose, onCreated }) {
 
   function getId(obj) { return obj?.id ?? obj?._id ?? ''; }
 
-  useEffect(() => { getNextCustomerCode().then(setCode).catch(() => {}); }, []);
+  useEffect(() => {
+    getNextContactCode('Customer').then(({ data }) => setCode(data.code)).catch(() => {});
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault(); setError('');
@@ -608,10 +794,19 @@ function CustomerAddModal({ chartGroups, onClose, onCreated }) {
     if (!chartGroup) { setError('Chart Of Groups is required'); return; }
     setSaving(true);
     try {
-      const created = await createCustomer({
-        code, name: name.trim(), mobile, buyerReference, address,
-        creditLimit, dueDate, openingBalance, chartGroup,
-      });
+      const fd = new FormData();
+      fd.append('code', code);
+      fd.append('name', name.trim());
+      fd.append('mobile', mobile);
+      fd.append('nid', nid);
+      fd.append('buyerReference', buyerReference);
+      fd.append('address', address);
+      fd.append('creditLimit', creditLimit);
+      fd.append('dueDate', dueDate);
+      fd.append('openingBalance', openingBalance);
+      fd.append('chartOfGroup', chartGroup);
+      fd.append('contactType', 'Customer');
+      const { data: created } = await createContact(fd);
       onCreated(created);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to add customer');
@@ -632,20 +827,26 @@ function CustomerAddModal({ chartGroups, onClose, onCreated }) {
           <Field label="Mobile Number">
             <input value={mobile} onChange={(e) => setMobile(e.target.value)} placeholder="Enter Mobile" className="input" />
           </Field>
+          <Field label="NID">
+            <input value={nid} onChange={(e) => setNid(e.target.value)} placeholder="Enter NID" className="input" />
+          </Field>
           <Field label="Buyer Reference">
-            <input value={buyerReference} onChange={(e) => setBuyerReference(e.target.value)} placeholder="Enter Business Name" className="input" />
+            <input value={buyerReference} onChange={(e) => setBuyerReference(e.target.value)}
+              placeholder="Enter Business Name" className="input" />
           </Field>
           <Field label="Address">
             <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Enter Address" className="input" />
           </Field>
           <Field label="Credit Limit">
-            <input type="number" value={creditLimit} onChange={(e) => setCreditLimit(e.target.value)} placeholder="Enter Credit Limit" className="input" />
+            <input type="number" value={creditLimit} onChange={(e) => setCreditLimit(e.target.value)}
+              placeholder="Enter Credit Limit" className="input" />
           </Field>
           <Field label="Due Date">
             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="input" />
           </Field>
           <Field label="Opening Balance">
-            <input type="number" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} placeholder="Opening Balance" className="input" />
+            <input type="number" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)}
+              placeholder="Opening Balance" className="input" />
           </Field>
           <Field label="Chart Of Groups" required>
             <select value={chartGroup} onChange={(e) => setChartGroup(e.target.value)} className="input">
@@ -655,8 +856,10 @@ function CustomerAddModal({ chartGroups, onClose, onCreated }) {
           </Field>
         </div>
         <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-          <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium transition-colors">Close</button>
-          <button type="submit" disabled={saving} className="px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium disabled:opacity-50 transition-colors">
+          <button type="button" onClick={onClose}
+            className="px-4 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium transition-colors">Close</button>
+          <button type="submit" disabled={saving}
+            className="px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium disabled:opacity-50 transition-colors">
             {saving ? 'Saving...' : 'Submit'}
           </button>
         </div>

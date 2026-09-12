@@ -24,3 +24,11 @@ export async function deleteContractorWorkorder(id) {
   const res = await api.delete(`/contractor-workorder/${id}`);
   return res.data;
 }
+export async function uploadContractorWorkorderAttachment(id, file) {
+  const fd = new FormData();
+  fd.append('attachment', file);
+  const res = await api.post(`/contractor-workorder/${id}/attachment`, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+}

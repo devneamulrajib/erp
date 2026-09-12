@@ -108,6 +108,8 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
       task: body.task || '',
       totalDebit,
       totalCredit,
+      bankAccount: body.bankAccount || null,
+      chequeDate: body.chequeDate || null,
       comment: body.comment || '',
       addedBy: req.user?.name || 'Admin',
       attachment: req.file ? `/uploads/contra-vouchers/${req.file.filename}` : '',
@@ -144,7 +146,7 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
       voucher.totalCredit = totalCredit;
     }
 
-    const plainFields = ['date', 'projectType', 'project', 'titleOfWork', 'site', 'task', 'comment', 'status'];
+    const plainFields = ['date', 'projectType', 'project', 'titleOfWork', 'site', 'task', 'comment', 'status', 'bankAccount', 'chequeDate'];
     plainFields.forEach((key) => {
       if (body[key] !== undefined) voucher[key] = body[key];
     });
@@ -183,6 +185,7 @@ router.post('/:id/duplicate', auth, async (req, res) => {
     copy.date = Date.now();
     copy.status = 'pending';
     copy.editedBy = '';
+    copy.reconciliationStatus = 'Pending';
 
     const created = await ContraVoucher.create(copy);
     for (const l of originalLines) {

@@ -14,9 +14,9 @@ export default function ProjectWiseIncomeStatement() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [selectedCompany, setSelectedCompany] = useState('Somikoron IT Ltd');
+const [selectedCompany, setSelectedCompany] = useState('Trikon Holdings');
   const [selectedProject, setSelectedProject] = useState('');
-  const [companyOptions, setCompanyOptions] = useState([{ value: 'Somikoron IT Ltd', label: 'Somikoron IT Ltd' }]);
+  const [companyOptions, setCompanyOptions] = useState([{ value: 'Trikon Holdings', label: 'Trikon Holdings' }]);
   const [projectOptions, setProjectOptions] = useState([]);
 
   const [pageSize, setPageSize] = useState(10);

@@ -43,8 +43,8 @@ export default function ChartOfAccountsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await getChartOfAccounts(groupFilter ? { chartOfGroup: groupFilter } : {});
-      setAccounts(data);
+      const data = await getChartOfAccounts(groupFilter ? { chartOfGroup: groupFilter } : {});
+      setAccounts(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load chart of accounts', err);
     } finally {
@@ -55,7 +55,7 @@ export default function ChartOfAccountsPage() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    getChartOfGroupOptions().then(({ data }) => setGroupOptions(data)).catch(console.error);
+    getChartOfGroupOptions().then((data) => setGroupOptions(Array.isArray(data) ? data : [])).catch(console.error);
   }, []);
 
   useEffect(() => {

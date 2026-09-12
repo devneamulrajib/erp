@@ -1,5 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Pencil, Trash2, Plus, X, Search, LayoutGrid, Home } from 'lucide-react';
+import {
+  Pencil, Trash2, Plus, X, Search, LayoutGrid, Home, Eye,
+  MapPin, Ruler, Sofa, Wallet, Info, BedDouble, Bath, User,
+  SlidersHorizontal, ChevronDown,
+} from 'lucide-react';
 import { getFlats, createFlat, updateFlat, deleteFlat } from '../api/flat';
 import { getProjects } from '../api/project';
 import { getSites } from '../api/site';
@@ -19,15 +23,80 @@ const EMPTY_FORM = {
   bedroom: '', bathroom: '', unit: '', drawing: '', dining: '',
   kitchen: '', balcony: '', parking: '', parkingCost: '',
   utilityCharge: '', basement: '', facing: '', amenities: '',
-  status: '',
+  status: '', customer: '',
 };
 
 const inputClass =
-  'w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition';
+  'w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition';
 
 function num(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
+}
+
+function money(v) {
+  return num(v).toLocaleString();
+}
+
+function Field({ label, required, span, children }) {
+  return (
+    <div className={span ? 'sm:col-span-2 lg:col-span-3' : ''}>
+      <label className="block text-xs font-medium text-slate-500 mb-1">
+        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function Section({ icon: Icon, title, hint, children }) {
+  return (
+    <div className="mb-4">
+      <div className="flex items-center gap-2 mb-2.5">
+        <div className="w-6 h-6 rounded-md bg-indigo-50 flex items-center justify-center shrink-0">
+          <Icon size={13} className="text-indigo-600" />
+        </div>
+        <h3 className="text-[13px] font-semibold text-slate-700">{title}</h3>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 bg-slate-50/70 border border-slate-100 rounded-xl p-4">
+        {children}
+      </div>
+      {hint && (
+        <p className="flex items-start gap-1.5 text-xs text-slate-400 mt-1.5 px-0.5">
+          <Info size={13} className="mt-0.5 shrink-0" />
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Read-only row used in the View modal
+function ViewRow({ label, value }) {
+  return (
+    <div>
+      <div className="text-xs font-medium text-slate-400 mb-0.5">{label}</div>
+      <div className="text-sm text-slate-800 font-medium">
+        {value === '' || value === null || value === undefined ? '-' : value}
+      </div>
+    </div>
+  );
+}
+
+function ViewSection({ icon: Icon, title, children }) {
+  return (
+    <div className="mb-4">
+      <div className="flex items-center gap-2 mb-2.5">
+        <div className="w-6 h-6 rounded-md bg-indigo-50 flex items-center justify-center shrink-0">
+          <Icon size={13} className="text-indigo-600" />
+        </div>
+        <h3 className="text-[13px] font-semibold text-slate-700">{title}</h3>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 bg-slate-50/70 border border-slate-100 rounded-xl p-4">
+        {children}
+      </div>
+    </div>
+  );
 }
 
 export default function Flat() {
@@ -41,16 +110,20 @@ export default function Flat() {
   const [filterProject, setFilterProject] = useState('');
   const [filterSite, setFilterSite] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
 
-  // modal state
+  // form modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+
+  // view modal state
+  const [viewFlat, setViewFlat] = useState(null);
 
   const loadFlats = useCallback(async () => {
     setLoading(true);
@@ -138,6 +211,7 @@ export default function Flat() {
       facing: flat.facing || '',
       amenities: flat.amenities || '',
       status: flat.status || '',
+      customer: flat.customer || '',
     });
     setFormError('');
     setModalOpen(true);
@@ -148,6 +222,14 @@ export default function Flat() {
     setEditingId(null);
     setForm(EMPTY_FORM);
     setFormError('');
+  }
+
+  function openViewModal(flat) {
+    setViewFlat(flat);
+  }
+
+  function closeViewModal() {
+    setViewFlat(null);
   }
 
   function updateField(key, value) {
@@ -257,49 +339,81 @@ export default function Flat() {
           </div>
         </div>
 
-        {/* Filters panel */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-5">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Project</label>
-              <select
-                value={filterProject}
-                onChange={(e) => setFilterProject(e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Select value</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+        {/* Filters panel — collapsed by default behind a Filter button */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm mb-5 overflow-hidden">
+          <button
+            onClick={() => setFiltersOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-5 py-3 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <span className="inline-flex items-center gap-2">
+              <SlidersHorizontal size={15} className="text-slate-400" />
+              Filter
+              {(filterProject || filterSite || filterStatus) && (
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-indigo-600 text-white text-[11px] font-semibold">
+                  {[filterProject, filterSite, filterStatus].filter(Boolean).length}
+                </span>
+              )}
+            </span>
+            <ChevronDown
+              size={16}
+              className={`text-slate-400 transition-transform ${filtersOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {filtersOpen && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 px-5 pb-5 pt-1 border-t border-slate-100">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1.5">Project</label>
+                <select
+                  value={filterProject}
+                  onChange={(e) => setFilterProject(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">Select value</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1.5">Site</label>
+                <select
+                  value={filterSite}
+                  onChange={(e) => setFilterSite(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">Select Site</option>
+                  {sites.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1.5">Status</label>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">Select Status</option>
+                  {STATUS_OPTIONS.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              {(filterProject || filterSite || filterStatus) && (
+                <div className="sm:col-span-3 flex justify-end">
+                  <button
+                    onClick={() => { setFilterProject(''); setFilterSite(''); setFilterStatus(''); }}
+                    className="text-xs font-medium text-slate-400 hover:text-red-500 transition-colors"
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Site</label>
-              <select
-                value={filterSite}
-                onChange={(e) => setFilterSite(e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Select Site</option>
-                {sites.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Status</label>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Select Status</option>
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Table panel */}
@@ -329,13 +443,12 @@ export default function Flat() {
             </div>
           </div>
 
-          {/* Table */}
+          {/* Table — condensed to the columns that matter at a glance; everything else lives in View */}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
-                  {['SL', 'Project', 'Site', 'Flat/Land No', 'Unit', 'Bedroom', 'Bathroom', 'Size',
-                    'Price', 'Subtotal', 'Parking Cost', 'Utility Charge', 'Grand Total', 'Customer', 'Status'].map((h) => (
+                  {['SL', 'Flat/Land No', 'Project', 'Site', 'Specs', 'Price', 'Grand Total', 'Customer', 'Status'].map((h) => (
                     <th key={h} className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">{h}</th>
                   ))}
                   <th className="px-4 py-3 text-right font-medium text-xs uppercase tracking-wide">Action</th>
@@ -343,10 +456,10 @@ export default function Flat() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={16} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
+                  <tr><td colSpan={10} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
                 ) : pagedFlats.length === 0 ? (
                   <tr>
-                    <td colSpan={16} className="text-center py-16">
+                    <td colSpan={10} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <LayoutGrid size={28} strokeWidth={1.5} />
                         <p className="text-sm">No entries found. Try adjusting your filters, or add one.</p>
@@ -357,26 +470,26 @@ export default function Flat() {
                   pagedFlats.map((f, idx) => (
                     <tr key={f.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
                       <td className="px-4 py-3.5 text-slate-400 font-mono text-xs">{(page - 1) * pageSize + idx + 1}</td>
-                      <td className="px-4 py-3.5 text-slate-600">{projectName(f)}</td>
-                      <td className="px-4 py-3.5 text-slate-600">{siteName(f)}</td>
                       <td className="px-4 py-3.5">
                         <button
-                          onClick={() => openEditModal(f)}
+                          onClick={() => openViewModal(f)}
                           className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-medium hover:underline underline-offset-2"
                         >
                           <Home size={13} className="text-slate-400" />
-                          {f.flatLandNo}
+                          {f.flatLandNo || '-'}
                         </button>
                       </td>
-                      <td className="px-4 py-3.5 text-slate-600">{f.unit}</td>
-                      <td className="px-4 py-3.5 text-slate-600">{f.bedroom}</td>
-                      <td className="px-4 py-3.5 text-slate-600">{f.bathroom}</td>
-                      <td className="px-4 py-3.5 text-slate-600">{f.size}</td>
-                      <td className="px-4 py-3.5 text-slate-600">{f.price}</td>
-                      <td className="px-4 py-3.5 text-slate-600">{f.subtotal}</td>
-                      <td className="px-4 py-3.5 text-slate-600">{f.parkingCost}</td>
-                      <td className="px-4 py-3.5 text-slate-600">{f.utilityCharge}</td>
-                      <td className="px-4 py-3.5 font-semibold text-slate-900">{f.grandTotal}</td>
+                      <td className="px-4 py-3.5 text-slate-600">{projectName(f)}</td>
+                      <td className="px-4 py-3.5 text-slate-600">{siteName(f)}</td>
+                      <td className="px-4 py-3.5 text-slate-600">
+                        <div className="flex items-center gap-3 text-xs text-slate-500">
+                          <span className="inline-flex items-center gap-1"><BedDouble size={13} />{f.bedroom || 0}</span>
+                          <span className="inline-flex items-center gap-1"><Bath size={13} />{f.bathroom || 0}</span>
+                          <span className="inline-flex items-center gap-1"><Ruler size={13} />{f.size || 0} sqft</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5 text-slate-600">{money(f.price)}</td>
+                      <td className="px-4 py-3.5 font-semibold text-slate-900">{money(f.grandTotal)}</td>
                       <td className="px-4 py-3.5 text-slate-600">{f.customer || '-'}</td>
                       <td className="px-4 py-3.5">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${STATUS_STYLES[f.status] || 'bg-slate-50 text-slate-500 ring-slate-600/10'}`}>
@@ -385,6 +498,13 @@ export default function Flat() {
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => openViewModal(f)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                            title="View"
+                          >
+                            <Eye size={14} />
+                          </button>
                           <button
                             onClick={() => openEditModal(f)}
                             className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors"
@@ -445,155 +565,230 @@ export default function Flat() {
           </div>
         </div>
 
-        {/* Modal */}
+        {/* Add / Edit Modal — wider, denser grid so the form doesn't feel like a long scroll */}
         {modalOpen && (
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center z-[9999] p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl xl:max-w-5xl max-h-[90vh] flex flex-col">
+
+              {/* Sticky header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
                 <h2 className="text-lg font-semibold text-slate-900">{editingId ? 'Edit Flat' : 'New Flat'}</h2>
                 <button onClick={closeModal} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
                   <X size={18} />
                 </button>
               </div>
 
-              <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Scrollable body */}
+              <div className="p-6 overflow-y-auto">
                 {formError && (
-                  <div className="col-span-2 text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+                  <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl px-4 py-3 mb-4">
                     {formError}
                   </div>
                 )}
 
-                <Field label="Project" required>
-                  <select
-                    value={form.project}
-                    onChange={(e) => updateField('project', e.target.value)}
-                    className={inputClass}
+                <Section icon={MapPin} title="Location & Identity">
+                  <Field label="Project" required>
+                    <select value={form.project} onChange={(e) => updateField('project', e.target.value)} className={inputClass}>
+                      <option value="">Select One Option</option>
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Site">
+                    <select value={form.site} onChange={(e) => updateField('site', e.target.value)} className={inputClass}>
+                      <option value="">Select Site</option>
+                      {sites.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Flat No">
+                    <input value={form.flatLandNo} onChange={(e) => updateField('flatLandNo', e.target.value)} className={inputClass} />
+                  </Field>
+                  <Field label="Status" required>
+                    <select value={form.status} onChange={(e) => updateField('status', e.target.value)} className={inputClass}>
+                      <option value="">Select Sale Status</option>
+                      {STATUS_OPTIONS.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Customer">
+                    <input value={form.customer} onChange={(e) => updateField('customer', e.target.value)} className={inputClass} placeholder="Optional" />
+                  </Field>
+                  <Field label="Unit">
+                    <input value={form.unit} onChange={(e) => updateField('unit', e.target.value)} className={inputClass} />
+                  </Field>
+                </Section>
+
+                <Section
+                  icon={Ruler}
+                  title="Size & Pricing"
+                  hint="Price is the rate per unit of size, not the flat's total price — Subtotal is calculated as Price × Size."
+                >
+                  <Field label="Size (sqft)">
+                    <input type="number" value={form.size} onChange={(e) => updateField('size', e.target.value)} className={inputClass} />
+                  </Field>
+                  <Field label="Price (per sq ft)">
+                    <input type="number" value={form.price} onChange={(e) => updateField('price', e.target.value)} className={inputClass} />
+                  </Field>
+                  <Field label="Bedroom">
+                    <input type="number" value={form.bedroom} onChange={(e) => updateField('bedroom', e.target.value)} className={inputClass} />
+                  </Field>
+                  <Field label="Bathroom">
+                    <input type="number" value={form.bathroom} onChange={(e) => updateField('bathroom', e.target.value)} className={inputClass} />
+                  </Field>
+                  <Field label="Parking Cost">
+                    <input type="number" value={form.parkingCost} onChange={(e) => updateField('parkingCost', e.target.value)} className={inputClass} />
+                  </Field>
+                  <Field label="Utility Charge">
+                    <input type="number" value={form.utilityCharge} onChange={(e) => updateField('utilityCharge', e.target.value)} className={inputClass} />
+                  </Field>
+                </Section>
+
+                <Section icon={Sofa} title="Layout Details">
+                  <Field label="Drawing">
+                    <input value={form.drawing} onChange={(e) => updateField('drawing', e.target.value)} className={inputClass} />
+                  </Field>
+                  <Field label="Dining">
+                    <input value={form.dining} onChange={(e) => updateField('dining', e.target.value)} className={inputClass} />
+                  </Field>
+                  <Field label="Kitchen">
+                    <input value={form.kitchen} onChange={(e) => updateField('kitchen', e.target.value)} className={inputClass} />
+                  </Field>
+                  <Field label="Balcony">
+                    <input value={form.balcony} onChange={(e) => updateField('balcony', e.target.value)} className={inputClass} />
+                  </Field>
+                  <Field label="Basement">
+                    <input value={form.basement} onChange={(e) => updateField('basement', e.target.value)} className={inputClass} />
+                  </Field>
+                  <Field label="Facing">
+                    <input value={form.facing} onChange={(e) => updateField('facing', e.target.value)} className={inputClass} />
+                  </Field>
+                </Section>
+
+                <Section icon={Wallet} title="Parking & Amenities">
+                  <Field label="Parking">
+                    <input value={form.parking} onChange={(e) => updateField('parking', e.target.value)} className={inputClass} />
+                  </Field>
+                  <Field label="Amenities" span>
+                    <textarea value={form.amenities} onChange={(e) => updateField('amenities', e.target.value)} className={`${inputClass} min-h-[42px]`} />
+                  </Field>
+                </Section>
+              </div>
+
+              {/* Sticky footer */}
+              <div className="flex items-center justify-between gap-4 px-6 py-4 border-t border-slate-100 shrink-0 bg-white rounded-b-2xl">
+                <div className="flex items-center gap-4 text-sm text-slate-500">
+                  <span>Subtotal: <span className="font-semibold text-slate-900">{subtotal.toLocaleString()}</span></span>
+                  <span className="text-slate-200">|</span>
+                  <span>Grand Total: <span className="font-semibold text-slate-900">{grandTotal.toLocaleString()}</span></span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={closeModal}
+                    className="px-4 py-2.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
                   >
-                    <option value="">Select One Option</option>
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </Field>
-
-                <Field label="Site">
-                  <select
-                    value={form.site}
-                    onChange={(e) => updateField('site', e.target.value)}
-                    className={inputClass}
+                    Close
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={saving}
+                    className="px-4 py-2.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 shadow-sm shadow-indigo-600/20 transition-colors"
                   >
-                    <option value="">Select Site</option>
-                    {sites.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </Field>
-
-                <Field label="Flat No">
-                  <input value={form.flatLandNo} onChange={(e) => updateField('flatLandNo', e.target.value)} className={inputClass} />
-                </Field>
-                <Field label="Size">
-                  <input type="number" value={form.size} onChange={(e) => updateField('size', e.target.value)} className={inputClass} />
-                </Field>
-
-                <Field label="Price">
-                  <input type="number" value={form.price} onChange={(e) => updateField('price', e.target.value)} className={inputClass} />
-                </Field>
-                <Field label="Bedroom">
-                  <input type="number" value={form.bedroom} onChange={(e) => updateField('bedroom', e.target.value)} className={inputClass} />
-                </Field>
-
-                <Field label="Bathroom">
-                  <input type="number" value={form.bathroom} onChange={(e) => updateField('bathroom', e.target.value)} className={inputClass} />
-                </Field>
-                <Field label="Unit">
-                  <input value={form.unit} onChange={(e) => updateField('unit', e.target.value)} className={inputClass} />
-                </Field>
-
-                <Field label="Drawing">
-                  <input value={form.drawing} onChange={(e) => updateField('drawing', e.target.value)} className={inputClass} />
-                </Field>
-                <Field label="Dining">
-                  <input value={form.dining} onChange={(e) => updateField('dining', e.target.value)} className={inputClass} />
-                </Field>
-
-                <Field label="Kitchen">
-                  <input value={form.kitchen} onChange={(e) => updateField('kitchen', e.target.value)} className={inputClass} />
-                </Field>
-                <Field label="Balcony">
-                  <input value={form.balcony} onChange={(e) => updateField('balcony', e.target.value)} className={inputClass} />
-                </Field>
-
-                <Field label="Parking">
-                  <input value={form.parking} onChange={(e) => updateField('parking', e.target.value)} className={inputClass} />
-                </Field>
-                <Field label="Parking Cost">
-                  <input type="number" value={form.parkingCost} onChange={(e) => updateField('parkingCost', e.target.value)} className={inputClass} />
-                </Field>
-
-                <Field label="Utility Charge">
-                  <input type="number" value={form.utilityCharge} onChange={(e) => updateField('utilityCharge', e.target.value)} className={inputClass} />
-                </Field>
-                <Field label="Basement">
-                  <input value={form.basement} onChange={(e) => updateField('basement', e.target.value)} className={inputClass} />
-                </Field>
-
-                <Field label="Facing">
-                  <input value={form.facing} onChange={(e) => updateField('facing', e.target.value)} className={inputClass} />
-                </Field>
-                <Field label="Amenities">
-                  <textarea value={form.amenities} onChange={(e) => updateField('amenities', e.target.value)} className={`${inputClass} min-h-[42px]`} />
-                </Field>
-
-                <Field label="Status" required>
-                  <select value={form.status} onChange={(e) => updateField('status', e.target.value)} className={inputClass}>
-                    <option value="">Select Sale Status</option>
-                    {STATUS_OPTIONS.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </Field>
-
-                <div className="col-span-2 grid grid-cols-2 gap-4 pt-4 border-t border-slate-100 mt-2">
-                  <div className="text-sm text-slate-500">
-                    Subtotal: <span className="font-semibold text-slate-900">{subtotal.toLocaleString()}</span>
-                  </div>
-                  <div className="text-sm text-slate-500">
-                    Grand Total: <span className="font-semibold text-slate-900">{grandTotal.toLocaleString()}</span>
-                  </div>
+                    {saving ? 'Saving…' : 'Submit'}
+                  </button>
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100">
+            </div>
+          </div>
+        )}
+
+        {/* View Modal — read-only, shows every field so nothing is missed */}
+        {viewFlat && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center z-[9999] p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl xl:max-w-5xl max-h-[90vh] flex flex-col">
+
+              {/* Sticky header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center">
+                    <Home size={16} className="text-indigo-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900 leading-tight">{viewFlat.flatLandNo || 'Flat Details'}</h2>
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset mt-0.5 ${STATUS_STYLES[viewFlat.status] || 'bg-slate-50 text-slate-500 ring-slate-600/10'}`}>
+                      {viewFlat.status}
+                    </span>
+                  </div>
+                </div>
+                <button onClick={closeViewModal} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Scrollable body */}
+              <div className="p-6 overflow-y-auto">
+                <ViewSection icon={MapPin} title="Location & Identity">
+                  <ViewRow label="Project" value={projectName(viewFlat)} />
+                  <ViewRow label="Site" value={siteName(viewFlat)} />
+                  <ViewRow label="Flat/Land No" value={viewFlat.flatLandNo} />
+                  <ViewRow label="Unit" value={viewFlat.unit} />
+                  <ViewRow label="Customer" value={viewFlat.customer} />
+                  <ViewRow label="Code" value={viewFlat.code} />
+                </ViewSection>
+
+                <ViewSection icon={Ruler} title="Size & Pricing">
+                  <ViewRow label="Size" value={viewFlat.size ? `${viewFlat.size} sqft` : '-'} />
+                  <ViewRow label="Price (per sq ft)" value={money(viewFlat.price)} />
+                  <ViewRow label="Bedroom" value={viewFlat.bedroom} />
+                  <ViewRow label="Bathroom" value={viewFlat.bathroom} />
+                  <ViewRow label="Subtotal" value={money(viewFlat.subtotal)} />
+                  <ViewRow label="Grand Total" value={money(viewFlat.grandTotal)} />
+                </ViewSection>
+
+                <ViewSection icon={Sofa} title="Layout Details">
+                  <ViewRow label="Drawing" value={viewFlat.drawing} />
+                  <ViewRow label="Dining" value={viewFlat.dining} />
+                  <ViewRow label="Kitchen" value={viewFlat.kitchen} />
+                  <ViewRow label="Balcony" value={viewFlat.balcony} />
+                  <ViewRow label="Basement" value={viewFlat.basement} />
+                  <ViewRow label="Facing" value={viewFlat.facing} />
+                </ViewSection>
+
+                <ViewSection icon={Wallet} title="Parking & Amenities">
+                  <ViewRow label="Parking" value={viewFlat.parking} />
+                  <ViewRow label="Parking Cost" value={money(viewFlat.parkingCost)} />
+                  <ViewRow label="Utility Charge" value={money(viewFlat.utilityCharge)} />
+                  <div className="sm:col-span-2 lg:col-span-3">
+                    <ViewRow label="Amenities" value={viewFlat.amenities} />
+                  </div>
+                </ViewSection>
+              </div>
+
+              {/* Sticky footer */}
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 shrink-0 bg-white rounded-b-2xl">
                 <button
-                  onClick={closeModal}
+                  onClick={closeViewModal}
                   className="px-4 py-2.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
                 >
                   Close
                 </button>
                 <button
-                  onClick={handleSubmit}
-                  disabled={saving}
-                  className="px-4 py-2.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 shadow-sm shadow-indigo-600/20 transition-colors"
+                  onClick={() => { const f = viewFlat; closeViewModal(); openEditModal(f); }}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm shadow-indigo-600/20 transition-colors"
                 >
-                  {saving ? 'Saving…' : 'Submit'}
+                  <Pencil size={14} />
+                  Edit
                 </button>
               </div>
+
             </div>
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function Field({ label, required, children }) {
-  return (
-    <div>
-      <label className="block text-xs font-medium text-slate-500 mb-1.5">
-        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-      </label>
-      {children}
     </div>
   );
 }

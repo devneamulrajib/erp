@@ -1,7 +1,22 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { PeriodBill, Customer, ChartOfAccount, Project, Site } = require('../models/associations');
+
+const uploadDir = path.join(__dirname, '..', 'uploads', 'period-bills');
+fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `${unique}${path.extname(file.originalname)}`);
+  },
+});
+const upload = multer({ storage });
 
 function generateCode() {
   return 'PB' + Math.floor(1000000 + Math.random() * 9000000);
@@ -16,6 +31,11 @@ function computeTotals(body) {
 
   return { projectCost, percentage, constructionCost, serviceCharge, grandTotal };
 }
+
+const listInclude = [
+  { model: Customer, as: 'customer', attributes: ['id', 'name'] },
+  { model: Project, as: 'project', attributes: ['id', 'name'] },
+];
 
 router.get('/next-code', auth, async (req, res) => {
   res.json({ code: generateCode() });
@@ -35,10 +55,7 @@ router.get('/', auth, async (req, res) => {
 
     const bills = await PeriodBill.findAll({
       where,
-      include: [
-        { model: Customer, as: 'customer', attributes: ['id', 'name'] },
-        { model: Project, as: 'project', attributes: ['id', 'name'] },
-      ],
+      include: listInclude,
       order: [['createdAt', 'DESC']],
     });
 
@@ -82,19 +99,12 @@ router.post('/', auth, async (req, res) => {
       startDate: req.body.startDate,
       endDate: req.body.endDate,
       projectId: project || null,
-      attachment: req.body.attachment,
       contentBody: req.body.contentBody,
       ...totals,
       addedBy: req.user?.name || 'Admin',
     });
 
-    const populated = await PeriodBill.findByPk(bill.id, {
-      include: [
-        { model: Customer, as: 'customer', attributes: ['id', 'name'] },
-        { model: Project, as: 'project', attributes: ['id', 'name'] },
-      ],
-    });
-
+    const populated = await PeriodBill.findByPk(bill.id, { include: listInclude });
     res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -108,7 +118,7 @@ router.put('/:id', auth, async (req, res) => {
 
     const fieldMap = {
       date: 'date', refWoNo: 'refWoNo', startDate: 'startDate', endDate: 'endDate',
-      attachment: 'attachment', contentBody: 'contentBody',
+      contentBody: 'contentBody',
       customer: 'customerId', ledger: 'ledgerId', site: 'siteId', project: 'projectId',
     };
     Object.entries(fieldMap).forEach(([bodyKey, col]) => {
@@ -119,15 +129,33 @@ router.put('/:id', auth, async (req, res) => {
     Object.assign(bill, totals);
 
     await bill.save();
-    const populated = await PeriodBill.findByPk(bill.id, {
-      include: [
-        { model: Customer, as: 'customer', attributes: ['id', 'name'] },
-        { model: Project, as: 'project', attributes: ['id', 'name'] },
-      ],
-    });
-
+    const populated = await PeriodBill.findByPk(bill.id, { include: listInclude });
     res.json(populated);
   } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Real file upload — same pattern as LabourBill / ContractorWorkorder attachment endpoints.
+router.post('/:id/attachment', auth, (req, res, next) => {
+  upload.single('attachment')(req, res, (err) => {
+    if (err) {
+      console.error('Attachment upload failed:', err);
+      return res.status(400).json({ message: `File upload error: ${err.message}` });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    const bill = await PeriodBill.findByPk(req.params.id);
+    if (!bill) return res.status(404).json({ message: 'Not found' });
+    if (req.file) {
+      bill.attachment = `/uploads/period-bills/${req.file.filename}`;
+      await bill.save();
+    }
+    res.json({ attachment: bill.attachment });
+  } catch (err) {
+    console.error('Saving attachment failed:', err);
     res.status(500).json({ message: err.message });
   }
 });

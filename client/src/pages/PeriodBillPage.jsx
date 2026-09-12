@@ -1,4 +1,3 @@
-// client/src/pages/PeriodBillPage.jsx
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
@@ -6,7 +5,7 @@ import { getCustomers } from '../api/customer';
 import { getChartOfAccounts } from '../api/chartOfAccounts';
 import {
   getPeriodBill, getNextPeriodBillCode,
-  createPeriodBill, updatePeriodBill,
+  createPeriodBill, updatePeriodBill, uploadPeriodBillAttachment,
 } from '../api/periodBill';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
@@ -46,6 +45,8 @@ export default function PeriodBillPage() {
   const [projectCost, setProjectCost] = useState('');
   const [percentage, setPercentage] = useState('');
   const [attachmentName, setAttachmentName] = useState('');
+  const [attachmentFile, setAttachmentFile] = useState(null);
+  const [existingAttachment, setExistingAttachment] = useState('');
   const [contentBody, setContentBody] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
@@ -78,6 +79,7 @@ export default function PeriodBillPage() {
       setProjectCost(b.projectCost || '');
       setPercentage(b.percentage || '');
       setContentBody(b.contentBody || '');
+      setExistingAttachment(b.attachment || '');
     }).catch((err) => {
       console.error(err);
       setError('Failed to load period bill.');
@@ -102,13 +104,17 @@ export default function PeriodBillPage() {
       const payload = {
         code, date, customer, ledger: ledger || null, site: site || null, refWoNo,
         startDate, endDate, project: project || null, projectCost, percentage,
-        attachment: attachmentName, contentBody,
+        contentBody,
       };
-      if (isEdit) {
-        await updatePeriodBill(id, payload);
-      } else {
-        await createPeriodBill(payload);
+
+      const result = isEdit
+        ? await updatePeriodBill(id, payload)
+        : await createPeriodBill(payload);
+
+      if (attachmentFile) {
+        await uploadPeriodBillAttachment(isEdit ? id : result.id, attachmentFile);
       }
+
       navigate('/billing/percentage_bill_list');
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to save period bill');
@@ -210,8 +216,21 @@ export default function PeriodBillPage() {
                 <label className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white text-slate-500 cursor-pointer hover:bg-slate-50 transition">
                   <Upload size={14} className="text-slate-400" />
                   <span className="truncate">{attachmentName || 'Choose File'}</span>
-                  <input type="file" className="hidden" onChange={(e) => setAttachmentName(e.target.files?.[0]?.name || '')} />
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files ? e.target.files[0] : null;
+                      setAttachmentFile(f);
+                      setAttachmentName(f ? f.name : '');
+                    }}
+                  />
                 </label>
+                {(!attachmentName && existingAttachment) ? (
+                  <a href={existingAttachment} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline mt-1 inline-block">
+                    View current file
+                  </a>
+                ) : null}
               </Field>
             </div>
 

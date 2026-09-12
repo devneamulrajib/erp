@@ -17,12 +17,34 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// Strips HTML tags and collapses whitespace, so rich-text content
+// accidentally saved into a "plain" field (e.g. Agreement.title)
+// never leaks raw markup into list views.
+function stripHtml(value) {
+  if (!value) return null;
+  const withoutTags = String(value).replace(/<[^>]*>/g, ' ');
+  const decoded = withoutTags
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+  const collapsed = decoded.replace(/\s+/g, ' ').trim();
+  return collapsed || null;
+}
+
 function serialize(row) {
   const json = row.toJSON();
+  const rawLabel = json.agreement ? (json.agreement.title || json.agreement.reference) : null;
+  const cleanLabel = stripHtml(rawLabel);
+
   return {
     ...json,
     _id: json.id,
-    agreementLabel: json.agreement ? (json.agreement.title || json.agreement.reference) : null,
+    agreementLabel: cleanLabel && cleanLabel.length > 60
+      ? cleanLabel.slice(0, 60) + '…'
+      : cleanLabel,
     image: json.image ? `/uploads/party-list/${json.image}` : null,
   };
 }

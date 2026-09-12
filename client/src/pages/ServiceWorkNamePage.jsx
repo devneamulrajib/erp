@@ -89,6 +89,21 @@ export default function ServiceWorkNamePage() {
 
   function closeModal() { setModalOpen(false); }
 
+  // When the unit changes, pull that unit's Rate in as a starting point
+  // for Cost — only when Cost is still blank, so it never overwrites a
+  // value the user (or an existing record) already set.
+  function handleUnitChange(unitId) {
+    setForm((f) => {
+      const selectedUnit = unitOptions.find((u) => String(u._id || u.id) === String(unitId));
+      const shouldPrefillCost = selectedUnit?.rate != null && (f.cost === '' || f.cost == null);
+      return {
+        ...f,
+        unit: unitId,
+        cost: shouldPrefillCost ? selectedUnit.rate : f.cost,
+      };
+    });
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!form.name) return;
@@ -338,7 +353,7 @@ export default function ServiceWorkNamePage() {
               <label className="block text-xs font-medium text-slate-500 mb-1.5">Unit</label>
               <select
                 value={form.unit}
-                onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
+                onChange={(e) => handleUnitChange(e.target.value)}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               >
                 <option value="">Select Unit</option>
@@ -351,7 +366,9 @@ export default function ServiceWorkNamePage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Cost</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">
+                Cost <span className="text-slate-400 font-normal">(defaults from the unit's rate — editable)</span>
+              </label>
               <input
                 type="number"
                 placeholder="Enter Cost"

@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiEye, FiEyeOff, FiMail, FiLock } from 'react-icons/fi';
+import { FiEye, FiEyeOff, FiMail, FiLock, FiArrowRight } from 'react-icons/fi';
 import api from '../api/axios';
+import trikonLogo from '../assets/trikon-logo.png';
+import loginVideo from '../assets/login-video.mp4';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -45,7 +47,17 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#e8f0e8] flex items-center justify-center p-4 sm:p-6 overflow-hidden">
+    <div className="relative min-h-screen flex items-center justify-center p-4 sm:p-6 overflow-hidden">
+
+      {/* Full-page background video */}
+      <video
+        className="absolute inset-0 w-full h-full object-cover -z-10"
+        src={loginVideo}
+        autoPlay
+        loop
+        muted
+        playsInline
+      />
 
       {/* Main Card */}
       <div className="relative w-full max-w-[1080px] min-h-[650px] bg-[#fafaf6] rounded-[30px] overflow-hidden shadow-[0_30px_90px_rgba(20,50,35,0.16)] grid lg:grid-cols-2">
@@ -65,10 +77,8 @@ export default function Login() {
           {/* Brand */}
           <div className="relative z-10 flex items-center gap-3">
 
-            <div className="w-11 h-11 rounded-xl bg-[#164d35] flex items-center justify-center shadow-sm">
-              <span className="text-white text-lg font-bold">
-                T
-              </span>
+            <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center shadow-sm ring-1 ring-[#e2e5dd] p-1.5">
+              <img src={trikonLogo} alt="TRIKON" className="w-full h-full object-contain" />
             </div>
 
             <div>
@@ -200,10 +210,8 @@ export default function Login() {
             {/* Mobile Logo */}
             <div className="lg:hidden flex items-center gap-3 mb-14">
 
-              <div className="w-11 h-11 rounded-xl bg-[#164d35] flex items-center justify-center">
-                <span className="text-white font-bold text-lg">
-                  T
-                </span>
+              <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center ring-1 ring-[#e2e5dd] p-1.5">
+                <img src={trikonLogo} alt="TRIKON" className="w-full h-full object-contain" />
               </div>
 
               <div>
@@ -365,27 +373,59 @@ export default function Login() {
               </div>
 
 
-              {/* Invisible submit mechanism */}
+              {/* Login button */}
               <button
                 type="submit"
                 disabled={loading}
-                className="hidden"
-                aria-hidden="true"
-                tabIndex="-1"
+                className="
+                  group
+                  w-full
+                  h-[54px]
+                  rounded-[14px]
+                  bg-[#17603e]
+                  text-white
+                  text-[14px]
+                  font-semibold
+                  tracking-wide
+                  flex
+                  items-center
+                  justify-center
+                  gap-2
+                  transition-all
+                  duration-200
+                  hover:bg-[#134e33]
+                  active:bg-[#0f3f29]
+                  disabled:opacity-60
+                  disabled:cursor-not-allowed
+                  shadow-[0_8px_20px_rgba(23,96,62,0.25)]
+                "
               >
-                {loading ? 'Signing in...' : 'Sign in'}
+                {loading ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  <>
+                    Login
+                    <FiArrowRight
+                      size={16}
+                      className="transition-transform duration-200 group-hover:translate-x-0.5"
+                    />
+                  </>
+                )}
               </button>
 
             </form>
 
 
             {/* Bottom hint */}
-            <div className="mt-10 pt-6 border-t border-[#edf0eb]">
+            <div className="mt-8 pt-6 border-t border-[#edf0eb]">
 
               <p className="text-center text-[12px] text-[#9aa19b]">
                 {loading
                   ? 'Signing you in...'
-                  : 'Press Enter to continue'}
+                  : 'You can also press Enter to sign in'}
               </p>
 
             </div>

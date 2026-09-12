@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
+import PortalAccessModal from '../components/PortalAccessModal';
 import { getChartOfGroupOptions } from '../api/chartOfGroup';
 import {
   getContacts, getNextContactCode, createContact, updateContact, deleteContact,
 } from '../api/contactAccounts';
-import { Pencil, Trash2, User, Search, Plus, LayoutGrid, Building2 } from 'lucide-react';
+import { Pencil, Trash2, User, Search, Plus, LayoutGrid, Building2, Eye, Mail, Phone, MapPin, CreditCard, Calendar, KeyRound } from 'lucide-react';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const EMPTY_FORM = {
@@ -29,11 +30,14 @@ export default function SupplierAccountsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const [viewItem, setViewItem] = useState(null);
+  const [portalItem, setPortalItem] = useState(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await getContacts('Supplier', groupFilter ? { chartOfGroup: groupFilter } : {});
-      setItems(data);
+      setItems(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load suppliers', err);
     } finally {
@@ -44,7 +48,9 @@ export default function SupplierAccountsPage() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    getChartOfGroupOptions().then(({ data }) => setGroupOptions(data)).catch(console.error);
+    getChartOfGroupOptions()
+      .then((data) => setGroupOptions(Array.isArray(data) ? data : []))
+      .catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -89,6 +95,14 @@ export default function SupplierAccountsPage() {
 
   function closeModal() {
     setModalOpen(false);
+  }
+
+  function openViewModal(item) {
+    setViewItem(item);
+  }
+
+  function closeViewModal() {
+    setViewItem(null);
   }
 
   async function handleSubmit(e) {
@@ -266,6 +280,13 @@ export default function SupplierAccountsPage() {
                       <td className="px-5 py-3.5">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
+                            onClick={() => openViewModal(item)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                            title="View"
+                          >
+                            <Eye size={14} />
+                          </button>
+                          <button
                             onClick={() => openEditModal(item)}
                             className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-sky-100 text-slate-500 hover:text-sky-600 transition-colors"
                             title="Edit"
@@ -273,10 +294,11 @@ export default function SupplierAccountsPage() {
                             <Pencil size={14} />
                           </button>
                           <button
-                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors"
-                            title="View Ledger"
+                            onClick={() => setPortalItem(item)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-500 hover:text-emerald-600 transition-colors"
+                            title="Portal Access"
                           >
-                            <User size={14} />
+                            <KeyRound size={14} />
                           </button>
                           <button
                             onClick={() => handleDelete(item.id)}
@@ -452,6 +474,97 @@ export default function SupplierAccountsPage() {
           </div>
         </form>
       </Modal>
+
+      <Modal open={!!viewItem} title="Supplier Details" onClose={closeViewModal}>
+        {viewItem && (
+          <div>
+            <div className="flex items-center gap-4 mb-6 pb-5 border-b border-slate-100">
+              <div className="w-16 h-16 rounded-xl bg-slate-100 flex items-center justify-center text-slate-300">
+                <Building2 size={24} />
+              </div>
+              <div>
+                <div className="text-lg font-semibold text-slate-900">{viewItem.name}</div>
+                <span className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-600 px-2.5 py-1 text-xs font-mono font-medium ring-1 ring-inset ring-indigo-600/10 mt-1">
+                  {viewItem.code}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <div className="flex items-start gap-2.5">
+                <Phone size={15} className="text-slate-400 mt-0.5" />
+                <div>
+                  <div className="text-xs text-slate-400 mb-0.5">Phone/Mobile</div>
+                  <div className="text-sm text-slate-800">{viewItem.mobile || '-'}</div>
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <Mail size={15} className="text-slate-400 mt-0.5" />
+                <div>
+                  <div className="text-xs text-slate-400 mb-0.5">E-mail</div>
+                  <div className="text-sm text-slate-800">{viewItem.email || '-'}</div>
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <MapPin size={15} className="text-slate-400 mt-0.5" />
+                <div>
+                  <div className="text-xs text-slate-400 mb-0.5">Address</div>
+                  <div className="text-sm text-slate-800">{viewItem.address || '-'}</div>
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <Building2 size={15} className="text-slate-400 mt-0.5" />
+                <div>
+                  <div className="text-xs text-slate-400 mb-0.5">Business/Organization</div>
+                  <div className="text-sm text-slate-800">{viewItem.businessName || '-'}</div>
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <CreditCard size={15} className="text-slate-400 mt-0.5" />
+                <div>
+                  <div className="text-xs text-slate-400 mb-0.5">Credit Limit</div>
+                  <div className="text-sm text-slate-800">{viewItem.creditLimit ?? '-'}</div>
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <Calendar size={15} className="text-slate-400 mt-0.5" />
+                <div>
+                  <div className="text-xs text-slate-400 mb-0.5">Due Date</div>
+                  <div className="text-sm text-slate-800">{viewItem.dueDate ? viewItem.dueDate.slice(0, 10) : '-'}</div>
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <Building2 size={15} className="text-slate-400 mt-0.5" />
+                <div>
+                  <div className="text-xs text-slate-400 mb-0.5">Chart Of Group (Under)</div>
+                  <div className="text-sm text-slate-800">{viewItem.chartOfGroup?.name || '-'}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={closeViewModal}
+                className="px-4 py-2.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <PortalAccessModal
+        open={!!portalItem}
+        customer={portalItem}
+        onClose={() => setPortalItem(null)}
+        onSuccess={load}
+        onNeedsEmail={(c) => {
+          setPortalItem(null);
+          openEditModal(c);
+        }}
+      />
     </div>
   );
 }

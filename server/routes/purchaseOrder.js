@@ -192,4 +192,19 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+router.patch('/:id/status', auth, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const allowed = ['Submitted', 'Under Review', 'Approved', 'Sent to Supplier', 'Acknowledged', 'Fulfilled', 'Cancelled'];
+    if (!allowed.includes(status)) return res.status(400).json({ message: 'Invalid status' });
+    const order = await PurchaseOrder.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ message: 'Not found' });
+    order.status = status;
+    await order.save();
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;

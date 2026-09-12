@@ -60,7 +60,10 @@ export default function ServiceRequisitionPage() {
       setTitleOfWork(r.titleOfWork || '');
       setTask(r.task || '');
       setSite(r.site?.id || r.site || '');
-      setRows(r.items || []);
+      setRows((r.items || []).map((it) => ({
+        ...it,
+        unit: typeof it.unit === 'object' ? (it.unit?.name || '') : (it.unit || ''),
+      })));
     }).catch((err) => {
       console.error(err);
       setError('Failed to load service requisition.');
@@ -83,7 +86,8 @@ export default function ServiceRequisitionPage() {
       date: new Date().toISOString().slice(0, 10),
       code: it.code || '',
       name: it.name,
-      unit: it.unit || '',
+      // it.unit is the included Unit association ({ name: '...' }), not a plain string — unwrap it.
+      unit: it.unit?.name || '',
       qtyDays: 0,
       rate: it.salePrice || 0,
       details: '',

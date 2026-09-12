@@ -10,8 +10,6 @@ import { getCustomers } from '../api/customer';
 import { getSites } from '../api/site';
 import { getFlats } from '../api/flat';
 
-// TODO: wire to real endpoint once available, e.g. import { getAssignShares } from '../api/assignShare';
-
 function generateShareCode() {
   const rand = Math.floor(100000 + Math.random() * 900000);
   return `SHR-${rand}`;
@@ -25,6 +23,8 @@ const emptyAssignForm = {
   flatLandNo: '',
   customer: '',
   noOfShare: 0,
+  shareAmount: 0,
+  paidAmount: 0,
   note: '',
 };
 
@@ -49,43 +49,32 @@ export default function AssignShare() {
 
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isBulkOpen, setIsBulkOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [addForm, setAddForm] = useState(emptyAssignForm);
   const [bulkForm, setBulkForm] = useState(emptyBulkForm);
 
-  // Dropdown option lists
   const [projectTypeOptions, setProjectTypeOptions] = useState([]);
   const [projectListOptions, setProjectListOptions] = useState([]);
-  const [allSites, setAllSites] = useState([]); // raw site records, filtered per-project below
-  const [allFlats, setAllFlats] = useState([]); // raw flat records, filtered per-project/site below
+  const [allSites, setAllSites] = useState([]);
+  const [allFlats, setAllFlats] = useState([]);
   const [customerOptions, setCustomerOptions] = useState([]);
   const [optionsError, setOptionsError] = useState(null);
 
-  // ---- Data fetch (replace with real assign-share API call once available) ----
+  function fetchShares() {
+    setLoading(true);
+    return api.get('/assign-share', { params: selectedProject ? { project: selectedProject } : {} })
+      .then((r) => setRows(r.data))
+      .catch((err) => {
+        console.error(err);
+        setRows([]);
+      })
+      .finally(() => setLoading(false));
+  }
+
   useEffect(() => {
-    let cancelled = false;
-    async function loadShares() {
-      setLoading(true);
-      try {
-        // const { data } = await api.get('/project-module/assign-share');
-        // if (!cancelled) setRows(data);
+    fetchShares();
+  }, [selectedProject]);
 
-        // Mock data matching current screenshot until API is wired up:
-        const mock = [
-          { id: 1, project: 'Home', code: 'CUS5752053', shareCode: 'SHR-611290', name: 'Masum', noOfShare: 2, flatLand: '' },
-          { id: 2, project: 'Abashon', code: 'CUS3719288', shareCode: 'SH-B8C9502BAC', name: 'Mostafa', noOfShare: 3, flatLand: '' },
-          { id: 3, project: 'Head Office', code: 'CUS3719288', shareCode: 'SHR-120868', name: 'Mostafa', noOfShare: 3, flatLand: '' },
-          { id: 4, project: 'Abashik', code: 'CUS6877196', shareCode: 'SHR-972775', name: 'Hassan', noOfShare: 1, flatLand: '' },
-        ];
-        if (!cancelled) setRows(mock);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    loadShares();
-    return () => { cancelled = true; };
-  }, []);
-
-  // ---- Real dropdown data: Project Type, Project, Customer, Site, Flat/Land ----
   useEffect(() => {
     let cancelled = false;
     async function loadOptions() {
@@ -94,35 +83,26 @@ export default function AssignShare() {
           api.get('/project-types'),
           getProjects(),
           getCustomers(),
-          getSites(), // returns raw axios response -> use .data
-          getFlats(), // no filters -> all flats; filtered client-side below
+          getSites(),
+          getFlats(),
         ]);
 
         if (cancelled) return;
 
-        setProjectTypeOptions(
-          projectTypesRes.data.map((t) => ({ value: t.id, label: t.name }))
-        );
-        setProjectListOptions(
-          projectsRes.data.map((p) => ({ value: p.id, label: p.name }))
-        );
-        setCustomerOptions(
-          customers.map((c) => ({ value: c.id, label: c.name }))
-        );
-        setAllSites(sitesRes.data); // raw records — filtered by project below
-        setAllFlats(Array.isArray(flatsData) ? flatsData : flatsData.flats || []); // raw records — filtered by project/site below
+        setProjectTypeOptions(projectTypesRes.data.map((t) => ({ value: t.id, label: t.name })));
+        setProjectListOptions(projectsRes.data.map((p) => ({ value: p.id, label: p.name })));
+        setCustomerOptions(customers.map((c) => ({ value: c.id, label: c.name })));
+        setAllSites(sitesRes.data);
+        setAllFlats(Array.isArray(flatsData) ? flatsData : flatsData.flats || []);
       } catch (err) {
         console.error(err);
         if (!cancelled) setOptionsError('Failed to load some dropdown options.');
       }
     }
     loadOptions();
-
     return () => { cancelled = true; };
   }, []);
 
-  // Sites belonging to the currently selected project in the Add modal.
-  // routes/site.js has no server-side projectId filter, so we filter client-side.
   const siteOptions = useMemo(() => {
     if (!addForm.project) return [];
     return allSites
@@ -130,7 +110,6 @@ export default function AssignShare() {
       .map((s) => ({ value: s.id, label: s.name }));
   }, [allSites, addForm.project]);
 
-  // Flats belonging to the currently selected project (and site, if chosen) in the Add modal.
   const flatLandOptions = useMemo(() => {
     if (!addForm.project) return [];
     return allFlats
@@ -141,9 +120,6 @@ export default function AssignShare() {
 
   const filteredRows = useMemo(() => {
     let data = rows;
-    if (selectedProject) {
-      data = data.filter((r) => r.project === selectedProject);
-    }
     if (searchTerm.trim()) {
       const term = searchTerm.trim().toLowerCase();
       data = data.filter((r) =>
@@ -154,7 +130,7 @@ export default function AssignShare() {
       );
     }
     return data;
-  }, [rows, selectedProject, searchTerm]);
+  }, [rows, searchTerm]);
 
   const totalShares = useMemo(
     () => filteredRows.reduce((s, r) => s + (Number(r.noOfShare) || 0), 0),
@@ -171,8 +147,8 @@ export default function AssignShare() {
     setCurrentPage(1);
   }, [selectedProject, searchTerm, pageSize]);
 
-  // ---- Handlers ----
   function openAddModal() {
+    setEditingId(null);
     setAddForm({ ...emptyAssignForm, shareCode: generateShareCode() });
     setIsAddOpen(true);
   }
@@ -186,14 +162,10 @@ export default function AssignShare() {
     setAddForm((prev) => ({ ...prev, [field]: value }));
   }
 
-  // Changing Project invalidates any previously chosen Site/Flat-Land, since
-  // those option lists are scoped to the project. Clear them in the same update
-  // so nothing stale can carry over (this was the earlier "wrong preset" bug).
   function handleProjectChange(value) {
     setAddForm((prev) => ({ ...prev, project: value, site: '', flatLandNo: '' }));
   }
 
-  // Changing Site should also clear Flat/Land No once that's scoped to a site.
   function handleSiteChange(value) {
     setAddForm((prev) => ({ ...prev, site: value, flatLandNo: '' }));
   }
@@ -203,38 +175,68 @@ export default function AssignShare() {
   }
 
   async function handleAddSubmit() {
-    // TODO: await api.post('/project-module/assign-share', addForm);
-    console.log('Submitting Assign Share:', addForm);
-    setIsAddOpen(false);
+    try {
+      if (editingId) {
+        await api.put(`/assign-share/${editingId}`, addForm);
+      } else {
+        await api.post('/assign-share', addForm);
+      }
+      setIsAddOpen(false);
+      setEditingId(null);
+      fetchShares();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save assign share.');
+    }
   }
 
   async function handleBulkSubmit() {
-    // TODO: await api.post('/project-module/assign-share/bulk', bulkForm);
-    console.log('Submitting Bulk Assign Share:', bulkForm);
-    setIsBulkOpen(false);
+    try {
+      const noOfShare = Number(bulkForm.noOfShare) || 0;
+      await api.post('/assign-share', {
+        project: bulkForm.project,
+        customer: bulkForm.customer,
+        noOfShare,
+        note: bulkForm.note,
+        shareCode: generateShareCode(),
+      });
+      setIsBulkOpen(false);
+      fetchShares();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save bulk assign share.');
+    }
   }
 
   function handleEdit(row) {
+    setEditingId(row.id);
     setAddForm({
       projectType: row.projectType || '',
-      project: row.project || '',
+      project: row.projectId || '',
       shareCode: row.shareCode || generateShareCode(),
       site: row.site || '',
       flatLandNo: row.flatLandNo || '',
       customer: row.customerId || '',
       noOfShare: row.noOfShare || 0,
+      shareAmount: row.shareAmount || 0,
+      paidAmount: row.paidAmount || 0,
       note: row.note || '',
     });
     setIsAddOpen(true);
   }
 
-  function handleDelete(row) {
-    // TODO: confirm + await api.delete(`/project-module/assign-share/${row.id}`)
-    console.log('Delete row:', row);
+  async function handleDelete(row) {
+    if (!window.confirm('Delete this share assignment?')) return;
+    try {
+      await api.delete(`/assign-share/${row.id}`);
+      fetchShares();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete.');
+    }
   }
 
   function handleViewPartners(row) {
-    // TODO: navigate to partner detail view for this share
     console.log('View partners for row:', row);
   }
 
@@ -461,7 +463,7 @@ export default function AssignShare() {
       </div>
 
       {/* ---- Add Assign Share modal ---- */}
-      <Modal open={isAddOpen} title="Assign Share" onClose={() => setIsAddOpen(false)}>
+      <Modal open={isAddOpen} title={editingId ? 'Edit Assign Share' : 'Assign Share'} onClose={() => { setIsAddOpen(false); setEditingId(null); }}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1.5">
@@ -551,6 +553,30 @@ export default function AssignShare() {
             />
           </div>
 
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Share Amount</label>
+            <input
+              type="number"
+              min={0}
+              value={addForm.shareAmount}
+              onChange={(e) => handleAddChange('shareAmount', Number(e.target.value))}
+              placeholder="Total value of shares"
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Paid Amount</label>
+            <input
+              type="number"
+              min={0}
+              value={addForm.paidAmount}
+              onChange={(e) => handleAddChange('paidAmount', Number(e.target.value))}
+              placeholder="Amount received so far"
+              className={inputClass}
+            />
+          </div>
+
           <div className="sm:col-span-2">
             <label className="block text-xs font-medium text-slate-500 mb-1.5">Note</label>
             <input
@@ -566,7 +592,7 @@ export default function AssignShare() {
         <div className="flex items-center justify-end gap-2 mt-6 pt-4 border-t border-slate-100">
           <button
             type="button"
-            onClick={() => setIsAddOpen(false)}
+            onClick={() => { setIsAddOpen(false); setEditingId(null); }}
             className="px-4 py-2.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
           >
             Close

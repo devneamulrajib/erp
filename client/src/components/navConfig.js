@@ -498,6 +498,12 @@ const ACCOUNTING_SUBPAGES = [
         label: 'Chart of Accounts',
         route: '/accounts-module/chart-accounts',
       },
+
+      {
+        key: 'bank-accounts',
+        label: 'Bank Accounts',
+        route: '/accounts-module/bank-accounts',
+      },
     ],
   },
 
@@ -720,37 +726,37 @@ const ACCOUNTING_SUBPAGES = [
       {
         key: 'cash-bank-books',
         label: 'Cash/Bank Books',
-        route: null,
+        route: '/accounts-module/reports/cash-bank-books',
       },
 
       {
         key: 'general-ledger',
         label: 'General Ledger',
-        route: null,
+        route: '/accounts-module/reports/general-ledger',
       },
 
       {
         key: 'income-statement',
         label: 'Income Statement',
-        route: null,
+        route: '/accounts-module/reports/income-statement',
       },
 
       {
         key: 'cash-flow-statement',
         label: 'Cash Flow Statement',
-        route: null,
+        route: '/accounts-module/reports/cash-flow-statement',
       },
 
       {
         key: 'trial-balance',
         label: 'Trial Balance',
-        route: null,
+        route: '/accounts-module/reports/trial-balance',
       },
 
       {
         key: 'balance-sheet',
         label: 'Balance Sheet',
-        route: null,
+        route: '/accounts-module/reports/balance-sheet',
       },
     ],
   },

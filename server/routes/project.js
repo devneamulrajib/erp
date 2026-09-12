@@ -5,6 +5,8 @@ const Project = require('../models/Project');
 const Site = require('../models/Site');
 const Expense = require('../models/Expense');
 const Voucher = require('../models/Voucher');
+const Sale = require('../models/Sale');
+const ProjectManager = require('../models/ProjectManager');
 
 function generateCode() {
   return 'P' + Math.floor(1000000 + Math.random() * 9000000);
@@ -26,11 +28,16 @@ router.get('/next-code', auth, async (req, res) => {
 });
 
 router.get('/options', auth, async (req, res) => {
-  res.json({
-    statuses: ['Active', 'Inactive', 'Complete', 'On Proposed'],
-    areas: [],
-    projectManagers: ['sojib', 'Masud Rana', 'support srm'],
-  });
+  try {
+    const managers = await ProjectManager.findAll({ order: [['name', 'ASC']] });
+    res.json({
+      statuses: ['Active', 'Inactive', 'Complete', 'On Proposed'],
+      areas: [],
+      projectManagers: managers.map((m) => ({ id: m.id, name: m.name })),
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 router.get('/', auth, async (req, res) => {
@@ -56,7 +63,11 @@ router.get('/', auth, async (req, res) => {
 
 router.post('/', auth, async (req, res) => {
   try {
-    const { name, code, projectType, projectManager, description, budget, location, status, area, assignUser, startDate, endDate } = req.body;
+    const {
+      name, code, projectType, projectManager, description,
+      budget, location, status, area, assignUser, startDate, endDate, image,
+    } = req.body;
+
     if (!name || !name.trim()) {
       return res.status(400).json({ message: 'Project Name is required' });
     }
@@ -74,6 +85,7 @@ router.post('/', auth, async (req, res) => {
       assignUser: assignUser || '',
       startDate: startDate || '',
       endDate: endDate || '',
+      image: image || null,
     });
 
     res.status(201).json(withDuration(newProject));
@@ -97,7 +109,10 @@ router.put('/:id', auth, async (req, res) => {
     const item = await Project.findByPk(req.params.id);
     if (!item) return res.status(404).json({ message: 'Not found' });
 
-    const fields = ['name', 'projectType', 'projectManager', 'description', 'budget', 'location', 'status', 'area', 'assignUser', 'startDate', 'endDate'];
+    const fields = [
+      'name', 'projectType', 'projectManager', 'description',
+      'budget', 'location', 'status', 'area', 'assignUser', 'startDate', 'endDate', 'image',
+    ];
     fields.forEach((f) => {
       if (req.body[f] !== undefined) item[f] = req.body[f];
     });
@@ -120,10 +135,29 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // ------------------------------------------------------------------
-// Reports (5 pages under Project > Reports)
+// Reports
 // ------------------------------------------------------------------
 
-async function sumByProject(Model, where = {}) {
+// Sums a model's `amount`-like field grouped by a real projectId FK column.
+// Use this for any model that has projectId (Voucher, Sale, ContractorBill, etc).
+async function sumByProjectId(Model, projectIdField, amountFields, where = {}) {
+  const rows = await Model.findAll({ where });
+  const totals = {};
+  for (const r of rows) {
+    const key = r[projectIdField];
+    if (key == null) continue;
+    let amount = 0;
+    for (const f of amountFields) {
+      if (r[f] != null) { amount = Number(r[f]) || 0; break; }
+    }
+    totals[key] = (totals[key] || 0) + amount;
+  }
+  return totals;
+}
+
+// Sums a model's `amount` field grouped by a plain string `project` name column.
+// Only needed for models like Expense that don't have a real projectId FK yet.
+async function sumByProjectName(Model, where = {}) {
   const rows = await Model.findAll({ where });
   const totals = {};
   for (const r of rows) {
@@ -159,7 +193,7 @@ router.get('/reports/project-summary', auth, async (req, res) => {
 router.get('/reports/project-progress', auth, async (req, res) => {
   try {
     const { project } = req.query;
-    const expenseTotals = await sumByProject(Expense);
+    const expenseTotals = await sumByProjectName(Expense);
     const projects = await Project.findAll();
 
     let result = projects.map((p) => {
@@ -190,23 +224,34 @@ router.get('/reports/project-progress', auth, async (req, res) => {
 router.get('/reports/project-wise-income', auth, async (req, res) => {
   try {
     const { project } = req.query;
-    const expenseTotals = await sumByProject(Expense);
-    const receiptTotals = await sumByProject(Voucher, { type: 'Receipt' });
+
+    // Expense has no projectId FK yet — only a plain `project` string column —
+    // so this side stays name-keyed until a migration adds Expense.projectId.
+    const expenseTotals = await sumByProjectName(Expense);
+
+    // Voucher and Sale both have a real projectId FK (see associations.js),
+    // so these are keyed by id, not name.
+    const receiptTotals = await sumByProjectId(Voucher, 'projectId', ['amount'], { type: 'Receipt' });
+    // ASSUMPTION: "income" = amount billed to the customer via Sale.
+    // Adjust the field list below if Sale's real column isn't grandTotal/amount/total.
+    const incomeTotals = await sumByProjectId(Sale, 'projectId', ['grandTotal', 'amount', 'total']);
+
     const projects = await Project.findAll();
 
     let result = projects.map((p) => {
-      const sales = Number(p.sales) || 0;
-      const budget = Number(p.budget) || 0;
-      const totalIncome = 0;
+      const totalIncome = incomeTotals[p.id] || 0;
       const totalExpense = expenseTotals[p.name] || 0;
-      const available = totalIncome - totalExpense;
-      const profit = totalIncome - totalExpense;
-      const receiveAmount = receiptTotals[p.name] || 0;
+      const receiveAmount = receiptTotals[p.id] || 0;
       return {
         id: p.id,
         project: p.name,
-        sales, budget, totalIncome, totalExpense, available, profit,
-        billSubmission: 0,
+        sales: Number(p.sales) || 0,
+        budget: Number(p.budget) || 0,
+        totalIncome,
+        totalExpense,
+        available: totalIncome - totalExpense,
+        profit: totalIncome - totalExpense,
+        billSubmission: totalIncome,
         receiveAmount,
         due: totalIncome - receiveAmount,
       };
@@ -215,6 +260,7 @@ router.get('/reports/project-wise-income', auth, async (req, res) => {
     if (project) result = result.filter((r) => String(r.id) === String(project));
     res.json(result);
   } catch (err) {
+    console.error('GET /api/projects/reports/project-wise-income failed:', err);
     res.status(500).json({ message: err.message });
   }
 });

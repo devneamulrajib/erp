@@ -22,6 +22,9 @@ const Quote = sequelize.define('Quote', {
   discountAmount: { type: DataTypes.FLOAT, defaultValue: 0 },
   grandTotal: { type: DataTypes.FLOAT, defaultValue: 0 },
 
+  // New: no status/timeline field existed on Quote before.
+  status: { type: DataTypes.STRING, defaultValue: 'Submitted' },
+
   addedBy: DataTypes.STRING,
 }, { timestamps: true });
 

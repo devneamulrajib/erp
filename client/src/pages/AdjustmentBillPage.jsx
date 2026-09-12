@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
-import { getCustomers, createCustomer, getNextCustomerCode } from '../api/customer';
 import { getChartOfAccounts } from '../api/chartOfAccounts';
 import { getChartOfGroups } from '../api/chartOfGroup';
 import { getCategories } from '../api/category';
@@ -86,7 +85,11 @@ export default function AdjustmentBillPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    getCustomers().then(setCustomers).catch(() => {});
+    // Customers live in the Chart Of Accounts table (contactType: 'Customer'),
+    // same table backing the Customer Accounts page — not the old Customer model.
+    api.get('/chart-of-accounts', { params: { contactType: 'Customer' } })
+      .then((res) => setCustomers(res.data))
+      .catch(() => {});
     getChartOfAccounts().then((res) => setLedgers(res.data || res)).catch(() => {});
     getChartOfGroups().then((res) => setChartGroups(res.data || res)).catch(() => {});
     api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
@@ -165,6 +168,39 @@ export default function AdjustmentBillPage() {
     setPayAmount(0);
   }
   function removePayment(i) { setPayments((prev) => prev.filter((_, idx) => idx !== i)); }
+
+  async function fetchFromWorkorder() {
+    if (!refWoNo.trim()) {
+      setError('Enter a Ref W/O No. first');
+      return;
+    }
+    setError('');
+    try {
+      // Work orders aren't looked up by id here, only by their code, so pull the
+      // list (scoped to the selected customer when we have one) and match client-side.
+      const res = await api.get('/workorder', { params: customer ? { customer } : {} });
+      const match = (res.data || []).find((wo) => wo.code === refWoNo.trim());
+      if (!match) {
+        setError(`No work order found with code "${refWoNo.trim()}"`);
+        return;
+      }
+      const items = (match.items || []).map((it) => ({
+        itemName: it.itemName || '',
+        description: it.description || '',
+        unit: it.unit || '',
+        quantity: it.quantity || 0,
+        rate: it.rate || 0,
+        image: it.image || '',
+        amount: it.amount || 0,
+      }));
+      setProposedRows(items);
+      // Adjustment Budget starts as a copy of the same items — you're adjusting
+      // from this baseline, not typing it all in again from scratch.
+      setAdjustmentRows(items.map((it) => ({ ...it })));
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to fetch work order');
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -291,7 +327,16 @@ export default function AdjustmentBillPage() {
                 </select>
               </Field>
               <Field label="Ref W/O No.">
-                <input value={refWoNo} onChange={(e) => setRefWoNo(e.target.value)} className={inputCls} placeholder="PO No." />
+                <div className="flex gap-2">
+                  <input value={refWoNo} onChange={(e) => setRefWoNo(e.target.value)} className={inputCls} placeholder="PO No." />
+                  <button
+                    type="button"
+                    onClick={fetchFromWorkorder}
+                    className="whitespace-nowrap px-3 rounded-lg bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium transition-colors"
+                  >
+                    Fetch
+                  </button>
+                </div>
               </Field>
             </div>
 
@@ -659,7 +704,10 @@ function CustomerAddModal({ chartGroups, onClose, onCreated }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    getNextCustomerCode().then(setCode).catch(() => {});
+    // Chart Of Accounts codes are scoped by contactType (CUS/SUP/INV prefixes).
+    api.get('/chart-of-accounts/next-code', { params: { contactType: 'Customer' } })
+      .then((res) => setCode(res.data.code))
+      .catch(() => {});
   }, []);
 
   async function handleSubmit(e) {
@@ -675,11 +723,25 @@ function CustomerAddModal({ chartGroups, onClose, onCreated }) {
     }
     setSaving(true);
     try {
-      const created = await createCustomer({
-        code, name: name.trim(), mobile, buyerReference, address,
-        creditLimit, dueDate, openingBalance, chartGroup,
+      // This modal writes into the Chart Of Accounts table (contactType: 'Customer'),
+      // the same table the Customer Accounts page reads from/writes to. Keeping this
+      // in sync is what makes newly-added customers show up in the dropdown above.
+      const fd = new FormData();
+      fd.append('code', code);
+      fd.append('name', name.trim());
+      fd.append('mobile', mobile);
+      fd.append('buyerReference', buyerReference);
+      fd.append('address', address);
+      fd.append('creditLimit', creditLimit);
+      fd.append('dueDate', dueDate);
+      fd.append('openingBalance', openingBalance);
+      fd.append('chartOfGroup', chartGroup);
+      fd.append('contactType', 'Customer');
+
+      const res = await api.post('/chart-of-accounts', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
-      onCreated(created);
+      onCreated(res.data);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to add customer');
     } finally {

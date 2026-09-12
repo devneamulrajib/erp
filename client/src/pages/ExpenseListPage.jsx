@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Eye, Pencil, Trash2, Copy, Search, FileText, FileSpreadsheet, Plus, Receipt } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
-import api from '../api/axios';
+import api, { resolveFileUrl } from '../api/axios';
 import { getExpenses, deleteExpense, duplicateExpense } from '../api/expense';
 
 const inputClass = "w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition";
@@ -233,7 +233,7 @@ export default function ExpenseListPage() {
                     </td>
                     <td className="px-4 py-3.5">
                       {e.attachment ? (
-                        <a href={e.attachment} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline text-sm">View</a>
+                        <a href={resolveFileUrl(e.attachment)} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline text-sm">View</a>
                       ) : '-'}
                     </td>
                     <td className="px-4 py-3.5">

@@ -38,3 +38,15 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+// Derives the backend origin (e.g. http://localhost:5000) from the API
+// baseURL (e.g. http://localhost:5000/api), so relative paths returned
+// by the server (like /uploads/contacts/xyz.jpg) can be turned into
+// full, loadable URLs on the frontend.
+export const API_ORIGIN = api.defaults.baseURL.replace(/\/api\/?$/, '');
+
+export const resolveFileUrl = (path) => {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path; // already absolute
+  return `${API_ORIGIN}${path}`;
+};

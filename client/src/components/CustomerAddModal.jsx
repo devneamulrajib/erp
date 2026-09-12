@@ -42,8 +42,9 @@ export default function CustomerAddModal({ open, onClose, onCreated }) {
   }
 
   async function handleSubmit() {
-    if (!form.name || !form.mobile || !form.nid) {
-      setError('Name, Mobile and NID are required');
+    // NID is now optional — only Name, Mobile, and Chart Of Groups are required
+    if (!form.name || !form.mobile || !form.chartOfGroup) {
+      setError('Name, Mobile and Chart Of Groups are required');
       return;
     }
     setSaving(true);
@@ -94,7 +95,7 @@ export default function CustomerAddModal({ open, onClose, onCreated }) {
             <input value={form.email} onChange={(e) => updateField('email', e.target.value)} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
           </Field>
 
-          <Field label="NID" required>
+          <Field label="NID">
             <input value={form.nid} onChange={(e) => updateField('nid', e.target.value)} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
           </Field>
           <Field label="Address">

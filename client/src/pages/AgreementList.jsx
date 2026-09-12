@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
-import { Pencil, Trash2, Copy, Plus, Search, ChevronDown, FileText } from 'lucide-react';
+import { Pencil, Trash2, Copy, Plus, Search, ChevronDown, FileText, Eye, Loader2, Download } from 'lucide-react';
 
 export default function AgreementList() {
   const navigate = useNavigate();
@@ -11,27 +11,33 @@ export default function AgreementList() {
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [downloadingId, setDownloadingId] = useState(null);
 
   useEffect(() => {
     loadRows();
   }, []);
 
   async function loadRows() {
+    setLoading(true);
     try {
       const res = await api.get('/agreements');
       setRows(res.data);
+      setError(null);
     } catch (err) {
       console.error(err);
       setError('Failed to load agreements.');
+    } finally {
+      setLoading(false);
     }
   }
 
   async function handleDelete(row) {
     if (!window.confirm('Delete this agreement?')) return;
     try {
-      await api.delete(`/agreements/${row._id}`);
-      setRows((prev) => prev.filter((r) => r._id !== row._id));
+      await api.delete(`/agreements/${row.id}`);
+      setRows((prev) => prev.filter((r) => r.id !== row.id));
     } catch (err) {
       console.error(err);
       alert('Failed to delete agreement.');
@@ -40,11 +46,32 @@ export default function AgreementList() {
 
   async function handleDuplicate(row) {
     try {
-      const res = await api.post(`/agreements/${row._id}/duplicate`);
+      const res = await api.post(`/agreements/${row.id}/duplicate`);
       setRows((prev) => [...prev, res.data]);
     } catch (err) {
       console.error(err);
       alert('Failed to duplicate agreement.');
+    }
+  }
+
+  async function handleDownloadPdf(row) {
+    setDownloadingId(row.id);
+    try {
+      const res = await api.get(`/agreements/${row.id}/pdf`, { responseType: 'blob' });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(row.reference || `agreement-${row.id}`).replace(/[^a-z0-9-_]+/gi, '_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to download PDF.');
+    } finally {
+      setDownloadingId(null);
     }
   }
 
@@ -64,7 +91,7 @@ export default function AgreementList() {
     <div className="min-h-screen w-full bg-gray-50 text-left">
       <Topbar />
 
-      <div className="px-6 pt-6 pb-10">
+      <div className="max-w-6xl mx-auto px-6 pt-6 pb-10">
         {/* Header row */}
         <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
           <div>
@@ -161,7 +188,14 @@ export default function AgreementList() {
                 </tr>
               </thead>
               <tbody>
-                {paged.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={5} className="text-center py-10 text-gray-400 text-sm">
+                      <Loader2 size={18} className="animate-spin inline-block mr-2" />
+                      Loading agreements...
+                    </td>
+                  </tr>
+                ) : paged.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="text-center py-10 text-gray-400 text-sm">
                       No data available in table
@@ -169,7 +203,7 @@ export default function AgreementList() {
                   </tr>
                 ) : (
                   paged.map((row, i) => (
-                    <tr key={row._id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
+                    <tr key={row.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
                       <td className="px-4 py-3 text-gray-400">#{(page - 1) * pageSize + i + 1}</td>
                       <td className="px-4 py-3">
                         <span className="inline-block rounded-md bg-indigo-50 text-indigo-600 text-xs font-medium px-2 py-1">
@@ -177,16 +211,38 @@ export default function AgreementList() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="flex items-center gap-1.5 font-semibold text-indigo-600">
+                        <button
+                          onClick={() => navigate(`/accounts-module/agreement_list_view/${row.id}`)}
+                          className="flex items-center gap-1.5 font-semibold text-indigo-600 hover:text-indigo-700 hover:underline"
+                        >
                           <FileText size={14} className="text-indigo-400" />
                           {row.reference || '—'}
-                        </span>
+                        </button>
                       </td>
                       <td className="px-4 py-3 text-gray-600">{row.project || '—'}</td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1.5">
                           <button
-                            onClick={() => navigate(`/accounts-module/agreement_list_add/${row._id}`)}
+                            onClick={() => navigate(`/accounts-module/agreement_list_view/${row.id}`)}
+                            title="View"
+                            className="bg-gray-50 hover:bg-indigo-50 hover:text-indigo-600 text-gray-500 p-2 rounded-lg border border-gray-100 transition-colors"
+                          >
+                            <Eye size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDownloadPdf(row)}
+                            disabled={downloadingId === row.id}
+                            title="Download PDF"
+                            className="bg-gray-50 hover:bg-indigo-50 hover:text-indigo-600 text-gray-500 p-2 rounded-lg border border-gray-100 transition-colors disabled:opacity-50"
+                          >
+                            {downloadingId === row.id ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <Download size={14} />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => navigate(`/accounts-module/agreement_list_add/${row.id}`)}
                             title="Edit"
                             className="bg-gray-50 hover:bg-indigo-50 hover:text-indigo-600 text-gray-500 p-2 rounded-lg border border-gray-100 transition-colors"
                           >

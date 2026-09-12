@@ -5,6 +5,10 @@ const ServiceRequisition = sequelize.define('ServiceRequisition', {
   code: { type: DataTypes.STRING, unique: true },
   date: DataTypes.STRING,
 
+  // New: previously no supplier link existed on this model. Nullable so
+  // existing internal-only requisitions are unaffected.
+  supplierId: { type: DataTypes.INTEGER, allowNull: true },
+
   projectType: DataTypes.STRING,
   projectId: DataTypes.INTEGER,
   titleOfWork: DataTypes.STRING,

@@ -42,7 +42,7 @@ export default function InvestorAccountsPage() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    getChartOfGroupOptions().then(({ data }) => setGroupOptions(data)).catch(console.error);
+    getChartOfGroupOptions().then((data) => setGroupOptions(Array.isArray(data) ? data : [])).catch(console.error);
   }, []);
 
   useEffect(() => {

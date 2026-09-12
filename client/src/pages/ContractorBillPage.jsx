@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import { getParties, createParty, getNextPartyCode } from '../api/party';
+import { getContacts } from '../api/contactAccounts';
 import { getChartOfAccounts } from '../api/chartOfAccounts';
 import { getChartOfGroups } from '../api/chartOfGroup';
 import { getCategories } from '../api/category';
@@ -10,7 +11,7 @@ import { getBrands, createBrand } from '../api/brand';
 import { getUnits } from '../api/unit';
 import {
   getContractorBill, getNextContractorBillCode,
-  createContractorBill, updateContractorBill,
+  createContractorBill, updateContractorBill, uploadContractorBillAttachment,
 } from '../api/contractorBill';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
@@ -35,6 +36,17 @@ function sameId(a, b) {
   return a !== '' && a != null && b !== '' && b != null && String(a) === String(b);
 }
 
+// The "Contractor/Supplier" dropdown draws from two separate tables that
+// aren't otherwise linked: Party (contractors/workers, added via
+// "Labour/Worker Add" on this page) and ChartOfAccount contacts with
+// contactType 'Supplier' (added on the Supplier Accounts page). A
+// ContractorBill can only be billed against a Party id, so selections are
+// tagged with a `party-` / `coa-` prefix and resolved to a real Party id
+// right before submit — creating a matching Party on the fly the first
+// time a Chart-of-Accounts supplier is billed.
+const PARTY_PREFIX = 'party-';
+const COA_PREFIX = 'coa-';
+
 const inputCls = 'w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition';
 const inputReadOnlyCls = 'w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-slate-50 text-slate-500';
 
@@ -44,6 +56,7 @@ export default function ContractorBillPage() {
   const isEdit = !!id;
 
   const [parties, setParties] = useState([]);
+  const [supplierContacts, setSupplierContacts] = useState([]); // ChartOfAccount, contactType: Supplier
   const [ledgers, setLedgers] = useState([]);
   const [chartGroups, setChartGroups] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -55,7 +68,7 @@ export default function ContractorBillPage() {
   const [units, setUnits] = useState([]);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [party, setParty] = useState('');
+  const [party, setParty] = useState(''); // prefixed value: `party-<id>` or `coa-<id>`
   const [ledger, setLedger] = useState('');
   const [code, setCode] = useState('');
   const [projectType, setProjectType] = useState('');
@@ -66,7 +79,9 @@ export default function ContractorBillPage() {
   const [task, setTask] = useState('');
   const [category, setCategory] = useState('');
   const [selectedItemId, setSelectedItemId] = useState('');
+  const [attachmentFile, setAttachmentFile] = useState(null);
   const [attachmentName, setAttachmentName] = useState('');
+  const [existingAttachment, setExistingAttachment] = useState('');
 
   const [rows, setRows] = useState([]);
   const qtyInputRefs = useRef([]);
@@ -90,7 +105,8 @@ export default function ContractorBillPage() {
   const [itemNotice, setItemNotice] = useState('');
 
   useEffect(() => {
-    getParties({ type: 'contractor' }).then((res) => setParties(asArray(res))).catch((err) => console.error('Failed to load parties', err));
+    getParties().then((res) => setParties(asArray(res))).catch((err) => console.error('Failed to load parties', err));
+    getContacts('Supplier').then((res) => setSupplierContacts(asArray(res))).catch((err) => console.error('Failed to load supplier contacts', err));
     getChartOfAccounts().then((res) => setLedgers(asArray(res))).catch((err) => console.error('Failed to load ledgers', err));
     getChartOfGroups().then((res) => setChartGroups(asArray(res))).catch((err) => console.error('Failed to load chart groups', err));
     // Confirmed from server/index.js: app.use('/api/projects', ...), app.use('/api/sites', ...),
@@ -118,21 +134,24 @@ export default function ContractorBillPage() {
     if (!isEdit) return;
     getContractorBill(id).then((b) => {
       setDate(b.date || '');
-      setParty(b.party?.id || b.party || '');
-      setLedger(b.ledger?.id || b.ledger || '');
+      // Existing bills are always billed against a Party (the FK only
+      // ever points there), so tag it with the party- prefix on load.
+      setParty(b.partyId != null ? `${PARTY_PREFIX}${b.partyId}` : '');
+      setLedger(b.ledgerId != null ? String(b.ledgerId) : '');
       setCode(b.code || '');
       setProjectType(b.projectType || '');
-      setProject(b.project?.id || b.project || '');
+      setProject(b.projectId != null ? String(b.projectId) : '');
       setTitleOfWork(b.titleOfWork || '');
-      setSite(b.site?.id || b.site || '');
+      setSite(b.siteId != null ? String(b.siteId) : '');
       setRefWoNo(b.refWoNo || '');
       setTask(b.task || '');
-      setCategory(b.category?.id || b.category || '');
-      setRows(b.items || []);
+      setCategory(b.categoryId != null ? String(b.categoryId) : '');
+      setRows(b.ContractorBillItems || []);
       setVatIncluded(!!b.vatIncluded);
       setVatPercent(b.vatPercent || 0);
       setSecurityDeposit(b.securityDeposit || 0);
-      setPayments(b.payments || []);
+      setPayments(b.ContractorBillPayments || []);
+      setExistingAttachment(b.attachment || '');
     }).catch((err) => {
       console.error(err);
       setError('Failed to load contractor bill.');
@@ -207,6 +226,44 @@ export default function ContractorBillPage() {
     setPayments((prev) => prev.filter((_, idx) => idx !== i));
   }
 
+  // Resolves the dropdown's tagged selection to a real Party id.
+  // - `party-<id>` selections already point at a Party: return the id.
+  // - `coa-<id>` selections point at a ChartOfAccount supplier: reuse a
+  //   Party with the same name if one exists, otherwise create one so the
+  //   bill (and every report reading Party + ContractorBill) has something
+  //   real to link against.
+  async function resolvePartyId(selection) {
+    if (!selection) return null;
+    if (selection.startsWith(PARTY_PREFIX)) {
+      return selection.slice(PARTY_PREFIX.length);
+    }
+    if (selection.startsWith(COA_PREFIX)) {
+      const coaId = selection.slice(COA_PREFIX.length);
+      const contact = supplierContacts.find((c) => sameId(c.id, coaId));
+      if (!contact) return null;
+
+      const existing = parties.find(
+        (p) => p.name?.trim().toLowerCase() === contact.name?.trim().toLowerCase()
+      );
+      if (existing) return existing.id;
+
+      const created = await createParty({
+        name: contact.name,
+        phone: contact.mobile || '',
+        address: contact.address || '',
+        openingBalance: contact.openingBalance || 0,
+        creditLimit: contact.creditLimit || 0,
+        dueDate: contact.dueDate || null,
+        type: 'supplier',
+      });
+      setParties((prev) => [...prev, created]);
+      return created.id;
+    }
+    // Legacy/plain numeric value (shouldn't normally happen once every
+    // option is prefixed) — treat it as an existing Party id.
+    return selection;
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
@@ -216,18 +273,29 @@ export default function ContractorBillPage() {
     }
     setSubmitting(true);
     try {
+      const resolvedPartyId = await resolvePartyId(party);
+      if (!resolvedPartyId) {
+        setError('Could not resolve the selected Contractor/Supplier. Please pick it again.');
+        setSubmitting(false);
+        return;
+      }
+
       const payload = {
-        code, date, party, ledger, projectType, project, titleOfWork, task,
+        code, date, party: resolvedPartyId, ledger, projectType, project, titleOfWork, task,
         site, category, refWoNo,
         items: rows.map((r) => ({ ...r, amount: num(r.rate) * num(r.quantity) })),
-        attachment: attachmentName,
         vatIncluded, vatPercent, securityDeposit,
         payments,
       };
+      let billId = id;
       if (isEdit) {
         await updateContractorBill(id, payload);
       } else {
-        await createContractorBill(payload);
+        const created = await createContractorBill(payload);
+        billId = created.id;
+      }
+      if (attachmentFile && billId) {
+        await uploadContractorBillAttachment(billId, attachmentFile);
       }
       navigate('/billing/vendor_bill_list');
     } catch (err) {
@@ -299,11 +367,24 @@ export default function ContractorBillPage() {
               <Field label="Contractor/Supplier" required>
                 <select value={party} onChange={(e) => setParty(e.target.value)} className={inputCls}>
                   <option value="">Select One Option</option>
-                  {parties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {supplierContacts.length > 0 && (
+                    <optgroup label="Suppliers">
+                      {supplierContacts.map((c) => (
+                        <option key={`${COA_PREFIX}${c.id}`} value={`${COA_PREFIX}${c.id}`}>{c.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {parties.length > 0 && (
+                    <optgroup label="Contractors / Workers">
+                      {parties.map((p) => (
+                        <option key={`${PARTY_PREFIX}${p.id}`} value={`${PARTY_PREFIX}${p.id}`}>{p.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
-                {parties.length === 0 && (
+                {parties.length === 0 && supplierContacts.length === 0 && (
                   <p className="text-xs text-amber-600 mt-1.5">
-                    No contractors found — use "Labour/Worker Add" above to create one.
+                    No contractors or suppliers found — use "Labour/Worker Add" above, or add one on the Supplier Accounts page.
                   </p>
                 )}
               </Field>
@@ -506,10 +587,17 @@ export default function ContractorBillPage() {
               <Field label="Attachment">
                 <input
                   type="file"
-                  onChange={(e) => setAttachmentName(e.target.files?.[0]?.name || '')}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] || null;
+                    setAttachmentFile(f);
+                    setAttachmentName(f?.name || '');
+                  }}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:bg-slate-100 file:text-slate-600 file:text-xs file:font-medium hover:file:bg-slate-200 transition"
                 />
                 {attachmentName && <p className="text-xs text-slate-500 mt-1.5 truncate">Selected: {attachmentName}</p>}
+                {!attachmentName && existingAttachment && (
+                  <p className="text-xs text-slate-500 mt-1.5 truncate">Current file on record — choose a new one to replace it.</p>
+                )}
               </Field>
             </div>
           </div>
@@ -623,7 +711,7 @@ export default function ContractorBillPage() {
         <PartyAddModal
           chartGroups={chartGroups}
           onClose={() => setShowPartyModal(false)}
-          onCreated={(p) => { setParties((prev) => [...prev, p]); setParty(p.id); setShowPartyModal(false); }}
+          onCreated={(p) => { setParties((prev) => [...prev, p]); setParty(`${PARTY_PREFIX}${p.id}`); setShowPartyModal(false); }}
         />
       )}
     </div>

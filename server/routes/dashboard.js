@@ -89,11 +89,15 @@ router.get('/projects', auth, async (req, res) => {
     const result = projects.map((p) => ({
       _id: p.id,
       name: p.name,
+      image: p.image || null,
+      location: p.location || '',
       status: p.status === 'Active' ? 'ON TRACK' : p.status,
       percentComplete: p.totalTask > 0 ? Math.round((p.completeTask / p.totalTask) * 100) : 0,
       months: 0, // TODO: no start/end month calc source yet
       totalTasks: p.totalTask || 0,
       completedTasks: p.completeTask || 0,
+      workers: 0,     // TODO: no workers/assignment count source yet
+      dueDate: p.endDate || null,
     }));
     res.json(result);
   } catch (err) {

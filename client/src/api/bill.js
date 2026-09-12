@@ -24,3 +24,39 @@ export async function deleteBill(id) {
   const res = await api.delete(`/bill/${id}`);
   return res.data;
 }
+
+export async function updateBillStatus(id, status) {
+  const res = await api.patch(`/bill/${id}/status`, { status });
+  return res.data;
+}
+
+export async function uploadBillAttachment(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await api.post('/bill/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data.url;
+}
+
+export async function downloadBillPdf(id, filename) {
+  const res = await api.get(`/bill/${id}/pdf`, { responseType: 'blob' });
+  const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename || `Invoice-${id}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function sendBillEmail(id, to) {
+  const res = await api.post(`/bill/${id}/send-email`, { to });
+  return res.data;
+}
+
+export function getBillAttachmentUrl(attachmentPath) {
+  if (!attachmentPath) return '';
+  if (/^https?:\/\//i.test(attachmentPath)) return attachmentPath;
+  const base = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '');
+  return `${base}${attachmentPath}`;
+}

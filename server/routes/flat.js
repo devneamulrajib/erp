@@ -21,8 +21,8 @@ router.get('/', auth, async (req, res) => {
     const flats = await Flat.findAll({
       where,
       include: [
-        { model: Project, attributes: ['name'] },
-        { model: Site, attributes: ['name'] },
+        { model: Project, as: 'project', attributes: ['name'] },
+        { model: Site, as: 'site', attributes: ['name'] },
       ],
       order: [['createdAt', 'DESC']],
     });

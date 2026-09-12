@@ -5,6 +5,7 @@ const fs = require('fs');
 const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
 const ChartOfAccount = require('../models/ChartOfAccount');
+const ChartOfGroup = require('../models/ChartOfGroup');
 
 const uploadDir = path.join(__dirname, '..', 'uploads', 'contacts');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -20,6 +21,11 @@ const upload = multer({ storage });
 
 const PREFIX_BY_TYPE = { Customer: 'CUS', Supplier: 'SUP', Investor: 'INV' };
 
+// Always pull the linked Chart of Group alongside each account, so the
+// frontend's `item.chartOfGroup.name` (used in tables and view modals)
+// is populated instead of coming back undefined.
+const GROUP_INCLUDE = { model: ChartOfGroup, as: 'chartOfGroup', attributes: ['id', 'name'] };
+
 router.get('/', auth, async (req, res) => {
   try {
     const { chartOfGroup, contactType, search } = req.query;
@@ -28,7 +34,11 @@ router.get('/', auth, async (req, res) => {
     if (contactType) where.contactType = contactType;
     if (search) where.name = { [Op.like]: `%${search}%` };
 
-    const items = await ChartOfAccount.findAll({ where, order: [['createdAt', 'DESC']] });
+    const items = await ChartOfAccount.findAll({
+      where,
+      include: [GROUP_INCLUDE],
+      order: [['createdAt', 'DESC']],
+    });
     res.json(items);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -55,6 +65,16 @@ router.get('/next-code', auth, async (req, res) => {
   }
 });
 
+router.get('/:id', auth, async (req, res) => {
+  try {
+    const item = await ChartOfAccount.findByPk(req.params.id, { include: [GROUP_INCLUDE] });
+    if (!item) return res.status(404).json({ message: 'Not found' });
+    res.json(item);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.post('/', auth, upload.single('image'), async (req, res) => {
   try {
     const {
@@ -66,7 +86,7 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
       return res.status(400).json({ message: 'Chart of group, code and name are required' });
     }
 
-    const item = await ChartOfAccount.create({
+    const created = await ChartOfAccount.create({
       chartOfGroupId: chartOfGroup,
       code,
       name,
@@ -79,7 +99,8 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
       image: req.file ? `/uploads/contacts/${req.file.filename}` : null,
     });
 
-    res.status(201).json(item);
+    const populated = await ChartOfAccount.findByPk(created.id, { include: [GROUP_INCLUDE] });
+    res.status(201).json(populated);
   } catch (err) {
     if (err.name === 'SequelizeUniqueConstraintError') return res.status(400).json({ message: 'Code already exists' });
     res.status(500).json({ message: err.message });
@@ -102,7 +123,8 @@ router.put('/:id', auth, upload.single('image'), async (req, res) => {
     if (req.file) item.image = `/uploads/contacts/${req.file.filename}`;
 
     await item.save();
-    res.json(item);
+    const populated = await ChartOfAccount.findByPk(item.id, { include: [GROUP_INCLUDE] });
+    res.json(populated);
   } catch (err) {
     if (err.name === 'SequelizeUniqueConstraintError') return res.status(400).json({ message: 'Code already exists' });
     res.status(500).json({ message: err.message });

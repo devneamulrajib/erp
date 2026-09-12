@@ -2,6 +2,12 @@ const router = require('express').Router();
 const auth = require('../middleware/auth');
 const { BillItem, Category, Brand, Unit } = require('../models/associations');
 
+const RELATION_INCLUDES = [
+  { model: Category, as: 'category', attributes: ['id', 'name'] },
+  { model: Brand, as: 'brand', attributes: ['id', 'name'] },
+  { model: Unit, as: 'unit', attributes: ['id', 'name'] },
+];
+
 async function generateCode() {
   const count = await BillItem.count();
   return `P${String(count + 1).padStart(4, '0')}`;
@@ -18,14 +24,20 @@ router.get('/next-code', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const items = await BillItem.findAll({
-      include: [
-        { model: Category, attributes: ['name'] },
-        { model: Brand, attributes: ['name'] },
-        { model: Unit, attributes: ['name'] },
-      ],
+      include: RELATION_INCLUDES,
       order: [['createdAt', 'DESC']],
     });
     res.json(items);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/:id', auth, async (req, res) => {
+  try {
+    const item = await BillItem.findByPk(req.params.id, { include: RELATION_INCLUDES });
+    if (!item) return res.status(404).json({ message: 'Not found' });
+    res.json(item);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -36,7 +48,7 @@ router.post('/', auth, async (req, res) => {
     const { category, brand, name, unit, purchasePrice, salePrice, description } = req.body;
     if (!name) return res.status(400).json({ message: 'Item Name is required' });
 
-    const item = await BillItem.create({
+    const created = await BillItem.create({
       code: await generateCode(),
       categoryId: category || null,
       brandId: brand || null,
@@ -47,7 +59,8 @@ router.post('/', auth, async (req, res) => {
       description: description || '',
     });
 
-    res.status(201).json(item);
+    const populated = await BillItem.findByPk(created.id, { include: RELATION_INCLUDES });
+    res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -67,7 +80,8 @@ router.put('/:id', auth, async (req, res) => {
     });
 
     await item.save();
-    res.json(item);
+    const populated = await BillItem.findByPk(item.id, { include: RELATION_INCLUDES });
+    res.json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

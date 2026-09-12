@@ -3,16 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { getContractorWorkorders, deleteContractorWorkorder } from '../api/contractorWorkorder';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
-import { ChevronDown, PlusCircle, Search, LayoutGrid, Paperclip } from 'lucide-react';
+import { PlusCircle, Search, LayoutGrid, Paperclip, Pencil, Eye, Trash2 } from 'lucide-react';
 
 function num(v) { return Number(v) || 0; }
+function rid(o) { return o?.id ?? o?._id ?? ''; }
 
 export default function ContractorWorkorderList() {
   const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [openActionId, setOpenActionId] = useState(null);
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
@@ -35,12 +35,11 @@ export default function ContractorWorkorderList() {
   async function handleDelete(row) {
     if (!window.confirm('Delete this work order?')) return;
     try {
-      await deleteContractorWorkorder(row._id);
-      setRows((prev) => prev.filter((r) => r._id !== row._id));
+      await deleteContractorWorkorder(rid(row));
+      setRows((prev) => prev.filter((r) => rid(r) !== rid(row)));
     } catch (e) {
       alert(e.response?.data?.message || e.message || 'Failed to delete');
     }
-    setOpenActionId(null);
   }
 
   const filtered = rows.filter((r) => {
@@ -57,15 +56,15 @@ export default function ContractorWorkorderList() {
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const HEADERS = ['ID', 'Contractor Name', 'W/O No', 'Ref Invoice No', 'Date', 'Sub Total', 'VAT', 'Discount',
-    'Grand Total', 'Added By', 'Approve', 'Attachment', 'Action'];
+    'Grand Total', 'Added By', 'Attachment', 'Action'];
 
   return (
     <div className="min-h-screen w-full bg-slate-50 text-left">
       <Topbar />
 
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+      <div className="max-w-full mx-auto px-3 sm:px-5 py-5">
         {/* Header */}
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
           <div>
             <Breadcrumb
               items={[
@@ -74,12 +73,12 @@ export default function ContractorWorkorderList() {
                 { label: 'Contractor Work Order List' },
               ]}
             />
-            <h1 className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">Contractor Work Orders</h1>
+            <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 mt-1 tracking-tight">Contractor Work Orders</h1>
             <p className="text-sm text-slate-500 mt-0.5">Manage contractor work orders and their billing details</p>
           </div>
           <button
             onClick={() => navigate('/billing/contractor-workorder')}
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 transition-colors"
+            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 transition-colors shrink-0"
           >
             <PlusCircle size={16} strokeWidth={2.5} />
             Contractor Work Order
@@ -87,17 +86,17 @@ export default function ContractorWorkorderList() {
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-5">{error}</div>
+          <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>
         )}
 
         {/* Summary strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5 max-w-xl">
           <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
             <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Total Orders</div>
             <div className="text-xl font-semibold text-slate-900">{rows.length}</div>
           </div>
-          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 col-span-2 sm:col-span-2">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Matching Search</div>
+          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Matching</div>
             <div className="text-xl font-semibold text-slate-900">{filtered.length}</div>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
@@ -109,7 +108,7 @@ export default function ContractorWorkorderList() {
         {/* Table panel */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           {/* Toolbar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50/50">
             <div className="flex items-center gap-2">
               <button className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium px-3.5 py-2 rounded-lg transition-colors">Excel</button>
               <button onClick={() => window.print()} className="bg-red-500 hover:bg-red-600 text-white text-xs font-medium px-3.5 py-2 rounded-lg transition-colors">PDF</button>
@@ -132,7 +131,7 @@ export default function ContractorWorkorderList() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search work orders..."
-                className="border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm w-64 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+                className="border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm w-56 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
           </div>
@@ -143,63 +142,70 @@ export default function ContractorWorkorderList() {
               <thead>
                 <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
                   {HEADERS.map((h) => (
-                    <th key={h} className={`px-5 py-3 font-medium text-xs uppercase tracking-wide ${h === 'Action' ? 'text-right' : 'text-left'}`}>{h}</th>
+                    <th key={h} className={`px-3 py-2.5 font-medium text-[11px] uppercase tracking-wide ${h === 'Action' ? 'text-right' : 'text-left'}`}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={13} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
+                  <tr><td colSpan={12} className="text-center py-14 text-slate-400 text-sm">Loading…</td></tr>
                 ) : paged.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="text-center py-16">
+                    <td colSpan={12} className="text-center py-14">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
-                        <LayoutGrid size={28} strokeWidth={1.5} />
+                        <LayoutGrid size={26} strokeWidth={1.5} />
                         <p className="text-sm">No work orders found. Try adjusting your search, or create one.</p>
                       </div>
                     </td>
                   </tr>
                 ) : (
                   paged.map((row, i) => (
-                    <tr key={row._id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap align-top">
-                      <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">#{(page - 1) * pageSize + i + 1}</td>
-                      <td className="px-5 py-3.5 text-slate-700 font-medium">{row.supplier?.name || '-'}</td>
-                      <td className="px-5 py-3.5">
-                        <span className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-600 px-2.5 py-1 text-xs font-mono font-medium ring-1 ring-inset ring-indigo-600/10">
+                    <tr key={rid(row)} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap align-top text-xs sm:text-sm">
+                      <td className="px-3 py-3 text-slate-400 font-mono text-xs">#{(page - 1) * pageSize + i + 1}</td>
+                      <td className="px-3 py-3 text-slate-700 font-medium">{row.supplier?.name || '-'}</td>
+                      <td className="px-3 py-3">
+                        <span className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-600 px-2 py-0.5 text-[11px] font-mono font-medium ring-1 ring-inset ring-indigo-600/10">
                           {row.code}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-slate-600">{row.refInvoiceNo || '-'}</td>
-                      <td className="px-5 py-3.5 text-slate-600">{row.date}</td>
-                      <td className="px-5 py-3.5 text-slate-600">{num(row.subtotal).toLocaleString()}</td>
-                      <td className="px-5 py-3.5 text-slate-600">{num(row.vatAmount).toLocaleString()}</td>
-                      <td className="px-5 py-3.5 text-slate-600">{num(row.discount).toLocaleString()}</td>
-                      <td className="px-5 py-3.5 font-semibold text-slate-900">{num(row.grandTotal).toLocaleString()}</td>
-                      <td className="px-5 py-3.5 text-slate-600">{row.addedBy || '-'}</td>
-                      <td className="px-5 py-3.5 text-slate-400">-</td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-3 py-3 text-slate-600">{row.refInvoiceNo || '-'}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.date}</td>
+                      <td className="px-3 py-3 text-slate-600">{num(row.subtotal).toLocaleString()}</td>
+                      <td className="px-3 py-3 text-slate-600">{num(row.vatAmount).toLocaleString()}</td>
+                      <td className="px-3 py-3 text-slate-600">{num(row.discount).toLocaleString()}</td>
+                      <td className="px-3 py-3 font-semibold text-slate-900">{num(row.grandTotal).toLocaleString()}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.addedBy || '-'}</td>
+                      <td className="px-3 py-3">
                         {row.attachment ? (
-                          <a href={row.attachment} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-indigo-600 hover:text-indigo-700 font-medium hover:underline underline-offset-2">
-                            <Paperclip size={13} /> File
+                          <a href={row.attachment} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-700 font-medium hover:underline underline-offset-2">
+                            <Paperclip size={12} /> File
                           </a>
                         ) : '-'}
                       </td>
-                      <td className="px-5 py-3.5 relative">
-                        <div className="flex justify-end">
+                      <td className="px-3 py-3">
+                        <div className="flex justify-end items-center gap-1.5">
                           <button
-                            onClick={() => setOpenActionId(openActionId === row._id ? null : row._id)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-indigo-100 text-slate-600 hover:text-indigo-600 rounded-lg text-xs font-medium transition-colors"
+                            onClick={() => navigate(`/billing/contractor-workorder/${rid(row)}`)}
+                            title="Edit"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors"
                           >
-                            Action <ChevronDown size={12} />
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            onClick={() => navigate(`/billing/contractor-workorder/${rid(row)}?view=1`)}
+                            title="View"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-500 hover:text-emerald-600 transition-colors"
+                          >
+                            <Eye size={13} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(row)}
+                            title="Delete"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors"
+                          >
+                            <Trash2 size={13} />
                           </button>
                         </div>
-                        {openActionId === row._id && (
-                          <div className="absolute right-5 mt-1 w-32 bg-white border border-slate-200 rounded-lg shadow-lg z-10 overflow-hidden">
-                            <button onClick={() => { navigate(`/billing/contractor-workorder/${row._id}`); setOpenActionId(null); }} className="w-full text-left px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">Edit</button>
-                            <button onClick={() => { navigate(`/billing/contractor-workorder/${row._id}`); setOpenActionId(null); }} className="w-full text-left px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">View</button>
-                            <button onClick={() => handleDelete(row)} className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button>
-                          </div>
-                        )}
                       </td>
                     </tr>
                   ))
@@ -209,7 +215,7 @@ export default function ContractorWorkorderList() {
           </div>
 
           {/* Pagination */}
-          <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-slate-100">
             <span className="text-sm text-slate-500">
               Showing <span className="font-medium text-slate-700">{filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}</span> to{' '}
               <span className="font-medium text-slate-700">{Math.min(page * pageSize, filtered.length)}</span> of{' '}

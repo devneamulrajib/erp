@@ -19,7 +19,17 @@ const COLUMNS = [
 ];
 
 const ALL_VISIBLE = { sl: true, code: true, name: true, under: true, section: true, action: true };
-const EMPTY_FORM = { under: '', code: '', name: '' };
+const EMPTY_FORM = { code: '', name: '' };
+
+// Looks at existing group codes, finds the highest numeric value, and
+// returns the next one, zero-padded to 4 digits (e.g. 0001, 0002, ...).
+function generateNextCode(groups) {
+  const numericCodes = groups
+    .map((g) => parseInt(g.code, 10))
+    .filter((n) => !Number.isNaN(n));
+  const max = numericCodes.length ? Math.max(...numericCodes) : 0;
+  return String(max + 1).padStart(4, '0');
+}
 
 export default function ChartOfGroupPage() {
   const [groups, setGroups] = useState([]);
@@ -38,8 +48,8 @@ export default function ChartOfGroupPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await getChartOfGroups();
-      setGroups(data);
+      const data = await getChartOfGroups();
+      setGroups(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load chart of groups', err);
     } finally {
@@ -60,7 +70,7 @@ export default function ChartOfGroupPage() {
 
   function openAddModal() {
     setEditingId(null);
-    setForm(EMPTY_FORM);
+    setForm({ code: generateNextCode(groups), name: '' });
     setError('');
     setModalOpen(true);
   }
@@ -68,7 +78,6 @@ export default function ChartOfGroupPage() {
   function openEditModal(group) {
     setEditingId(group.id);
     setForm({
-      under: group.underId || '',
       code: group.code || '',
       name: group.name || '',
     });
@@ -348,31 +357,15 @@ export default function ChartOfGroupPage() {
               {error}
             </div>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Under</label>
-              <select
-                value={form.under}
-                onChange={(e) => setForm((f) => ({ ...f, under: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
-              >
-                <option value="">Select Chart Of Account</option>
-                {groups
-                  .filter((g) => g.id !== editingId)
-                  .map((g) => (
-                    <option key={g.id} value={g.id}>{g.name}</option>
-                  ))}
-              </select>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">Code</label>
               <input
-                required
-                placeholder="Code"
+                readOnly
                 value={form.code}
-                onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-mono bg-slate-50 text-slate-500 cursor-not-allowed"
               />
+              <p className="text-xs text-slate-400 mt-1">Auto-generated</p>
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">Chart of Group Name</label>

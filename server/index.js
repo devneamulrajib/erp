@@ -7,12 +7,12 @@ const createSuperAdmin = require('./seed/createSuperAdmin');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 sequelize.authenticate()
   .then(async () => {
     console.log('MySQL connected');
-    await sequelize.sync(); // creates tables that don't exist yet
+    await sequelize.sync(); // just verifies models match DB structure — does NOT auto-modify schema
     await createSuperAdmin();
   })
   .catch((err) => console.error('MySQL connection error:', err));
@@ -63,11 +63,9 @@ app.use('/api/contractor-workorder', require('./routes/contractorWorkorder'));
 app.use('/api/period-bill', require('./routes/periodBill'));
 app.use('/api/adjustment-bill', require('./routes/adjustmentBill'));
 app.use('/api/expenses', require('./routes/expense'));
-app.use('/api/receipt-vouchers', require('./routes/receiptVoucher'));
 app.use('/api/accounting-reports', require('./routes/accountingReports'));
 app.use('/api/sales', require('./routes/sale'));
 app.use('/api/quote', require('./routes/quote'));
-app.use('/api/payment-vouchers', require('./routes/paymentVoucher'));
 app.use('/api/journal-vouchers', require('./routes/journalVoucher'));
 app.use('/api/contra-vouchers', require('./routes/contraVoucher'));
 app.use('/api/contractor-bill-report', require('./routes/contractorBillReport'));
@@ -75,6 +73,18 @@ app.use('/api/contractor-bill', require('./routes/contractorBill'));
 app.use('/api/employee', require('./routes/employee'));
 app.use('/api/party-list', require('./routes/partyList'));
 app.use('/api/vouchers', require('./routes/voucher'));
+app.use('/api/bank-accounts', require('./routes/bankAccount'));
+app.use('/api/project-managers', require('./routes/projectManager'));
+app.use('/api/portal/auth', require('./routes/portalAuth'));
+app.use('/api/portal/dashboard', require('./routes/portalDashboard'));
+app.use('/api/portal-admin', require('./routes/portalAdmin'));
+app.use('/api/portal/bills', require('./routes/portalBills'));
+app.use('/api/portal/quotes', require('./routes/portalQuotes'));
+app.use('/api/portal/purchase-orders', require('./routes/portalPurchaseOrders'));
+app.use('/api/portal/material-requisitions', require('./routes/portalMaterialRequisitions'));
+app.use('/api/portal/requests', require('./routes/portalRequests'));
+app.use('/api/portalAuth', require('./routes/portalAuth'));
+app.use('/api/assign-share', require('./routes/assignShare'));
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

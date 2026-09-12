@@ -13,3 +13,4 @@ export const addRevaluationEntry = (id, data) => api.post(`/assets/${id}/revalua
 // Reused option sources
 export const getItemOptions = () => api.get('/item');
 export const getProjectOptions = () => api.get('/projects');
+export const getSiteOptions = () => api.get('/sites');

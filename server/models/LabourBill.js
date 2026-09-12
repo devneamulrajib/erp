@@ -26,6 +26,7 @@ const LabourBill = sequelize.define('LabourBill', {
   paymentMethod: { type: DataTypes.STRING, defaultValue: 'Cash' },
   paid: { type: DataTypes.FLOAT, defaultValue: 0 },
   due: { type: DataTypes.FLOAT, defaultValue: 0 },
+  status: { type: DataTypes.ENUM('unpaid', 'partial', 'paid'), defaultValue: 'unpaid' },
   addedBy: DataTypes.STRING,
 }, { timestamps: true });
 

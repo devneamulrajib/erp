@@ -3,13 +3,15 @@ import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import { getCustomers, createCustomer, getNextCustomerCode } from '../api/customer';
 import { getChartOfGroups } from '../api/chartOfGroup';
+import { getItems } from '../api/item';
 import {
   getWorkorder, getNextWorkorderCode,
   createWorkorder, updateWorkorder,
 } from '../api/workorder';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
-import { Plus, Trash2, X, ListChecks, UserPlus, List } from 'lucide-react';
+import SearchableSelect from '../components/SearchableSelect';
+import { Plus, Trash2, X, ListChecks, UserPlus, List, FileText } from 'lucide-react';
 
 function num(v) {
   const n = Number(v);
@@ -34,6 +36,7 @@ export default function WorkorderPage() {
   const [projectTypes, setProjectTypes] = useState([]);
   const [projects, setProjects] = useState([]);
   const [sites, setSites] = useState([]);
+  const [itemCatalog, setItemCatalog] = useState([]);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [customer, setCustomer] = useState('');
@@ -62,6 +65,7 @@ export default function WorkorderPage() {
     api.get('/projects').then((res) => setProjects(asArray(res))).catch((err) => console.error('Failed to load projects', err));
     api.get('/project-types').then((res) => setProjectTypes(asArray(res))).catch((err) => console.error('Failed to load project types', err));
     api.get('/sites').then((res) => setSites(asArray(res))).catch((err) => console.error('Failed to load sites', err));
+    getItems().then((res) => setItemCatalog(asArray(res))).catch((err) => console.error('Failed to load items', err));
   }, []);
 
   useEffect(() => {
@@ -79,7 +83,16 @@ export default function WorkorderPage() {
       setProject(o.project?.id || o.project || '');
       setSite(o.site?.id || o.site || '');
       setClientOrderNo(o.clientOrderNo || '');
-      setRows(o.items || []);
+      setRows((o.items || []).map((it) => ({
+        item: it.itemId ?? it.item ?? '',
+        itemName: it.itemName || '',
+        description: it.description || '',
+        unit: it.unit || '',
+        quantity: it.quantity || 0,
+        rate: it.rate || 0,
+        image: it.image || '',
+        amount: it.amount || 0,
+      })));
       setVatIncluded(!!o.vatIncluded);
       setVatPercent(o.vatPercent || 0);
       setAitIncluded(!!o.aitIncluded);
@@ -100,7 +113,7 @@ export default function WorkorderPage() {
 
   function addRow() {
     setRows((prev) => [...prev, {
-      itemName: '', description: '', unit: '', quantity: 0, rate: 0, image: '', amount: 0,
+      item: '', itemName: '', description: '', unit: '', quantity: 0, rate: 0, image: '', amount: 0,
     }]);
   }
   function updateRow(i, key, value) {
@@ -108,6 +121,16 @@ export default function WorkorderPage() {
   }
   function removeRow(i) {
     setRows((prev) => prev.filter((_, idx) => idx !== i));
+  }
+  function selectCatalogItem(i, itemId) {
+    const found = itemCatalog.find((it) => String(it.id) === String(itemId));
+    setRows((prev) => prev.map((r, idx) => (idx === i ? {
+      ...r,
+      item: itemId,
+      itemName: found?.name || '',
+      unit: found?.unit || r.unit,
+      rate: found?.salePrice ?? r.rate,
+    } : r)));
   }
 
   async function handleSubmit(e) {
@@ -159,31 +182,41 @@ export default function WorkorderPage() {
             <p className="text-sm text-slate-500 mt-0.5">Create a work order with items, VAT and AIT</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={addRow}
-              className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors"
-            >
-              <Plus size={16} strokeWidth={2.5} />
-              Add Item
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowCustomerModal(true)}
-              className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors"
-            >
-              <UserPlus size={16} strokeWidth={2.5} />
-              Add Contact
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/billing/workorder_list')}
-              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 transition-colors"
-            >
-              <List size={16} />
-              Work Order List
-            </button>
-          </div>
+  <button
+    type="button"
+    onClick={addRow}
+    className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors"
+  >
+    <Plus size={16} strokeWidth={2.5} />
+    Add Item
+  </button>
+  <button
+    type="button"
+    onClick={() => setShowCustomerModal(true)}
+    className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors"
+  >
+    <UserPlus size={16} strokeWidth={2.5} />
+    Add Contact
+  </button>
+  {isEdit && (
+    <button
+      type="button"
+      onClick={() => navigate(`/billing/workorder/${id}/invoice`)}
+      className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors"
+    >
+      <FileText size={16} />
+      Invoice
+    </button>
+  )}
+  <button
+    type="button"
+    onClick={() => navigate('/billing/workorder_list')}
+    className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 transition-colors"
+  >
+    <List size={16} />
+    Work Order List
+  </button>
+</div>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -288,7 +321,14 @@ export default function WorkorderPage() {
                     rows.map((r, i) => (
                       <tr key={i} className="hover:bg-slate-50/70 transition-colors">
                         <td className="px-5 py-3">
-                          <input value={r.itemName} onChange={(e) => updateRow(i, 'itemName', e.target.value)} placeholder="Item name" className="w-32 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30" />
+                          <SearchableSelect
+                            options={itemCatalog.map((it) => ({ value: it.id, label: it.name }))}
+                            value={r.item || ''}
+                            onChange={(val) => selectCatalogItem(i, val)}
+                            placeholder="Select item"
+                            clearable
+                            className="w-40"
+                          />
                         </td>
                         <td className="px-5 py-3">
                           <input value={r.description} onChange={(e) => updateRow(i, 'description', e.target.value)} placeholder="Optional note" className="w-44 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30" />

@@ -24,3 +24,15 @@ export async function deleteLabourBill(id) {
   const res = await api.delete(`/labour-bill/${id}`);
   return res.data;
 }
+export async function uploadLabourBillAttachment(id, file) {
+  const formData = new FormData();
+  formData.append('attachment', file);
+  const res = await api.post(`/labour-bill/${id}/attachment`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+}
+export async function updateLabourBillStatus(id, status) {
+  const res = await api.patch(`/labour-bill/${id}/status`, { status });
+  return res.data;
+}

@@ -3,8 +3,19 @@ import { Search, LayoutGrid, FileText, FileSpreadsheet } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import SearchableSelect from '../components/SearchableSelect';
+import api from '../api/axios';
+import { getProjects } from '../api/project';
 
-// TODO: replace with your real api client, e.g. import api from '../api/axios';
+function parseDateRange(rangeStr) {
+  if (!rangeStr || !rangeStr.includes(' - ')) return { startDate: null, endDate: null };
+  const [startStr, endStr] = rangeStr.split(' - ').map((s) => s.trim());
+  const start = new Date(startStr);
+  const end = new Date(endStr);
+  return {
+    startDate: isNaN(start) ? null : start.toISOString().slice(0, 10),
+    endDate: isNaN(end) ? null : end.toISOString().slice(0, 10),
+  };
+}
 
 export default function ShareReport() {
   const [rows, setRows] = useState([]);
@@ -23,11 +34,17 @@ export default function ShareReport() {
     async function load() {
       setLoading(true);
       try {
-        // const { data } = await api.get('/project-module/share-report', {
-        //   params: { dateRange, project: selectedProject },
-        // });
-        // if (!cancelled) setRows(data);
-        if (!cancelled) setRows([]); // no data yet
+        const { startDate, endDate } = parseDateRange(dateRange);
+        const { data } = await api.get('/assign-share/report', {
+          params: {
+            ...(startDate && endDate ? { startDate, endDate } : {}),
+            ...(selectedProject ? { project: selectedProject } : {}),
+          },
+        });
+        if (!cancelled) setRows(data);
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) setRows([]);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -37,10 +54,13 @@ export default function ShareReport() {
   }, [dateRange, selectedProject]);
 
   useEffect(() => {
-    // TODO: api.get('/project-module/projects').then(({ data }) =>
-    //   setProjectOptions(data.map((p) => ({ value: p._id, label: p.name })))
-    // );
-    setProjectOptions([]);
+    let cancelled = false;
+    getProjects()
+      .then((res) => {
+        if (!cancelled) setProjectOptions(res.data.map((p) => ({ value: p.id, label: p.name })));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   const filteredRows = useMemo(() => {
@@ -68,12 +88,10 @@ export default function ShareReport() {
   }, [searchTerm, pageSize]);
 
   function handleExportPdf() {
-    // TODO: wire up PDF export
     console.log('Export PDF', { dateRange, selectedProject });
   }
 
   function handleExportExcel() {
-    // TODO: wire up Excel export
     console.log('Export Excel', { dateRange, selectedProject });
   }
 
@@ -154,6 +172,7 @@ export default function ShareReport() {
                 value={selectedProject}
                 onChange={setSelectedProject}
                 placeholder="Select a project"
+                clearable
               />
             </div>
           </div>

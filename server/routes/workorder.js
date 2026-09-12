@@ -28,8 +28,9 @@ function computeTotals(body, items) {
 }
 
 const includeList = [
-  { model: Customer, attributes: ['name'] },
-  { model: Project, attributes: ['name'] },
+  { model: Customer, as: 'customer', attributes: ['name'] },
+  { model: Project, as: 'project', attributes: ['name'] },
+  { model: WorkorderItem, as: 'items' },
 ];
 
 router.get('/next-code', auth, async (req, res) => {
@@ -58,10 +59,10 @@ router.get('/:id', auth, async (req, res) => {
   try {
     const order = await Workorder.findByPk(req.params.id, {
       include: [
-        { model: Customer, attributes: ['name'] },
-        { model: Project, attributes: ['name'] },
-        { model: Site, attributes: ['name'] },
-        { model: WorkorderItem },
+        { model: Customer, as: 'customer', attributes: ['name'] },
+        { model: Project, as: 'project', attributes: ['name'] },
+        { model: Site, as: 'site', attributes: ['name'] },
+        { model: WorkorderItem, as: 'items' },
       ],
     });
     if (!order) return res.status(404).json({ message: 'Not found' });
