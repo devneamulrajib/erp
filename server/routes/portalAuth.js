@@ -6,25 +6,15 @@ const ChartOfAccount = require('../models/ChartOfAccount');
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    console.log('--- PORTAL LOGIN ATTEMPT ---');
-    console.log('Email received:', JSON.stringify(email));
-    console.log('Password received:', JSON.stringify(password));
 
     const customer = await ChartOfAccount.findOne({ where: { email } });
-    console.log('Customer found:', customer ? customer.id : null);
-    console.log('Stored portalPassword hash:', customer ? customer.portalPassword : 'N/A');
-    console.log('createUser flag:', customer ? customer.createUser : 'N/A');
 
     if (!customer || !customer.portalPassword) {
-      console.log('REJECTED: no customer or no portalPassword set');
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
     const match = await bcrypt.compare(password, customer.portalPassword);
-    console.log('bcrypt.compare result:', match);
-
     if (!match) {
-      console.log('REJECTED: password mismatch');
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
@@ -44,8 +34,6 @@ router.post('/login', async (req, res) => {
 
     customer.lastPortalLoginAt = new Date();
     await customer.save();
-
-    console.log('LOGIN SUCCESS for customer', customer.id);
 
     res.json({
       token,

@@ -3,17 +3,21 @@ const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
 const {
   MaterialRequisition, MaterialRequisitionItem, MaterialRequisitionApproval,
-  Customer, Project, Site, Category,
-  // NOTE: Purchase/PurchaseItem are assumed already converted (Purchase wasn't
-  // in your pending list). PurchaseOrder/PurchaseOrderItem are still pending
-  // in this batch (Tier 3) — the convert-to-purchase-order route below will
-  // throw until PurchaseOrder + PurchaseOrderItem exist in associations.js.
-  // Double-check these four names/fields once each is confirmed.
+  MaterialRequisitionQuotation, MaterialRequisitionQuotationItem,
+  ChartOfAccount, Project, Site, Category,
   Purchase, PurchaseItem, PurchaseOrder, PurchaseOrderItem,
 } = require('../models/associations');
+const notifyAdmin = require('../utils/notify');
 
 function generateCode() {
   return 'REQ-' + Math.floor(100 + Math.random() * 900);
+}
+
+function sendError(res, err) {
+  const detail = Array.isArray(err.errors) && err.errors.length
+    ? err.errors.map((e) => e.message).join('; ')
+    : err.message;
+  res.status(500).json({ message: detail });
 }
 
 function cleanItems(items) {
@@ -26,8 +30,8 @@ function cleanItems(items) {
     budgetQty: Number(it.budgetQty) || 0,
     demandQty: Number(it.demandQty) || 0,
     stockQty: Number(it.stockQty) || 0,
-    rate: Number(it.rate) || 0,
-    amount: (Number(it.rate) || 0) * (Number(it.demandQty) || 0),
+    rate: 0,
+    amount: 0,
   }));
 }
 
@@ -36,15 +40,16 @@ function computeSubtotal(items) {
 }
 
 const listInclude = [
-  { model: Customer, as: 'supplier', attributes: ['name'] },
+  { model: ChartOfAccount, as: 'supplier', attributes: ['name'] },
   { model: Project, as: 'project', attributes: ['name'] },
   { model: Site, as: 'site', attributes: ['name'] },
+  { model: MaterialRequisitionApproval, as: 'approvals' },
+  { model: MaterialRequisitionQuotation, as: 'quotations', attributes: ['id', 'status'] },
 ];
 
 const detailInclude = [
   ...listInclude,
   { model: MaterialRequisitionItem, as: 'items' },
-  { model: MaterialRequisitionApproval, as: 'approvals' },
 ];
 
 router.get('/next-code', auth, async (req, res) => {
@@ -73,7 +78,7 @@ router.get('/', auth, async (req, res) => {
 
     res.json(requisitions);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    sendError(res, err);
   }
 });
 
@@ -83,7 +88,144 @@ router.get('/:id', auth, async (req, res) => {
     if (!requisition) return res.status(404).json({ message: 'Not found' });
     res.json(requisition);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    sendError(res, err);
+  }
+});
+
+router.get('/:id/quotations', auth, async (req, res) => {
+  try {
+    const quotations = await MaterialRequisitionQuotation.findAll({
+      where: { materialRequisitionId: req.params.id },
+      include: [
+        { model: MaterialRequisitionQuotationItem, as: 'items' },
+        { model: ChartOfAccount, as: 'supplier', attributes: ['name'] },
+      ],
+      order: [['createdAt', 'ASC']],
+    });
+    res.json(quotations);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+// Admin: accept one supplier's quotation. Rejects the rest, then auto-converts
+// the requisition into a Purchase Order using ONLY the items the supplier
+// marked available, at the qty/rate THEY quoted (not the original demand qty).
+router.post('/:id/quotations/:quotationId/accept', auth, async (req, res) => {
+  try {
+    const requisition = await MaterialRequisition.findByPk(req.params.id, {
+      include: [{ model: MaterialRequisitionItem, as: 'items' }],
+    });
+    if (!requisition) return res.status(404).json({ message: 'Requisition not found' });
+
+    const quotation = await MaterialRequisitionQuotation.findOne({
+      where: { id: req.params.quotationId, materialRequisitionId: requisition.id },
+      include: [{ model: MaterialRequisitionQuotationItem, as: 'items' }],
+    });
+    if (!quotation) return res.status(404).json({ message: 'Quotation not found' });
+
+    const qItemsById = Object.fromEntries(
+      quotation.items.map((qi) => [qi.materialRequisitionItemId, qi])
+    );
+
+    const items = requisition.items
+      .map((it) => ({ it, qi: qItemsById[it.id] }))
+      .filter(({ qi }) => qi && qi.available !== false)
+      .map(({ it, qi }) => {
+        const rate = Number(qi.quotedRate) || 0;
+        const purchaseQty = Number(qi.offeredQty) || 0;
+        return {
+          itemId: it.itemId,
+          itemCode: it.itemCode,
+          itemName: it.itemName,
+          details: it.details,
+          unit: it.unit,
+          budgetQty: it.budgetQty,
+          purchaseQty,
+          stockQty: it.stockQty,
+          rate,
+          amount: rate * purchaseQty,
+        };
+      });
+
+    if (items.length === 0) {
+      return res.status(400).json({ message: 'This quotation has no deliverable items to convert' });
+    }
+
+    await MaterialRequisitionQuotation.update(
+      { status: 'Rejected' },
+      { where: { materialRequisitionId: requisition.id, id: { [Op.ne]: quotation.id } } },
+    );
+    quotation.status = 'Accepted';
+    await quotation.save();
+
+    const subtotal = items.reduce((sum, it) => sum + it.amount, 0);
+
+    const order = await PurchaseOrder.create({
+      code: 'PO-' + Math.floor(100000 + Math.random() * 900000),
+      date: new Date().toISOString().slice(0, 10),
+      supplierId: quotation.supplierId,
+      projectType: requisition.projectType,
+      projectId: requisition.projectId,
+      titleOfWork: requisition.titleOfWork,
+      task: requisition.task,
+      siteId: requisition.siteId,
+      categoryId: requisition.categoryId,
+      reference: requisition.code,
+      subtotal,
+      grandTotal: subtotal,
+      addedBy: req.user?.name || 'Admin',
+    });
+
+    await PurchaseOrderItem.bulkCreate(items.map((it) => ({ ...it, purchaseOrderId: order.id })));
+
+    requisition.status = 'Converted';
+    requisition.supplierId = quotation.supplierId;
+    requisition.convertedToPurchaseOrderId = order.id;
+    await requisition.save();
+
+    // Was previously missing entirely — this is why the supplier saw nothing
+    // in the portal after admin accepted their quotation.
+    await notifyAdmin.notifySupplier(
+      quotation.supplierId,
+      'requisition_accepted',
+      `Your quotation for ${requisition.code} was accepted — Purchase Order ${order.code} created.`,
+      'PurchaseOrder',
+      order.id,
+    );
+
+    res.json({ quotation, purchaseOrder: order });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+router.post('/:id/quotations/:quotationId/reject', auth, async (req, res) => {
+  try {
+    const quotation = await MaterialRequisitionQuotation.findOne({
+      where: { id: req.params.quotationId, materialRequisitionId: req.params.id },
+    });
+    if (!quotation) return res.status(404).json({ message: 'Quotation not found' });
+    quotation.status = 'Rejected';
+    await quotation.save();
+    res.json(quotation);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+router.post('/:id/quotations/:quotationId/request-correction', auth, async (req, res) => {
+  try {
+    const quotation = await MaterialRequisitionQuotation.findOne({
+      where: { id: req.params.quotationId, materialRequisitionId: req.params.id },
+    });
+    if (!quotation) return res.status(404).json({ message: 'Quotation not found' });
+    quotation.status = 'NeedsCorrection';
+    quotation.correctionNote = req.body.note || null;
+    await quotation.save();
+    res.json(quotation);
+  } catch (err) {
+    sendError(res, err);
   }
 });
 
@@ -125,10 +267,21 @@ router.post('/', auth, async (req, res) => {
       name: 'Admin', approved: false, materialRequisitionId: requisition.id,
     });
 
+    // New requisition sent to a specific supplier — notify them live too.
+    if (requisition.supplierId) {
+      await notifyAdmin.notifySupplier(
+        requisition.supplierId,
+        'requisition_new',
+        `New material requisition ${requisition.code} sent to you`,
+        'MaterialRequisition',
+        requisition.id,
+      );
+    }
+
     const populated = await MaterialRequisition.findByPk(requisition.id, { include: detailInclude });
     res.status(201).json(populated);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    sendError(res, err);
   }
 });
 
@@ -166,7 +319,7 @@ router.put('/:id', auth, async (req, res) => {
     const populated = await MaterialRequisition.findByPk(requisition.id, { include: detailInclude });
     res.json(populated);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    sendError(res, err);
   }
 });
 
@@ -176,11 +329,10 @@ router.delete('/:id', auth, async (req, res) => {
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    sendError(res, err);
   }
 });
 
-// Convert requisition items -> a real Purchase record
 router.post('/:id/convert-to-purchase', auth, async (req, res) => {
   try {
     const requisition = await MaterialRequisition.findByPk(req.params.id, {
@@ -234,11 +386,10 @@ router.post('/:id/convert-to-purchase', auth, async (req, res) => {
 
     res.status(201).json(purchase);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    sendError(res, err);
   }
 });
 
-// Convert requisition items -> a real Purchase Order record
 router.post('/:id/convert-to-purchase-order', auth, async (req, res) => {
   try {
     const requisition = await MaterialRequisition.findByPk(req.params.id, {
@@ -287,15 +438,23 @@ router.post('/:id/convert-to-purchase-order', auth, async (req, res) => {
     requisition.convertedToPurchaseOrderId = order.id;
     await requisition.save();
 
+    // Same case as the quotation-accept route above: notify the supplier.
+    if (requisition.supplierId) {
+      await notifyAdmin.notifySupplier(
+        requisition.supplierId,
+        'requisition_accepted',
+        `${requisition.code} was converted to Purchase Order ${order.code}.`,
+        'PurchaseOrder',
+        order.id,
+      );
+    }
+
     res.status(201).json(order);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    sendError(res, err);
   }
 });
 
-// TODO: no RFQ model exists yet in this codebase — build server/models/Rfq.js
-// and a server/routes/rfq.js first, then wire a real conversion here the
-// same way as the two routes above.
 router.post('/:id/convert-to-rfq', auth, async (req, res) => {
   res.status(501).json({ message: 'RFQ conversion is not implemented yet' });
 });

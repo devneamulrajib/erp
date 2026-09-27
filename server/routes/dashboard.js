@@ -9,7 +9,6 @@ const BankAccount = require('../models/BankAccount');
 const Property = require('../models/Property');
 const Party = require('../models/Party');
 const { Comment, CommentAttachment } = require('../models/associations');
-const Customer = require('../models/Customer');
 const ChartOfAccount = require('../models/ChartOfAccount');
 const Sale = require('../models/Sale');
 const Purchase = require('../models/Purchase');
@@ -312,7 +311,7 @@ router.get('/project-progress', auth, async (req, res) => {
 
 router.get('/inventory-summary', auth, async (req, res) => {
   try {
-    const customers = await Customer.count();
+    const customers = await ChartOfAccount.count({ where: { contactType: 'Customer' } });
     const suppliers = await ChartOfAccount.count({ where: { contactType: 'Supplier' } });
 
     res.json({

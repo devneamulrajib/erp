@@ -2,7 +2,7 @@ const router = require('express').Router();
 const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
 const {
-  Quote, QuoteItem, Customer, Project, Site,
+  Quote, QuoteItem, ChartOfAccount, Project, Site,
 } = require('../models/associations');
 
 function generateCode() {
@@ -42,7 +42,7 @@ function computeTotals(body, items) {
 }
 
 const listInclude = [
-  { model: Customer, as: 'customer', attributes: ['name'] },
+  { model: ChartOfAccount, as: 'customer', attributes: ['name'] },
   { model: Project, as: 'project', attributes: ['name'] },
 ];
 

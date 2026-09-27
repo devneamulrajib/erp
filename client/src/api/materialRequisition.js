@@ -44,3 +44,22 @@ export async function convertRequisitionToRfq(id) {
   const res = await api.post(`/material-requisitions/${id}/convert-to-rfq`);
   return res.data;
 }
+
+export async function getRequisitionQuotations(id) {
+  const res = await api.get(`/material-requisitions/${id}/quotations`);
+  return res.data;
+}
+
+export async function acceptRequisitionQuotation(id, quotationId) {
+  const res = await api.post(`/material-requisitions/${id}/quotations/${quotationId}/accept`);
+  return res.data;
+}
+export async function rejectRequisitionQuotation(id, quotationId) {
+  const res = await api.post(`/material-requisitions/${id}/quotations/${quotationId}/reject`);
+  return res.data;
+}
+
+export async function requestQuotationCorrection(id, quotationId, note) {
+  const res = await api.post(`/material-requisitions/${id}/quotations/${quotationId}/request-correction`, { note });
+  return res.data;
+}

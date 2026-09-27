@@ -109,8 +109,8 @@ export default function InventoryTopNav() {
   }
 
   return (
-    <nav ref={containerRef} className="relative bg-slate-900 px-3 py-2">
-      <div className="flex items-center gap-1 overflow-x-auto">
+    <nav ref={containerRef} className="relative bg-slate-900">
+      <div className="mx-auto flex max-w-[1550px] items-center justify-center gap-1 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active = isItemActive(item, location.pathname);
@@ -120,9 +120,9 @@ export default function InventoryTopNav() {
             <div key={item.key} className="relative shrink-0">
               <button
                 onClick={() => handleTopClick(item)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${
                   active
-                    ? 'bg-indigo-600 text-white'
+                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
                     : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                 }`}
               >
@@ -137,7 +137,7 @@ export default function InventoryTopNav() {
               </button>
 
               {item.children && isOpen && (
-                <div className="absolute left-0 top-full mt-1.5 w-64 bg-white rounded-xl border border-slate-200 shadow-lg shadow-slate-900/10 py-1.5 z-50">
+                <div className="absolute left-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg shadow-slate-900/10">
                   {item.children.map((child) => {
                     const childActive = child.route === location.pathname;
                     return (
@@ -145,9 +145,9 @@ export default function InventoryTopNav() {
                         key={child.key}
                         to={child.route}
                         onClick={() => setOpenKey(null)}
-                        className={`block px-4 py-2 text-sm transition-colors ${
+                        className={`block px-4 py-2 text-sm font-medium transition-colors ${
                           childActive
-                            ? 'text-indigo-600 bg-indigo-50 font-medium'
+                            ? 'bg-blue-50 text-blue-600'
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >

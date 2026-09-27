@@ -24,3 +24,11 @@ export async function deletePurchaseOrder(id) {
   const res = await api.delete(`/purchase-order/${id}`);
   return res.data;
 }
+export async function createBillFromPurchaseOrder(id) {
+  const res = await api.post(`/purchase-order/${id}/create-bill`);
+  return res.data;
+}
+export async function confirmDelivery(id) {
+  const res = await api.patch(`/purchase-order/${id}/confirm-delivery`);
+  return res.data;
+}

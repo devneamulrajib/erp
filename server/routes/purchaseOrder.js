@@ -2,9 +2,10 @@ const router = require('express').Router();
 const auth = require('../middleware/auth');
 const sequelize = require('../config/db');
 const { Op } = require('sequelize');
+const notifyAdmin = require('../utils/notify');
 const {
   PurchaseOrder, PurchaseOrderItem, PurchaseOrderBoqItem, PurchaseOrderApproval,
-  Customer, Project, Site,
+  ChartOfAccount, Project, Site, Bill, BillPayment,
 } = require('../models/associations');
 
 function generateCode() {
@@ -35,9 +36,15 @@ const includes = [
   { model: PurchaseOrderItem, as: 'items' },
   { model: PurchaseOrderBoqItem, as: 'boqItems' },
   { model: PurchaseOrderApproval, as: 'approvals' },
-  { model: Customer, as: 'supplier', attributes: ['id', 'name'] },
+  { model: ChartOfAccount, as: 'supplier', attributes: ['id', 'name'] },
   { model: Project, as: 'project', attributes: ['id', 'name'] },
   { model: Site, as: 'site', attributes: ['id', 'name'] },
+  {
+    model: Bill,
+    as: 'bill',
+    attributes: ['id', 'code', 'subtotal', 'grandTotal', 'paid', 'due', 'status'],
+    include: [{ model: BillPayment, attributes: ['id', 'paymentMethod', 'amount', 'date'] }],
+  },
 ];
 
 router.get('/next-code', auth, async (req, res) => {
@@ -202,6 +209,98 @@ router.patch('/:id/status', auth, async (req, res) => {
     order.status = status;
     await order.save();
     res.json(order);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Shared: build a supplier Bill (acts as the invoice) from a PO's confirmed items.
+async function generateBillFromOrder(order, addedByName) {
+  const { Bill, BillLineItem, BillApproval } = require('../models/associations');
+
+  const bill = await Bill.create({
+    code: 'Bill' + Math.floor(1000000 + Math.random() * 9000000),
+    date: new Date().toISOString().slice(0, 10),
+    customerId: order.supplierId,
+    projectType: order.projectType,
+    projectId: order.projectId,
+    siteId: order.siteId,
+    refWoNo: order.code,
+    contentBody: `Supplier bill for Purchase Order ${order.code}`,
+    attachment: order.invoiceFile || null,
+    status: 'Unpaid',
+    subtotal: order.subtotal,
+    grandTotal: order.grandTotal,
+    paid: 0,
+    due: order.grandTotal,
+    addedBy: addedByName || 'Admin',
+  });
+
+  const items = (order.items || []).map((it) => ({
+    billId: bill.id,
+    itemName: it.itemName,
+    description: it.details,
+    unit: it.unit,
+    quantity: it.purchaseQty,
+    rate: it.rate,
+    amount: it.amount,
+  }));
+  if (items.length) await BillLineItem.bulkCreate(items);
+  await BillApproval.create({ name: 'Admin', approved: false, billId: bill.id });
+
+  order.convertedToBillId = bill.id;
+  await order.save();
+
+  return bill;
+}
+
+// Admin confirms delivery once the supplier has marked the order Delivered.
+// Auto-generates the supplier's invoice (Bill) and notifies the supplier.
+router.patch('/:id/confirm-delivery', auth, async (req, res) => {
+  try {
+    const order = await PurchaseOrder.findByPk(req.params.id, { include: includes });
+    if (!order) return res.status(404).json({ message: 'Not found' });
+    if (order.deliveryStatus !== 'Delivered') {
+      return res.status(400).json({ message: 'Order has not been marked Delivered by the supplier yet' });
+    }
+    if (order.deliveryConfirmedAt) {
+      return res.status(400).json({ message: 'Delivery has already been confirmed' });
+    }
+
+    order.deliveryConfirmedAt = new Date();
+    await order.save();
+
+    let bill = null;
+    if (!order.convertedToBillId) {
+      bill = await generateBillFromOrder(order, req.user?.name || 'Admin');
+    }
+
+    await notifyAdmin.notifySupplier(
+      order.supplierId,
+      'DeliveryConfirmed',
+      `Delivery confirmed for order ${order.code}. An invoice has been generated.`,
+      'PurchaseOrder',
+      order.id
+    );
+
+    const populated = await PurchaseOrder.findByPk(order.id, { include: includes });
+    res.json({ purchaseOrder: populated, bill });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Manual fallback if confirm-delivery was skipped for some reason.
+router.post('/:id/create-bill', auth, async (req, res) => {
+  try {
+    const order = await PurchaseOrder.findByPk(req.params.id, { include: includes });
+    if (!order) return res.status(404).json({ message: 'Not found' });
+    if (order.convertedToBillId) {
+      return res.status(400).json({ message: 'A bill has already been created for this order' });
+    }
+    const bill = await generateBillFromOrder(order, req.user?.name || 'Admin');
+    const populated = await PurchaseOrder.findByPk(order.id, { include: includes });
+    res.status(201).json({ bill, purchaseOrder: populated });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

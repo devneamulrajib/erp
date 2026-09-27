@@ -5,7 +5,7 @@ const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
 const {
   Lead, LeadRequirement, LeadDealNegotiation, LeadFollowUp, LeadVisit, LeadNote,
-  LeadActivityLog, Flat, Area, Project, LeadCategory, Customer,
+  LeadActivityLog, Flat, Area, Project, LeadCategory, ChartOfAccount,
 } = require('../models/associations');
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -23,6 +23,17 @@ async function generateLeadId() {
   const count = await Lead.count({ where: { leadId: { [Op.like]: `${prefix}%` } } });
   const seq = String(count + 1).padStart(4, '0');
   return `${prefix}-${seq}`;
+}
+
+async function generateCustomerCode() {
+  let code;
+  let exists = true;
+  while (exists) {
+    code = 'CUS' + Math.floor(1000000 + Math.random() * 9000000);
+    // eslint-disable-next-line no-await-in-loop
+    exists = await ChartOfAccount.findOne({ where: { code } });
+  }
+  return code;
 }
 
 const detailInclude = [
@@ -253,17 +264,31 @@ router.post('/wish-sms', auth, async (req, res) => {
   res.json({ queued: ids.length, note: 'SMS gateway not configured — logged only' });
 });
 
+// Converts a Lead into a real ChartOfAccount (Customer) row. ChartOfAccount
+// requires chartOfGroupId + a unique code, unlike the old Customer model, so
+// the caller must now pass chartOfGroupId (same as the manual "Add Customer"
+// flow in BillPage.jsx's CustomerAddModal).
 router.post('/:id/convert-to-customer', auth, async (req, res) => {
   try {
     const lead = await Lead.findByPk(req.params.id);
     if (!lead) return res.status(404).json({ message: 'Lead not found' });
     if (lead.isConverted) return res.status(400).json({ message: 'Lead already converted' });
 
-    const customer = await Customer.create({
+    const { chartOfGroupId, nid } = req.body;
+    if (!chartOfGroupId) {
+      return res.status(400).json({ message: 'chartOfGroupId is required to convert a lead into a customer' });
+    }
+
+    const code = await generateCustomerCode();
+
+    const customer = await ChartOfAccount.create({
+      chartOfGroupId,
+      code,
       name: lead.name,
       mobile: lead.mobile,
       address: lead.address,
-      nid: req.body.nid || '0000000000',
+      nid: nid || '',
+      contactType: 'Customer',
     });
 
     lead.isConverted = true;

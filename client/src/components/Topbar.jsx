@@ -11,16 +11,72 @@ import {
 } from 'lucide-react';
 
 import ModuleNav from './ModuleNav';
+import {
+  getNotifications,
+  getUnreadCount,
+  getUnreadCountByType,
+  markNotificationRead,
+  markAllNotificationsRead,
+} from '../api/notifications';
+
+const RELATED_ROUTES = {
+  MaterialRequisitionQuotation: (id) => `/requisition-module/material-requisition-list?reviewId=${id}`,
+  PurchaseOrderConfirmed: (id) => `/procurement-module/purchase-order-list?viewId=${id}`,
+  PurchaseOrderDelivered: (id) => `/procurement-module/purchase-order-list?viewId=${id}`,
+  InvoiceUploaded: (id) => `/procurement-module/purchase-order-list?viewId=${id}`,
+  DeliveryConfirmed: (id) => `/procurement-module/purchase-order-list?viewId=${id}`,
+  PaymentConfirmedBySupplier: (id) => `/procurement-module/purchase-order-list?viewId=${id}`,
+  PaymentRecorded: (id) => `/procurement-module/purchase-order-list?viewId=${id}`,
+};
+
+// Maps a notification "type" to the top-level nav module key (see navConfig.js)
+// that should show the badge count for it.
+const NOTIFICATION_MODULE_MAP = {
+  MaterialRequisitionQuotation: 'requisition',
+  PurchaseOrderConfirmed: 'inventory',
+  PurchaseOrderDelivered: 'inventory',
+  InvoiceUploaded: 'inventory',
+  DeliveryConfirmed: 'inventory',
+  PaymentConfirmedBySupplier: 'inventory',
+  PaymentRecorded: 'inventory',
+};
 
 export default function Topbar() {
   const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [moduleCounts, setModuleCounts] = useState({});
   const profileRef = useRef(null);
+  const notifRef = useRef(null);
+
+  useEffect(() => {
+    function refreshCount() {
+      getUnreadCount().then(setUnreadCount).catch(() => {});
+      getUnreadCountByType()
+        .then((byType) => {
+          const grouped = {};
+          Object.entries(byType).forEach(([type, count]) => {
+            const key = NOTIFICATION_MODULE_MAP[type];
+            if (key) grouped[key] = (grouped[key] || 0) + count;
+          });
+          setModuleCounts(grouped);
+        })
+        .catch(() => {});
+    }
+    refreshCount();
+    const interval = setInterval(refreshCount, 30000); // poll every 30s
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(e) {
       if (profileRef.current && !profileRef.current.contains(e.target)) {
         setProfileOpen(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setNotifOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -34,6 +90,36 @@ export default function Topbar() {
     navigate('/login', { replace: true });
   }
 
+  function toggleNotifications() {
+    const next = !notifOpen;
+    setNotifOpen(next);
+    if (next) {
+      getNotifications().then(setNotifications).catch(() => {});
+    }
+  }
+
+  async function handleNotificationClick(n) {
+    if (!n.read) {
+      try {
+        await markNotificationRead(n.id);
+        setUnreadCount((c) => Math.max(0, c - 1));
+        setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
+      } catch { /* ignore */ }
+    }
+    setNotifOpen(false);
+    const route = RELATED_ROUTES[n.type];
+    if (route && n.relatedId) navigate(route(n.relatedId));
+  }
+
+  async function handleMarkAllRead() {
+    try {
+      await markAllNotificationsRead();
+      setUnreadCount(0);
+      setModuleCounts({});
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    } catch { /* ignore */ }
+  }
+
   return (
     <header className="relative z-[9999] w-full">
       {/* =====================================================
@@ -42,7 +128,7 @@ export default function Topbar() {
       <div
         className="
           relative
-          z-[9999]
+          z-[100000]
           h-[78px]
           w-full
           overflow-visible
@@ -513,47 +599,111 @@ export default function Topbar() {
               <Sun size={18} />
             </button>
 
-            <button
-              type="button"
-              title="Notifications"
-              className="
-                relative
-                flex
-                h-[40px]
-                w-[40px]
-                items-center
-                justify-center
-                rounded-[11px]
-                border
-                border-[#e5e5e5]
-                bg-white/90
-                text-black
-                shadow-sm
-              "
-            >
-              <Bell size={18} />
-
-              <span
+            {/* NOTIFICATIONS */}
+            <div className="relative" ref={notifRef}>
+              <button
+                type="button"
+                title="Notifications"
+                onClick={toggleNotifications}
                 className="
-                  absolute
-                  right-[5px]
-                  top-[5px]
+                  relative
                   flex
-                  h-[15px]
-                  min-w-[15px]
+                  h-[40px]
+                  w-[40px]
                   items-center
                   justify-center
-                  rounded-full
-                  bg-black
-                  px-1
-                  text-[7px]
-                  font-bold
-                  text-white
+                  rounded-[11px]
+                  border
+                  border-[#e5e5e5]
+                  bg-white/90
+                  text-black
+                  shadow-sm
                 "
               >
-                3
-              </span>
-            </button>
+                <Bell size={18} />
+
+                {unreadCount > 0 && (
+                  <span
+                    className="
+                      absolute
+                      right-[5px]
+                      top-[5px]
+                      flex
+                      h-[15px]
+                      min-w-[15px]
+                      items-center
+                      justify-center
+                      rounded-full
+                      bg-black
+                      px-1
+                      text-[7px]
+                      font-bold
+                      text-white
+                    "
+                  >
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {notifOpen && (
+                <div
+                  className="
+                    absolute
+                    right-0
+                    top-[calc(100%+8px)]
+                    z-[10000]
+                    w-[340px]
+                    max-h-[420px]
+                    overflow-hidden
+                    rounded-[12px]
+                    border
+                    border-[#e5e5e5]
+                    bg-white
+                    shadow-[0_12px_30px_rgba(0,0,0,0.12)]
+                    flex
+                    flex-col
+                  "
+                >
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-[#eee]">
+                    <span className="text-[12px] font-bold text-black">Notifications</span>
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={handleMarkAllRead}
+                        className="text-[10px] font-medium text-indigo-600 hover:text-indigo-700"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+                  <div className="overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <div className="px-4 py-8 text-center text-[11px] text-[#999]">No notifications yet</div>
+                    ) : (
+                      notifications.map((n) => (
+                        <button
+                          key={n.id}
+                          onClick={() => handleNotificationClick(n)}
+                          className={`w-full text-left px-4 py-3 border-b border-[#f3f3f3] hover:bg-slate-50 transition-colors ${
+                            !n.read ? 'bg-indigo-50/40' : ''
+                          }`}
+                        >
+                          <div className="flex items-start gap-2">
+                            {!n.read && <span className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-600 shrink-0" />}
+                            <div className="min-w-0">
+                              <p className="text-[11px] text-black leading-snug">{n.message}</p>
+                              <p className="text-[9px] text-[#999] mt-0.5">
+                                {new Date(n.createdAt).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             <button
               type="button"
@@ -727,7 +877,7 @@ export default function Topbar() {
             overflow-visible
           "
         >
-          <ModuleNav />
+          <ModuleNav badgeCounts={moduleCounts} />
         </div>
       </div>
     </header>
