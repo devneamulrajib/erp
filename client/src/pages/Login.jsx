@@ -35,6 +35,7 @@ export default function Login() {
       });
 
       localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
       navigate('/dashboard');
     } catch (err) {
       setError(

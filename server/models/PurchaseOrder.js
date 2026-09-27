@@ -19,8 +19,28 @@ const PurchaseOrder = sequelize.define('PurchaseOrder', {
   grandTotal: { type: DataTypes.DECIMAL(14, 2), defaultValue: 0 },
   attachment: DataTypes.STRING,
 
-  // New: no status/timeline field existed on PurchaseOrder before.
   status: { type: DataTypes.STRING, defaultValue: 'Submitted' },
+
+  // Supplier-side confirmation, delivery tracking, invoice
+  supplierConfirmedAt: { type: DataTypes.DATE, allowNull: true },
+  deliveryStatus: {
+    type: DataTypes.ENUM('Pending', 'Shipped', 'Delivered'),
+    defaultValue: 'Pending',
+  },
+  deliveryUpdatedAt: { type: DataTypes.DATE, allowNull: true },
+  invoiceFile: { type: DataTypes.STRING, allowNull: true },
+  invoiceUploadedAt: { type: DataTypes.DATE, allowNull: true },
+
+  // Admin-side delivery confirmation (triggers auto invoice/bill generation)
+  deliveryConfirmedAt: { type: DataTypes.DATE, allowNull: true },
+
+  // Payment lifecycle, synced from the Bill created for this PO
+  paymentStatus: { type: DataTypes.STRING, defaultValue: 'Unpaid' }, // 'Unpaid' | 'Paid'
+  paidAt: { type: DataTypes.DATE, allowNull: true },
+  supplierPaymentConfirmedAt: { type: DataTypes.DATE, allowNull: true },
+
+  // Links this PO to the Bill created from it (Accounts side / auto invoice)
+  convertedToBillId: { type: DataTypes.INTEGER, allowNull: true },
 
   addedBy: DataTypes.STRING,
 }, {

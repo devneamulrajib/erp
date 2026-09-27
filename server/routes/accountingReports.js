@@ -116,6 +116,30 @@ router.get('/day-book', auth, async (req, res) => {
       });
     }
 
+    // Expense — bridged via server/routes/expense.js, which creates a
+    // matching Voucher/VoucherEntry pair for every Expense record.
+    if (wantType('Expense')) {
+      const where = { date: dateWhere, type: 'Expense' };
+      if (project) where.projectId = project;
+      const vouchers = await Voucher.findAll({
+        where,
+        include: voucherIncludes,
+        order: [['date', 'ASC'], ['createdAt', 'ASC']],
+      });
+      vouchers.forEach((v) => {
+        (v.entries || []).forEach((e) => {
+          const debit = Number(e.debit) || 0;
+          const credit = Number(e.credit) || 0;
+          totalDebit += debit;
+          totalCredit += credit;
+          rows.push({
+            date: v.date, voucherNo: v.voucherNo, project: v.project?.name || '-',
+            description: e.account?.name || '', debit, credit, note: v.narration || '',
+          });
+        });
+      });
+    }
+
     rows.sort((a, b) => new Date(a.date) - new Date(b.date));
 
     res.json({ rows, totals: { debit: totalDebit, credit: totalCredit } });

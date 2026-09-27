@@ -1,83 +1,111 @@
 import { useState } from 'react';
-import { Search, Eye, Check, X } from 'lucide-react';
+import { Search, Eye } from 'lucide-react';
 
 const TABS = ['Today', 'Weekly', 'Monthly', 'Yearly', 'All'];
-const TYPE_BADGE = { PurchaseRequisition: 'bg-orange-500', Expense: 'bg-gray-500' };
 
-function VoucherCard({ voucher }) {
-  const badgeColor = TYPE_BADGE[voucher.type] || 'bg-gray-400';
+const TYPE_BADGE = {
+  Payment: 'bg-blue-600',
+  Receipt: 'bg-emerald-600',
+  Expense: 'bg-slate-500',
+  PurchaseRequisition: 'bg-amber-500',
+  Journal: 'bg-violet-600',
+  Contra: 'bg-sky-600',
+};
+
+function withinRange(dateStr, tab) {
+  if (tab === 'All' || !dateStr) return true;
+  const d = new Date(dateStr);
+  const now = new Date();
+  if (tab === 'Today') return d.toDateString() === now.toDateString();
+  const diffDays = (now - d) / 86400000;
+  if (tab === 'Weekly') return diffDays <= 7;
+  if (tab === 'Monthly') return diffDays <= 31;
+  if (tab === 'Yearly') return diffDays <= 366;
+  return true;
+}
+
+function VoucherCard({ voucher, onApprove }) {
+  const badgeColor = TYPE_BADGE[voucher.type] || 'bg-slate-400';
   return (
-    <div className="border border-gray-200 rounded-lg p-3 mb-3 bg-white text-sm text-left">
-      <div className="flex justify-between items-start mb-1">
-        <div className="font-semibold text-gray-700">Reference:</div>
-        <span className={`${badgeColor} text-white text-xs px-2 py-0.5 rounded`}>
-          {voucher.type}{voucher.amount ? ` ${voucher.amount}` : ''}
+    <div className="mb-3 rounded-xl border border-slate-100 p-3.5 text-sm">
+      <div className="mb-1.5 flex items-start justify-between gap-2">
+        <span className="font-mono text-xs font-bold text-slate-800">{voucher.reference}</span>
+        <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold text-white ${badgeColor}`}>
+          {voucher.type}{voucher.amount ? ` $${Number(voucher.amount).toLocaleString()}` : ''}
         </span>
       </div>
-      <div className="text-gray-600">Project: <span className="font-medium">{voucher.project}</span></div>
+
+      <p className="text-slate-600">Project: <span className="font-semibold text-slate-800">{voucher.project}</span></p>
       {voucher.drAccount && (
-        <div className="text-gray-600">
-          Dr-<span className="text-blue-600">{voucher.drAccount}</span>, Cr-<span className="text-blue-600">{voucher.crAccount}</span>
-        </div>
+        <p className="text-slate-500">
+          Dr-<span className="text-blue-600 font-medium">{voucher.drAccount}</span>, Cr-<span className="text-blue-600 font-medium">{voucher.crAccount}</span>
+        </p>
       )}
-      <div className="text-gray-500 text-xs mt-1">{voucher.reference}</div>
-      <div className="text-gray-500 text-xs">Added By: <span className="font-medium">{voucher.addedBy}</span></div>
-      <div className="text-gray-500 text-xs mb-2">
-        {voucher.date ? new Date(voucher.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}
+      <p className="mt-1 text-[11px] text-slate-400">
+        Added By: <span className="font-medium text-slate-500">{voucher.addedBy}</span>
+        {voucher.date && ` · ${new Date(voucher.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`}
+      </p>
+
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          title="View details"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50"
+        >
+          <Eye size={14} />
+        </button>
+        <button
+          onClick={() => (onApprove ? onApprove(voucher) : window.alert('Wire this button to your approve-voucher endpoint.'))}
+          className="flex-1 rounded-lg bg-blue-600 py-1.5 text-xs font-bold text-white transition hover:bg-blue-700"
+        >
+          Approve Voucher
+        </button>
       </div>
-      {(voucher.approvals || []).map((a, i) => (
-        <div key={i} className={`flex items-center gap-1 text-xs ${a.approved ? 'text-green-600' : 'text-red-500'}`}>
-          {a.approved ? <Check size={13} /> : <X size={13} />}
-          {a.name}
-        </div>
-      ))}
-      <button className="mt-2 bg-indigo-500 hover:bg-indigo-600 text-white p-1.5 rounded flex items-center justify-center w-fit">
-        <Eye size={14} />
-      </button>
     </div>
   );
 }
 
-export default function PendingVoucherPanel({ vouchers }) {
+export default function PendingVoucherPanel({ vouchers, onApprove }) {
   const [activeTab, setActiveTab] = useState('Today');
   const [search, setSearch] = useState('');
 
-  const filtered = vouchers.filter((v) =>
-    (v.project || '').toLowerCase().includes(search.toLowerCase()) ||
-    (v.reference || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = vouchers.filter((v) => {
+    const matchesSearch = (v.project || '').toLowerCase().includes(search.toLowerCase())
+      || (v.reference || '').toLowerCase().includes(search.toLowerCase());
+    return matchesSearch && withinRange(v.date, activeTab);
+  });
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 flex flex-col h-full">
-      <div className="flex gap-1 p-2 border-b border-gray-200 overflow-x-auto">
+    <div className="flex h-full flex-col">
+      <div className="grid grid-cols-5 gap-1 rounded-lg bg-slate-100 p-1">
         {TABS.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-3 py-1 rounded text-xs font-medium whitespace-nowrap ${
-              activeTab === tab ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            className={`rounded-md px-2 py-1.5 text-center text-[11px] font-bold transition-colors ${
+              activeTab === tab ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200'
             }`}
           >
             {tab}
           </button>
         ))}
       </div>
-      <div className="font-semibold text-center py-2 border-b border-gray-200">Pending Voucher/Invoice</div>
-      <div className="p-2">
-        <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search with Project/Code/Reference..."
-            className="w-full pl-8 pr-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-          />
-        </div>
+
+      <div className="relative mt-3">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search with Project/Code/Reference..."
+          className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+        />
       </div>
-      <div className="px-2 pb-2 overflow-y-auto flex-1 max-h-[480px]">
-        {filtered.length === 0 && <div className="text-gray-400 text-sm text-center py-8">No pending vouchers</div>}
-        {filtered.map((v, i) => <VoucherCard key={v._id || i} voucher={v} />)}
+
+      <div className="mt-3 max-h-[520px] flex-1 overflow-y-auto pr-0.5">
+        {filtered.length === 0 && (
+          <p className="py-8 text-center text-sm text-slate-400">No pending vouchers</p>
+        )}
+        {filtered.map((v, i) => <VoucherCard key={v._id || i} voucher={v} onApprove={onApprove} />)}
       </div>
     </div>
   );

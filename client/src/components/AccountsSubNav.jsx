@@ -81,39 +81,46 @@ export default function AccountsSubNav() {
   const openItem = NAV_ITEMS.find((item) => item.key === menu?.key);
 
   return (
-    <nav ref={navRef} className="flex items-center gap-1 overflow-x-auto border-b border-gray-200 bg-gray-100 px-2 py-1.5">
-      {NAV_ITEMS.map((item) => {
-        const { key, label, icon: Icon, children } = item;
-        const isActive = active === key;
-        const isOpen = menu?.key === key;
+    <nav
+      ref={navRef}
+      className="border-b border-slate-200 bg-white"
+    >
+      <div className="mx-auto flex max-w-[1550px] items-center justify-center gap-1 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8">
+        {NAV_ITEMS.map((item) => {
+          const { key, label, icon: Icon, children } = item;
+          const isActive = active === key;
+          const isOpen = menu?.key === key;
 
-        return (
-          <button
-            key={key}
-            onClick={(e) => handleItemClick(item, e)}
-            className={`flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              isActive ? 'bg-indigo-500 text-white' : 'text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            <Icon size={15} />
-            {label}
-            {children?.length ? (
-              <ChevronDown size={13} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-            ) : null}
-          </button>
-        );
-      })}
+          return (
+            <button
+              key={key}
+              onClick={(e) => handleItemClick(item, e)}
+              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                isActive
+                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/20'
+                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
+              }`}
+            >
+              <Icon size={15} />
+              {label}
+              {children?.length ? (
+                <ChevronDown size={13} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
 
       {openItem && (
         <div
-          className="fixed z-50 min-w-[200px] rounded-lg border border-gray-200 bg-white py-1.5 shadow-lg"
+          className="fixed z-50 min-w-[200px] rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg shadow-slate-900/10"
           style={{ top: menu.top, left: menu.left }}
         >
           {openItem.children.map((child) => (
             <button
               key={child.path}
               onClick={() => goTo(child.path, openItem.key)}
-              className="block w-full px-3.5 py-2 text-left text-sm text-gray-600 hover:bg-gray-50 hover:text-indigo-600"
+              className="block w-full px-3.5 py-2 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-600"
             >
               {child.label}
             </button>

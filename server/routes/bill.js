@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { PassThrough } = require('stream');
 const nodemailer = require('nodemailer');
-const { Bill, BillLineItem, BillPayment, BillApproval, Customer, Project } = require('../models/associations');
+const { Bill, BillLineItem, BillPayment, BillApproval, ChartOfAccount, Project } = require('../models/associations');
 const { buildBillPdf } = require('../utils/billPdf');
 
 function generateCode() {
@@ -41,11 +41,48 @@ function computeTotals(body, items) {
   const paid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
   const due = grandTotal - paid;
 
+  // Auto-derive status from the payment math, unless the caller explicitly
+  // set one (e.g. admin manually marking Cancelled/Overdue via PATCH /status,
+  // or passing a status straight through create/update).
+  let derivedStatus;
+  if (due <= 0 && grandTotal > 0) derivedStatus = 'Paid';
+  else if (paid > 0) derivedStatus = 'Partially Paid';
+  else derivedStatus = 'Unpaid';
+
   return {
     subtotal, vatIncluded, vatPercent, vatAmount,
     aitIncluded, aitPercent, aitAmount,
     interestRate, interestAmount, grandTotal, paid, due,
+    derivedStatus,
   };
+}
+
+// Keeps the linked PurchaseOrder's payment status in sync whenever a Bill
+// created from a PO (see purchaseOrder.js -> generateBillFromOrder) is saved.
+// A PO is considered Paid once its linked bill's due amount hits zero.
+async function syncPurchaseOrderPaymentStatus(bill) {
+  const { PurchaseOrder } = require('../models/associations');
+  const order = await PurchaseOrder.findOne({ where: { convertedToBillId: bill.id } });
+  if (!order) return;
+
+  const isPaid = Number(bill.due) <= 0 && Number(bill.grandTotal) > 0;
+  const nextStatus = isPaid ? 'Paid' : 'Unpaid';
+  if (order.paymentStatus === nextStatus) return;
+
+  order.paymentStatus = nextStatus;
+  order.paidAt = isPaid ? new Date() : null;
+  await order.save();
+
+  if (isPaid) {
+    const notifyAdmin = require('../utils/notify');
+    await notifyAdmin.notifySupplier(
+      order.supplierId,
+      'PaymentRecorded',
+      `Payment recorded for order ${order.code}. Please confirm receipt.`,
+      'PurchaseOrder',
+      order.id
+    );
+  }
 }
 
 const includeAll = [{ model: BillLineItem }, { model: BillPayment }, { model: BillApproval }];
@@ -87,7 +124,7 @@ router.get('/', auth, async (req, res) => {
     const bills = await Bill.findAll({
       where,
       include: [
-        { model: Customer, attributes: ['name'] },
+        { model: ChartOfAccount, attributes: ['name'] },
         { model: Project, attributes: ['name'] },
         { model: BillLineItem }, { model: BillPayment }, { model: BillApproval },
       ],
@@ -104,7 +141,7 @@ router.get('/:id', auth, async (req, res) => {
   try {
     const bill = await Bill.findByPk(req.params.id, {
       include: [
-        { model: Customer, attributes: ['name'] },
+        { model: ChartOfAccount, attributes: ['name'] },
         { model: Project, attributes: ['name'] },
         ...includeAll,
       ],
@@ -121,7 +158,7 @@ router.get('/:id/pdf', auth, async (req, res) => {
   try {
     const bill = await Bill.findByPk(req.params.id, {
       include: [
-        { model: Customer, attributes: ['name'] },
+        { model: ChartOfAccount, attributes: ['name'] },
         { model: Project, attributes: ['name'] },
         ...includeAll,
       ],
@@ -162,7 +199,7 @@ router.post('/:id/send-email', auth, async (req, res) => {
 
     const bill = await Bill.findByPk(req.params.id, {
       include: [
-        { model: Customer, attributes: ['name'] },
+        { model: ChartOfAccount, attributes: ['name'] },
         { model: Project, attributes: ['name'] },
         ...includeAll,
       ],
@@ -207,6 +244,7 @@ router.post('/', auth, async (req, res) => {
 
     const items = cleanItems(req.body.items);
     const totals = computeTotals(req.body, items);
+    const { derivedStatus, ...totalFields } = totals;
 
     const bill = await Bill.create({
       code: req.body.code || generateCode(),
@@ -219,8 +257,8 @@ router.post('/', auth, async (req, res) => {
       refWoNo: req.body.refWoNo,
       contentBody: req.body.contentBody,
       attachment: req.body.attachment,
-      status: req.body.status || 'Unpaid',
-      ...totals,
+      status: req.body.status || derivedStatus,
+      ...totalFields,
       addedBy: req.user?.name || 'Admin',
     });
 
@@ -233,9 +271,10 @@ router.post('/', auth, async (req, res) => {
       }
     }
     await BillApproval.create({ name: 'Admin', approved: false, billId: bill.id });
+    await syncPurchaseOrderPaymentStatus(bill);
 
     const populated = await Bill.findByPk(bill.id, {
-      include: [{ model: Customer, attributes: ['name'] }, { model: Project, attributes: ['name'] }, ...includeAll],
+      include: [{ model: ChartOfAccount, attributes: ['name'] }, { model: Project, attributes: ['name'] }, ...includeAll],
     });
 
     res.status(201).json(populated);
@@ -289,11 +328,16 @@ router.put('/:id', auth, async (req, res) => {
     }
 
     const totals = computeTotals(req.body, items);
-    Object.assign(bill, totals);
+    const { derivedStatus, ...totalFields } = totals;
+    Object.assign(bill, totalFields);
+    if (req.body.status === undefined) {
+      bill.status = derivedStatus;
+    }
 
     await bill.save();
+    await syncPurchaseOrderPaymentStatus(bill);
     const populated = await Bill.findByPk(bill.id, {
-      include: [{ model: Customer, attributes: ['name'] }, { model: Project, attributes: ['name'] }, ...includeAll],
+      include: [{ model: ChartOfAccount, attributes: ['name'] }, { model: Project, attributes: ['name'] }, ...includeAll],
     });
 
     res.json(populated);

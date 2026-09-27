@@ -13,13 +13,15 @@ import PendingVoucherPanel from '../components/PendingVoucherPanel';
 import Topbar from '../components/Topbar';
 import api from '../api/axios';
 
+// key, label, Icon, icon accent classes, fallback trend caption
+// (override per-card by adding `${key}Note` to the summary API response)
 const cards = [
-  ['totalExpense', 'Total Expense', WalletCards],
-  ['payment', 'Payment', CreditCard],
-  ['sales', 'Sales', TrendingUp],
-  ['purchases', 'Purchases', ShoppingCart],
-  ['receipt', 'Receipt', Receipt],
-  ['journal', 'Journal', BookOpen],
+  ['totalExpense', 'Total Expense', WalletCards, 'bg-blue-50 text-blue-600 group-hover:bg-blue-600', 'vs budget'],
+  ['payment', 'Payment', CreditCard, 'bg-violet-50 text-violet-600 group-hover:bg-violet-600', 'scheduled today'],
+  ['sales', 'Sales', TrendingUp, 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600', 'MoM'],
+  ['purchases', 'Purchases', ShoppingCart, 'bg-amber-50 text-amber-600 group-hover:bg-amber-600', 'PO commitments'],
+  ['receipt', 'Receipt', Receipt, 'bg-fuchsia-50 text-fuchsia-600 group-hover:bg-fuchsia-600', 'collected'],
+  ['journal', 'Journal', BookOpen, 'bg-slate-100 text-slate-600 group-hover:bg-slate-700', 'Balanced ledger'],
 ];
 
 const emptyFlow = { labels: [], inflow: [], outflow: [] };
@@ -34,7 +36,7 @@ const Panel = ({ children, className = '' }) => (
   </section>
 );
 
-const PanelTitle = ({ icon: Icon, title, subtitle, count }) => (
+const PanelTitle = ({ icon: Icon, title, subtitle, count, right }) => (
   <div className="flex items-center justify-between gap-3 px-5 py-4">
     <div className="flex items-center gap-3">
       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
@@ -45,11 +47,14 @@ const PanelTitle = ({ icon: Icon, title, subtitle, count }) => (
         {subtitle && <p className="mt-0.5 text-[11px] text-slate-500">{subtitle}</p>}
       </div>
     </div>
-    {count !== undefined && (
-      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
-        {count}
-      </span>
-    )}
+    <div className="flex items-center gap-2">
+      {right}
+      {count !== undefined && (
+        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
+          {count}
+        </span>
+      )}
+    </div>
   </div>
 );
 
@@ -130,6 +135,14 @@ export default function AccountsDashboard() {
     );
   }
 
+  // Highest-value expense slice, used for the "Primary cost driver" line.
+  const topExpense = expenseChart.length
+    ? expenseChart.reduce((max, d) => (Number(d.total) > Number(max.total) ? d : max), expenseChart[0])
+    : null;
+
+  const netFlow = (flow.inflow || []).reduce((s, v) => s + (Number(v) || 0), 0)
+    - (flow.outflow || []).reduce((s, v) => s + (Number(v) || 0), 0);
+
   return (
     <div className="min-h-screen bg-[#f6f8fc]">
       <Topbar />
@@ -143,17 +156,24 @@ export default function AccountsDashboard() {
               <span>Home</span><ChevronRight size={12}/><span>Accounting</span>
               <ChevronRight size={12}/><span className="font-semibold text-slate-600">Dashboard</span>
             </div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-              Accounts Overview
-            </h1>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
+                Accounts Overview
+              </h1>
+              <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-600">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                LiveLedger
+              </span>
+            </div>
             <p className="mt-1 text-sm text-slate-500">
-              Monitor your financial activity, balances and pending work.
+              Monitor your real-time financial activity, balances, cash movement and pending vouchers.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             {lastUpdated && (
-              <span className="hidden rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-500 sm:block">
+              <span className="hidden items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-500 sm:flex">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 Updated <b className="text-slate-700">
                   {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </b>
@@ -172,26 +192,34 @@ export default function AccountsDashboard() {
 
         {/* KPI */}
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-          {cards.map(([key, label, Icon], i) => (
-            <div
-              key={key}
-              className="group rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_5px_20px_rgba(15,23,42,.04)] transition hover:-translate-y-0.5 hover:shadow-lg"
-            >
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white">
-                  <Icon size={16}/>
+          {cards.map(([key, label, Icon, iconClasses, fallbackNote], i) => {
+            const note = summary?.[`${key}Note`] || fallbackNote;
+            return (
+              <div
+                key={key}
+                className="group rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_5px_20px_rgba(15,23,42,.04)] transition hover:-translate-y-0.5 hover:shadow-lg"
+              >
+                <div className="mb-4 flex items-center justify-between">
+                  <div className={`flex h-9 w-9 items-center justify-center rounded-xl transition group-hover:text-white ${iconClasses}`}>
+                    <Icon size={16}/>
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-300">0{i + 1}</span>
                 </div>
-                <span className="text-[10px] font-bold text-slate-300">0{i + 1}</span>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+                {loading
+                  ? <Skeleton className="mt-2 h-7 w-20"/>
+                  : (
+                    <>
+                      <p className="mt-1 text-xl font-extrabold tabular-nums text-slate-900">
+                        ${Number(summary?.[key] ?? 0).toLocaleString()}
+                      </p>
+                      {note && <p className="mt-0.5 text-[10px] font-medium text-slate-400">{note}</p>}
+                    </>
+                  )
+                }
               </div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
-              {loading
-                ? <Skeleton className="mt-2 h-7 w-20"/>
-                : <p className="mt-1 text-xl font-extrabold tabular-nums text-slate-900">
-                    {Number(summary?.[key] ?? 0).toLocaleString()}
-                  </p>
-              }
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Dashboard */}
@@ -227,9 +255,19 @@ export default function AccountsDashboard() {
                     <Skeleton className="h-52 w-52 rounded-full"/>
                   </div>
                 ) : expenseChart.length ? (
-                  <div className="flex min-h-[290px] items-center justify-center">
-                    <ExpenseDonut data={expenseChart}/>
-                  </div>
+                  <>
+                    <div className="flex min-h-[220px] items-center justify-center">
+                      <ExpenseDonut data={expenseChart}/>
+                    </div>
+                    {topExpense && (
+                      <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs">
+                        <span className="text-slate-500">
+                          Primary cost driver: <b className="text-slate-700">{topExpense.name}</b>
+                        </span>
+                        <button className="font-bold text-blue-600 hover:underline">View ledger →</button>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div className="flex h-[290px] items-center justify-center text-sm text-slate-400">
                     No expense data available.

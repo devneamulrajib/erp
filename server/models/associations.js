@@ -5,6 +5,8 @@ const AdjustmentBillPayment = require('./AdjustmentBillPayment');
 const Customer = require('./Customer');
 const CustomerNominee = require('./CustomerNominee');
 
+const ChartOfAccount = require('./ChartOfAccount');
+
 const Expense = require('./Expense');
 const ExpenseApproval = require('./ExpenseApproval');
 
@@ -13,7 +15,6 @@ const VoucherEntry = require('./VoucherEntry');
 const VoucherApproval = require('./VoucherApproval');
 
 const ChartOfGroup = require('./ChartOfGroup');
-const ChartOfAccount = require('./ChartOfAccount');
 
 const Campaign = require('./Campaign');
 const LeadSource = require('./LeadSource');
@@ -149,8 +150,26 @@ const ReceiptVoucherApproval = require('./ReceiptVoucherApproval');
 
 const AssignShare = require('./AssignShare');
 
-// New for the customer/supplier/vendor portal
+// Portal (customer/supplier/vendor)
 const PortalRequest = require('./PortalRequest');
+const MaterialRequisitionQuotation = require('./MaterialRequisitionQuotation');
+const MaterialRequisitionQuotationItem = require('./MaterialRequisitionQuotationItem');
+const Notification = require('./Notification');
+
+const BudgetCategory = require('./BudgetCategory');
+const MonthlyBudget = require('./MonthlyBudget');
+const OfficeExpense = require('./OfficeExpense');
+
+const Employee = require('./Employee');
+const EmployeeAdvance = require('./EmployeeAdvance');
+
+
+// Add relations:
+Employee.hasMany(EmployeeAdvance, { as: 'advances', foreignKey: 'employeeId', onDelete: 'CASCADE' });
+EmployeeAdvance.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
+
+OfficeExpense.hasOne(EmployeeAdvance, { foreignKey: 'officeExpenseId' });
+EmployeeAdvance.belongsTo(OfficeExpense, { as: 'officeExpense', foreignKey: 'officeExpenseId' });
 
 // ---- AssignShare ----
 Project.hasMany(AssignShare, { foreignKey: 'projectId' });
@@ -165,8 +184,8 @@ AssignShare.belongsTo(Site, { as: 'site', foreignKey: 'siteId' });
 Flat.hasMany(AssignShare, { foreignKey: 'flatId' });
 AssignShare.belongsTo(Flat, { as: 'flat', foreignKey: 'flatId' });
 
-Customer.hasMany(AssignShare, { foreignKey: 'customerId' });
-AssignShare.belongsTo(Customer, { as: 'customer', foreignKey: 'customerId' });
+ChartOfAccount.hasMany(AssignShare, { foreignKey: 'customerId' });
+AssignShare.belongsTo(ChartOfAccount, { as: 'customer', foreignKey: 'customerId' });
 
 // ---- PartyContact (Agreement party list) ----
 Agreement.hasMany(PartyContact, { as: 'partyContacts', foreignKey: 'agreementId' });
@@ -225,8 +244,8 @@ FlatSale.belongsTo(Site, { foreignKey: 'siteId' });
 Flat.hasMany(FlatSale, { foreignKey: 'flatId' });
 FlatSale.belongsTo(Flat, { foreignKey: 'flatId' });
 
-Customer.hasMany(FlatSale, { foreignKey: 'customerId' });
-FlatSale.belongsTo(Customer, { foreignKey: 'customerId' });
+ChartOfAccount.hasMany(FlatSale, { foreignKey: 'customerId' });
+FlatSale.belongsTo(ChartOfAccount, { foreignKey: 'customerId' });
 
 // ---- MaterialUsage ----
 MaterialUsage.hasMany(MaterialUsageItem, { foreignKey: 'materialUsageId', onDelete: 'CASCADE' });
@@ -251,13 +270,16 @@ AdjustmentBillItem.belongsTo(AdjustmentBill, { foreignKey: 'adjustmentBillId' })
 AdjustmentBill.hasMany(AdjustmentBillPayment, { foreignKey: 'adjustmentBillId', onDelete: 'CASCADE' });
 AdjustmentBillPayment.belongsTo(AdjustmentBill, { foreignKey: 'adjustmentBillId' });
 
-// ---- Customer ----
+// ---- Customer (legacy/internal model — kept only for CustomerNominee) ----
 Customer.hasMany(CustomerNominee, { foreignKey: 'customerId', onDelete: 'CASCADE' });
 CustomerNominee.belongsTo(Customer, { foreignKey: 'customerId' });
 
 // ---- Expense ----
 Expense.hasMany(ExpenseApproval, { foreignKey: 'expenseId', onDelete: 'CASCADE' });
 ExpenseApproval.belongsTo(Expense, { foreignKey: 'expenseId' });
+
+Voucher.hasOne(Expense, { foreignKey: 'voucherId' });
+Expense.belongsTo(Voucher, { foreignKey: 'voucherId' });
 
 // ---- Voucher ----
 Voucher.hasMany(VoucherEntry, { foreignKey: 'voucherId', onDelete: 'CASCADE' });
@@ -307,8 +329,8 @@ SalePayment.belongsTo(Sale, { foreignKey: 'saleId' });
 Sale.hasMany(SaleApproval, { foreignKey: 'saleId', onDelete: 'CASCADE' });
 SaleApproval.belongsTo(Sale, { foreignKey: 'saleId' });
 
-Customer.hasMany(Sale, { foreignKey: 'customerId' });
-Sale.belongsTo(Customer, { foreignKey: 'customerId' });
+ChartOfAccount.hasMany(Sale, { foreignKey: 'customerId' });
+Sale.belongsTo(ChartOfAccount, { foreignKey: 'customerId' });
 
 Project.hasMany(Sale, { foreignKey: 'projectId' });
 Sale.belongsTo(Project, { foreignKey: 'projectId' });
@@ -326,8 +348,8 @@ PurchasePayment.belongsTo(Purchase, { foreignKey: 'purchaseId' });
 Purchase.hasMany(PurchaseApproval, { foreignKey: 'purchaseId', onDelete: 'CASCADE' });
 PurchaseApproval.belongsTo(Purchase, { foreignKey: 'purchaseId' });
 
-Customer.hasMany(Purchase, { foreignKey: 'supplierId' });
-Purchase.belongsTo(Customer, { foreignKey: 'supplierId' });
+ChartOfAccount.hasMany(Purchase, { foreignKey: 'supplierId' });
+Purchase.belongsTo(ChartOfAccount, { foreignKey: 'supplierId' });
 
 Project.hasMany(Purchase, { foreignKey: 'projectId' });
 Purchase.belongsTo(Project, { foreignKey: 'projectId' });
@@ -367,11 +389,11 @@ BillPayment.belongsTo(Bill, { foreignKey: 'billId' });
 Bill.hasMany(BillApproval, { foreignKey: 'billId', onDelete: 'CASCADE' });
 BillApproval.belongsTo(Bill, { foreignKey: 'billId' });
 
-Customer.hasMany(Bill, { foreignKey: 'customerId' });
-Bill.belongsTo(Customer, { foreignKey: 'customerId' });
+ChartOfAccount.hasMany(Bill, { foreignKey: 'customerId' });
+Bill.belongsTo(ChartOfAccount, { foreignKey: 'customerId' });
 
-ChartOfAccount.hasMany(Bill, { foreignKey: 'ledgerId' });
-Bill.belongsTo(ChartOfAccount, { foreignKey: 'ledgerId' });
+ChartOfAccount.hasMany(Bill, { as: 'ledgerBills', foreignKey: 'ledgerId' });
+Bill.belongsTo(ChartOfAccount, { as: 'ledger', foreignKey: 'ledgerId' });
 
 Project.hasMany(Bill, { foreignKey: 'projectId' });
 Bill.belongsTo(Project, { foreignKey: 'projectId' });
@@ -418,8 +440,8 @@ ContractorBill.belongsTo(Category, { foreignKey: 'categoryId' });
 Workorder.hasMany(WorkorderItem, { as: 'items', foreignKey: 'workorderId', onDelete: 'CASCADE' });
 WorkorderItem.belongsTo(Workorder, { foreignKey: 'workorderId' });
 
-Customer.hasMany(Workorder, { foreignKey: 'customerId' });
-Workorder.belongsTo(Customer, { as: 'customer', foreignKey: 'customerId' });
+ChartOfAccount.hasMany(Workorder, { foreignKey: 'customerId' });
+Workorder.belongsTo(ChartOfAccount, { as: 'customer', foreignKey: 'customerId' });
 
 Project.hasMany(Workorder, { foreignKey: 'projectId' });
 Workorder.belongsTo(Project, { as: 'project', foreignKey: 'projectId' });
@@ -495,8 +517,8 @@ LeadNote.belongsTo(Lead, { foreignKey: 'leadId' });
 Lead.hasMany(LeadActivityLog, { as: 'activityLog', foreignKey: 'leadId', onDelete: 'CASCADE' });
 LeadActivityLog.belongsTo(Lead, { foreignKey: 'leadId' });
 
-Lead.belongsToMany(Flat, { through: 'LeadAssignedFlats', as: 'assignedFlats', foreignKey: 'leadId' });
-Flat.belongsToMany(Lead, { through: 'LeadAssignedFlats', as: 'leads', foreignKey: 'flatId' });
+Lead.belongsToMany(Flat, { through: 'leadassignedflats', as: 'assignedFlats', foreignKey: 'leadId' });
+Flat.belongsToMany(Lead, { through: 'leadassignedflats', as: 'leads', foreignKey: 'flatId' });
 
 LeadSource.hasMany(Lead, { foreignKey: 'leadSourceId' });
 Lead.belongsTo(LeadSource, { foreignKey: 'leadSourceId' });
@@ -510,8 +532,8 @@ Lead.belongsTo(LeadCategory, { foreignKey: 'leadCategoryId', as: 'leadCategory' 
 Campaign.hasMany(Lead, { foreignKey: 'campaignId' });
 Lead.belongsTo(Campaign, { foreignKey: 'campaignId' });
 
-Customer.hasMany(Lead, { foreignKey: 'convertedCustomerId' });
-Lead.belongsTo(Customer, { foreignKey: 'convertedCustomerId' });
+ChartOfAccount.hasMany(Lead, { foreignKey: 'convertedCustomerId' });
+Lead.belongsTo(ChartOfAccount, { foreignKey: 'convertedCustomerId' });
 
 // ---- ServiceItem ----
 Category.hasMany(ServiceItem, { foreignKey: 'categoryId' });
@@ -535,9 +557,9 @@ ServiceRequisition.belongsTo(Project, { as: 'project', foreignKey: 'projectId' }
 Site.hasMany(ServiceRequisition, { foreignKey: 'siteId' });
 ServiceRequisition.belongsTo(Site, { as: 'site', foreignKey: 'siteId' });
 
-// New: ServiceRequisition <-> Customer (as supplier) — supports the portal
-Customer.hasMany(ServiceRequisition, { foreignKey: 'supplierId' });
-ServiceRequisition.belongsTo(Customer, { as: 'supplier', foreignKey: 'supplierId' });
+// ServiceRequisition <-> ChartOfAccount (as supplier) — supports the portal
+ChartOfAccount.hasMany(ServiceRequisition, { foreignKey: 'supplierId' });
+ServiceRequisition.belongsTo(ChartOfAccount, { as: 'supplier', foreignKey: 'supplierId' });
 
 // ---- MaterialRequisition ----
 MaterialRequisition.hasMany(MaterialRequisitionItem, { as: 'items', foreignKey: 'materialRequisitionId', onDelete: 'CASCADE' });
@@ -548,8 +570,8 @@ MaterialRequisitionItem.belongsTo(Item, { as: 'item', foreignKey: 'itemId' });
 MaterialRequisition.hasMany(MaterialRequisitionApproval, { as: 'approvals', foreignKey: 'materialRequisitionId', onDelete: 'CASCADE' });
 MaterialRequisitionApproval.belongsTo(MaterialRequisition, { foreignKey: 'materialRequisitionId' });
 
-Customer.hasMany(MaterialRequisition, { foreignKey: 'supplierId' });
-MaterialRequisition.belongsTo(Customer, { as: 'supplier', foreignKey: 'supplierId' });
+ChartOfAccount.hasMany(MaterialRequisition, { foreignKey: 'supplierId' });
+MaterialRequisition.belongsTo(ChartOfAccount, { as: 'supplier', foreignKey: 'supplierId' });
 
 Project.hasMany(MaterialRequisition, { foreignKey: 'projectId' });
 MaterialRequisition.belongsTo(Project, { as: 'project', foreignKey: 'projectId' });
@@ -566,12 +588,22 @@ MaterialRequisition.belongsTo(Purchase, { as: 'convertedToPurchase', foreignKey:
 PurchaseOrder.hasMany(MaterialRequisition, { foreignKey: 'convertedToPurchaseOrderId' });
 MaterialRequisition.belongsTo(PurchaseOrder, { as: 'convertedToPurchaseOrder', foreignKey: 'convertedToPurchaseOrderId' });
 
+// ---- MaterialRequisitionQuotation ----
+MaterialRequisition.hasMany(MaterialRequisitionQuotation, { as: 'quotations', foreignKey: 'materialRequisitionId', onDelete: 'CASCADE' });
+MaterialRequisitionQuotation.belongsTo(MaterialRequisition, { foreignKey: 'materialRequisitionId' });
+
+ChartOfAccount.hasMany(MaterialRequisitionQuotation, { foreignKey: 'supplierId' });
+MaterialRequisitionQuotation.belongsTo(ChartOfAccount, { as: 'supplier', foreignKey: 'supplierId' });
+
+MaterialRequisitionQuotation.hasMany(MaterialRequisitionQuotationItem, { as: 'items', foreignKey: 'materialRequisitionQuotationId', onDelete: 'CASCADE' });
+MaterialRequisitionQuotationItem.belongsTo(MaterialRequisitionQuotation, { foreignKey: 'materialRequisitionQuotationId' });
+
 // ---- Quote ----
 Quote.hasMany(QuoteItem, { as: 'items', foreignKey: 'quoteId', onDelete: 'CASCADE' });
 QuoteItem.belongsTo(Quote, { foreignKey: 'quoteId' });
 
-Customer.hasMany(Quote, { foreignKey: 'customerId' });
-Quote.belongsTo(Customer, { as: 'customer', foreignKey: 'customerId' });
+ChartOfAccount.hasMany(Quote, { foreignKey: 'customerId' });
+Quote.belongsTo(ChartOfAccount, { as: 'customer', foreignKey: 'customerId' });
 
 Project.hasMany(Quote, { foreignKey: 'projectId' });
 Quote.belongsTo(Project, { as: 'project', foreignKey: 'projectId' });
@@ -591,8 +623,8 @@ PurchaseOrderBoqItem.belongsTo(PurchaseOrder, { foreignKey: 'purchaseOrderId' })
 PurchaseOrder.hasMany(PurchaseOrderApproval, { as: 'approvals', foreignKey: 'purchaseOrderId', onDelete: 'CASCADE' });
 PurchaseOrderApproval.belongsTo(PurchaseOrder, { foreignKey: 'purchaseOrderId' });
 
-Customer.hasMany(PurchaseOrder, { foreignKey: 'supplierId' });
-PurchaseOrder.belongsTo(Customer, { as: 'supplier', foreignKey: 'supplierId' });
+ChartOfAccount.hasMany(PurchaseOrder, { foreignKey: 'supplierId' });
+PurchaseOrder.belongsTo(ChartOfAccount, { as: 'supplier', foreignKey: 'supplierId' });
 
 Project.hasMany(PurchaseOrder, { foreignKey: 'projectId' });
 PurchaseOrder.belongsTo(Project, { as: 'project', foreignKey: 'projectId' });
@@ -602,6 +634,12 @@ PurchaseOrder.belongsTo(Site, { as: 'site', foreignKey: 'siteId' });
 
 Category.hasMany(PurchaseOrder, { foreignKey: 'categoryId' });
 PurchaseOrder.belongsTo(Category, { as: 'category', foreignKey: 'categoryId' });
+
+// PurchaseOrder -> Bill: the supplier invoice/bill auto-generated once admin
+// confirms delivery (see server/routes/purchaseOrder.js -> generateBillFromOrder).
+// constraints: false because convertedToBillId is a plain column added via the
+// migration script, not a real DB foreign key.
+PurchaseOrder.belongsTo(Bill, { as: 'bill', foreignKey: 'convertedToBillId', constraints: false });
 
 // ---- StockTransfer ----
 StockTransfer.hasMany(StockTransferItem, { as: 'items', foreignKey: 'stockTransferId', onDelete: 'CASCADE' });
@@ -623,10 +661,10 @@ Category.hasMany(StockTransfer, { foreignKey: 'categoryId' });
 StockTransfer.belongsTo(Category, { as: 'category', foreignKey: 'categoryId' });
 
 // ---- PeriodBill ----
-Customer.hasMany(PeriodBill, { foreignKey: 'customerId' });
-PeriodBill.belongsTo(Customer, { as: 'customer', foreignKey: 'customerId' });
+ChartOfAccount.hasMany(PeriodBill, { foreignKey: 'customerId' });
+PeriodBill.belongsTo(ChartOfAccount, { as: 'customer', foreignKey: 'customerId' });
 
-ChartOfAccount.hasMany(PeriodBill, { foreignKey: 'ledgerId' });
+ChartOfAccount.hasMany(PeriodBill, { as: 'ledgerPeriodBills', foreignKey: 'ledgerId' });
 PeriodBill.belongsTo(ChartOfAccount, { as: 'ledger', foreignKey: 'ledgerId' });
 
 Site.hasMany(PeriodBill, { foreignKey: 'siteId' });
@@ -653,9 +691,30 @@ Voucher.belongsTo(Party, { as: 'contact', foreignKey: 'contactId' });
 BankAccount.hasMany(Voucher, { foreignKey: 'bankId' });
 Voucher.belongsTo(BankAccount, { as: 'bank', foreignKey: 'bankId' });
 
-// ---- PortalRequest (new) ----
-Customer.hasMany(PortalRequest, { as: 'portalRequests', foreignKey: 'customerId', onDelete: 'CASCADE' });
-PortalRequest.belongsTo(Customer, { as: 'customer', foreignKey: 'customerId' });
+// ---- Office Budget module ----
+BudgetCategory.hasMany(MonthlyBudget, { as: 'monthlyBudgets', foreignKey: 'budgetCategoryId', onDelete: 'CASCADE' });
+MonthlyBudget.belongsTo(BudgetCategory, { as: 'budgetCategory', foreignKey: 'budgetCategoryId' });
+
+// NOTE: kept for backward compatibility with any already-recorded general
+// Expense rows that used budgetCategoryId — but the ExpensePage UI no
+// longer writes to it, and it is NOT summed into office budget totals.
+BudgetCategory.hasMany(Expense, { foreignKey: 'budgetCategoryId' });
+Expense.belongsTo(BudgetCategory, { as: 'budgetCategory', foreignKey: 'budgetCategoryId' });
+
+// This is the real source of office budget spend.
+BudgetCategory.hasMany(OfficeExpense, { as: 'officeExpenses', foreignKey: 'budgetCategoryId' });
+OfficeExpense.belongsTo(BudgetCategory, { as: 'budgetCategory', foreignKey: 'budgetCategoryId' });
+
+Voucher.hasOne(OfficeExpense, { foreignKey: 'voucherId' });
+OfficeExpense.belongsTo(Voucher, { foreignKey: 'voucherId' });
+
+// Self-referential: top-level category <-> its subcategories
+BudgetCategory.belongsTo(BudgetCategory, { as: 'parent', foreignKey: 'parentId' });
+BudgetCategory.hasMany(BudgetCategory, { as: 'subcategories', foreignKey: 'parentId' });
+
+// ---- PortalRequest ----
+ChartOfAccount.hasMany(PortalRequest, { as: 'portalRequests', foreignKey: 'customerId', onDelete: 'CASCADE' });
+PortalRequest.belongsTo(ChartOfAccount, { as: 'customer', foreignKey: 'customerId' });
 
 module.exports = {
   AdjustmentBill,
@@ -663,13 +722,13 @@ module.exports = {
   AdjustmentBillPayment,
   Customer,
   CustomerNominee,
+  ChartOfAccount,
   Expense,
   ExpenseApproval,
   Voucher,
   VoucherEntry,
   VoucherApproval,
   ChartOfGroup,
-  ChartOfAccount,
   Campaign,
   LeadSource,
   BoqTitle,
@@ -748,6 +807,8 @@ module.exports = {
   MaterialRequisition,
   MaterialRequisitionItem,
   MaterialRequisitionApproval,
+  MaterialRequisitionQuotation,
+  MaterialRequisitionQuotationItem,
   Quote,
   QuoteItem,
   PurchaseOrder,
@@ -766,5 +827,11 @@ module.exports = {
   AgreementPayment,
   PartyContact,
   AssignShare,
+  BudgetCategory,
+  MonthlyBudget,
+  OfficeExpense,
+  Employee,
+  EmployeeAdvance,
   PortalRequest,
+  Notification,
 };

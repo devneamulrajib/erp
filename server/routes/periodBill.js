@@ -4,7 +4,7 @@ const { Op } = require('sequelize');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { PeriodBill, Customer, ChartOfAccount, Project, Site } = require('../models/associations');
+const { PeriodBill, ChartOfAccount, Project, Site } = require('../models/associations');
 
 const uploadDir = path.join(__dirname, '..', 'uploads', 'period-bills');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -33,7 +33,7 @@ function computeTotals(body) {
 }
 
 const listInclude = [
-  { model: Customer, as: 'customer', attributes: ['id', 'name'] },
+  { model: ChartOfAccount, as: 'customer', attributes: ['id', 'name'] },
   { model: Project, as: 'project', attributes: ['id', 'name'] },
 ];
 
@@ -69,7 +69,7 @@ router.get('/:id', auth, async (req, res) => {
   try {
     const bill = await PeriodBill.findByPk(req.params.id, {
       include: [
-        { model: Customer, as: 'customer', attributes: ['id', 'name'] },
+        { model: ChartOfAccount, as: 'customer', attributes: ['id', 'name'] },
         { model: ChartOfAccount, as: 'ledger', attributes: ['id', 'name', 'code'] },
         { model: Project, as: 'project', attributes: ['id', 'name'] },
         { model: Site, as: 'site', attributes: ['id', 'name'] },
@@ -136,7 +136,6 @@ router.put('/:id', auth, async (req, res) => {
   }
 });
 
-// Real file upload — same pattern as LabourBill / ContractorWorkorder attachment endpoints.
 router.post('/:id/attachment', auth, (req, res, next) => {
   upload.single('attachment')(req, res, (err) => {
     if (err) {

@@ -29,6 +29,7 @@ import {
   CreditCard,
   Tag as TagIcon,
   KeyRound,
+  LayoutGrid,
 } from 'lucide-react';
 import PortalAccessModal from '../components/PortalAccessModal';
 
@@ -129,6 +130,31 @@ function FieldLabel({ children, infoKey, required }) {
         </>
       )}
     </div>
+  );
+}
+
+function SummaryCard({ label, value, icon, tone, onClick, active }) {
+  const tones = {
+    indigo: 'from-indigo-500 to-indigo-600 shadow-indigo-500/25',
+    emerald: 'from-emerald-500 to-emerald-600 shadow-emerald-500/25',
+    violet: 'from-violet-500 to-violet-600 shadow-violet-500/25',
+  };
+  const Comp = onClick ? 'button' : 'div';
+  return (
+    <Comp
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      className={`relative overflow-hidden rounded-xl px-4 py-3.5 text-left bg-gradient-to-br ${tones[tone]} shadow-lg ${
+        onClick ? 'cursor-pointer hover:scale-[1.02] active:scale-[0.99] transition-transform' : ''
+      } ${active ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-50' : ''}`}
+    >
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-white/80">{label}</span>
+        <span className="text-white/70">{icon}</span>
+      </div>
+      <div className="text-2xl font-bold text-white">{value}</div>
+      <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
+    </Comp>
   );
 }
 
@@ -343,7 +369,7 @@ export default function CustomerAccountsPage() {
 
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
         {/* Header */}
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
           <div>
             <Breadcrumb
               items={[
@@ -367,7 +393,7 @@ export default function CustomerAccountsPage() {
 
           <button
             onClick={openCreateModal}
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 transition-colors"
+            className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 transition-colors w-full sm:w-auto"
           >
             <Plus size={16} strokeWidth={2.5} />
             Create Customer
@@ -381,42 +407,33 @@ export default function CustomerAccountsPage() {
         )}
 
         {/* Summary */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">
-              Total Customers
-            </div>
-
-            <div className="text-xl font-semibold text-slate-900">
-              {items.length}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 col-span-2 sm:col-span-2">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">
-              Matching Search
-            </div>
-
-            <div className="text-xl font-semibold text-slate-900">
-              {filteredRows.length}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">
-              Showing
-            </div>
-
-            <div className="text-xl font-semibold text-slate-900">
-              {pagedRows.length} / {filteredRows.length}
-            </div>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+          <SummaryCard
+            label="Total Customers"
+            value={items.length}
+            icon={<Users size={16} />}
+            tone="indigo"
+            active={!search}
+            onClick={search ? () => setSearch('') : undefined}
+          />
+          <SummaryCard
+            label="Matching Search"
+            value={filteredRows.length}
+            icon={<Search size={16} />}
+            tone="emerald"
+          />
+          <SummaryCard
+            label="Showing"
+            value={`${pagedRows.length} / ${filteredRows.length}`}
+            icon={<LayoutGrid size={16} />}
+            tone="violet"
+          />
         </div>
 
         {/* Table */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           {/* Toolbar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-4 border-b border-slate-100 bg-slate-50/50">
             <div className="flex items-center gap-2 text-sm text-slate-500">
               <span>Show</span>
 
@@ -437,7 +454,7 @@ export default function CustomerAccountsPage() {
               <span>entries</span>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
               <SelectColumnsDropdown
                 columns={COLUMNS}
                 visible={visibleColumns}
@@ -468,7 +485,7 @@ export default function CustomerAccountsPage() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search customers..."
-                  className="border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm w-64 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+                  className="border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm w-full sm:w-64 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
                 />
               </div>
             </div>
@@ -476,65 +493,65 @@ export default function CustomerAccountsPage() {
 
           {/* Table */}
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-xs">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
                   {visibleColumns.id && (
-                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                    <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">
                       ID
                     </th>
                   )}
 
                   {visibleColumns.code && (
-                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                    <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">
                       Code
                     </th>
                   )}
 
                   {visibleColumns.name && (
-                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                    <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">
                       Name
                     </th>
                   )}
 
                   {visibleColumns.business && (
-                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                    <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">
                       Business
                     </th>
                   )}
 
                   {visibleColumns.mobile && (
-                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                    <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">
                       Mobile
                     </th>
                   )}
 
                   {visibleColumns.email && (
-                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                    <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">
                       Email
                     </th>
                   )}
 
                   {visibleColumns.nid && (
-                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                    <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">
                       NID
                     </th>
                   )}
 
                   {visibleColumns.under && (
-                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
+                    <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">
                       Under
                     </th>
                   )}
 
                   {visibleColumns.image && (
-                    <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">
-                      Image
+                    <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">
+                      Img
                     </th>
                   )}
 
                   {visibleColumns.action && (
-                    <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">
+                    <th className="px-2 py-2.5 text-right font-medium text-[11px] uppercase tracking-wide">
                       Action
                     </th>
                   )}
@@ -577,7 +594,7 @@ export default function CustomerAccountsPage() {
                       className="hover:bg-slate-50/70 transition-colors whitespace-nowrap"
                     >
                       {visibleColumns.id && (
-                        <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">
+                        <td className="px-2 py-2.5 text-slate-400 font-mono">
                           #
                           {(page - 1) * pageSize +
                             i +
@@ -586,117 +603,121 @@ export default function CustomerAccountsPage() {
                       )}
 
                       {visibleColumns.code && (
-                        <td className="px-5 py-3.5">
-                          <span className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-600 px-2.5 py-1 text-xs font-mono font-medium ring-1 ring-inset ring-indigo-600/10">
+                        <td className="px-2 py-2.5">
+                          <span className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-600 px-2 py-0.5 font-mono font-medium ring-1 ring-inset ring-indigo-600/10">
                             {row.code}
                           </span>
                         </td>
                       )}
 
                       {visibleColumns.name && (
-                        <td className="px-5 py-3.5">
+                        <td className="px-2 py-2.5 max-w-[110px]">
                           <button
                             onClick={() =>
                               openEditModal(row)
                             }
-                            className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-medium hover:underline underline-offset-2"
+                            className="inline-flex items-center gap-1.5 text-indigo-600 hover:text-indigo-700 font-medium hover:underline underline-offset-2 truncate"
+                            title={row.name}
                           >
                             <User
-                              size={13}
-                              className="text-slate-400"
+                              size={12}
+                              className="text-slate-400 shrink-0"
                             />
-                            {row.name}
+                            <span className="truncate">{row.name}</span>
                           </button>
                         </td>
                       )}
 
                       {visibleColumns.business && (
-                        <td className="px-5 py-3.5 text-slate-600">
+                        <td className="px-2 py-2.5 text-slate-600 max-w-[100px] truncate" title={row.businessName || ''}>
                           {row.businessName || '-'}
                         </td>
                       )}
 
                       {visibleColumns.mobile && (
-                        <td className="px-5 py-3.5 text-slate-600">
+                        <td className="px-2 py-2.5 text-slate-600">
                           {row.mobile}
                         </td>
                       )}
 
                       {visibleColumns.email && (
-                        <td className="px-5 py-3.5 text-slate-600">
+                        <td className="px-2 py-2.5 text-slate-600 max-w-[130px] truncate" title={row.email || ''}>
                           {row.email || '-'}
                         </td>
                       )}
 
                       {visibleColumns.nid && (
-                        <td className="px-5 py-3.5 text-slate-600">
+                        <td className="px-2 py-2.5 text-slate-600">
                           {row.nid || '-'}
                         </td>
                       )}
 
                       {visibleColumns.under && (
-                        <td className="px-5 py-3.5">
-                          <span className="inline-flex items-center gap-1.5 text-slate-600 text-xs">
+                        <td className="px-2 py-2.5 max-w-[110px]">
+                          <span
+                            className="inline-flex items-center gap-1 text-slate-600 truncate"
+                            title={row.chartOfGroup?.name || ''}
+                          >
                             <Building2
-                              size={12}
-                              className="text-slate-400"
+                              size={11}
+                              className="text-slate-400 shrink-0"
                             />
-
-                            {row.chartOfGroup?.name ||
-                              '-'}
+                            <span className="truncate">
+                              {row.chartOfGroup?.name || '-'}
+                            </span>
                           </span>
                         </td>
                       )}
 
                       {visibleColumns.image && (
-                        <td className="px-5 py-3.5">
+                        <td className="px-2 py-2.5">
                           {row.image ? (
                             <img
                               src={resolveFileUrl(
                                 row.image
                               )}
                               alt={row.name}
-                              className="w-8 h-8 rounded-lg object-cover ring-1 ring-slate-200"
+                              className="w-6 h-6 rounded-md object-cover ring-1 ring-slate-200"
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-300">
-                              <User size={14} />
+                            <div className="w-6 h-6 rounded-md bg-slate-100 flex items-center justify-center text-slate-300">
+                              <User size={11} />
                             </div>
                           )}
                         </td>
                       )}
 
                       {visibleColumns.action && (
-                        <td className="px-5 py-3.5">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="px-2 py-2.5">
+                          <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() =>
                                 openViewModal(row)
                               }
-                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                              className="w-7 h-7 flex items-center justify-center rounded-md bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
                               title="View"
                             >
-                              <Eye size={14} />
+                              <Eye size={12} />
                             </button>
 
                             <button
                               onClick={() =>
                                 openEditModal(row)
                               }
-                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors"
+                              className="w-7 h-7 flex items-center justify-center rounded-md bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors"
                               title="Edit"
                             >
-                              <Pencil size={14} />
+                              <Pencil size={12} />
                             </button>
 
                             <button
                               onClick={() =>
                                 setPortalItem(row)
                               }
-                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-500 hover:text-emerald-600 transition-colors"
+                              className="w-7 h-7 flex items-center justify-center rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-500 hover:text-emerald-600 transition-colors"
                               title="Portal Access"
                             >
-                              <KeyRound size={14} />
+                              <KeyRound size={12} />
                             </button>
 
                             <button
@@ -706,10 +727,10 @@ export default function CustomerAccountsPage() {
                               disabled={
                                 deletingId === row.id
                               }
-                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors disabled:opacity-50"
+                              className="w-7 h-7 flex items-center justify-center rounded-md bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors disabled:opacity-50"
                               title="Delete"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={12} />
                             </button>
                           </div>
                         </td>
@@ -722,7 +743,7 @@ export default function CustomerAccountsPage() {
           </div>
 
           {/* Pagination */}
-          <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-4 border-t border-slate-100">
             <span className="text-sm text-slate-500">
               Showing{' '}
               <span className="font-medium text-slate-700">
@@ -744,7 +765,7 @@ export default function CustomerAccountsPage() {
               entries
             </span>
 
-            <div className="flex gap-1.5">
+            <div className="flex flex-wrap gap-1.5">
               <button
                 disabled={page === 1}
                 onClick={() =>

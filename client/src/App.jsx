@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import ProjectDashboard from './pages/ProjectDashboard'
@@ -96,11 +96,11 @@ import JournalVoucherPage from './pages/JournalVoucherPage'
 import ContraVoucherListPage from './pages/ContraVoucherListPage'
 import ContraVoucherPage from './pages/ContraVoucherPage'
 import WorkorderList from './pages/WorkorderList'
-import StockReportPage from './pages/StockReportPage';
-import EmployeeListPage from './pages/EmployeeListPage';
-import MaterialUsageReportPage from './pages/MaterialUsageReportPage';
-import PurchaseDetailsReportPage from './pages/PurchaseDetailsReportPage';
-import PurchaseOrderReceiveReportPage from './pages/PurchaseOrderReceiveReportPage';
+import StockReportPage from './pages/StockReportPage'
+import EmployeeListPage from './pages/EmployeeListPage'
+import MaterialUsageReportPage from './pages/MaterialUsageReportPage'
+import PurchaseDetailsReportPage from './pages/PurchaseDetailsReportPage'
+import PurchaseOrderReceiveReportPage from './pages/PurchaseOrderReceiveReportPage'
 import AccountsDashboard from './pages/AccountsDashboard'
 import CashBankBookPage from './pages/CashBankBookPage'
 import BankAccountPage from './pages/BankAccountPage'
@@ -109,32 +109,68 @@ import CashFlowStatementPage from './pages/CashFlowStatementPage'
 import IncomeStatementPage from './pages/IncomeStatementPage'
 import TrialBalancePage from './pages/TrialBalancePage'
 import BalanceSheetPage from './pages/BalanceSheetPage'
+import WorkorderInvoice from './pages/WorkorderInvoice'
+
+// --- Office budget module ---
+import BudgetCategoryPage from './pages/BudgetCategoryPage'
+import OfficeBudgetPage from './pages/OfficeBudgetPage'
+import OfficeExpensePage from './pages/OfficeExpensePage'
+import OfficeExpenseListPage from './pages/OfficeExpenseListPage'
+import OfficeReportPage from './pages/OfficeReportPage'
+
+// --- Portal ---
 import PortalInvoices from './portal/pages/PortalInvoices'
 import PortalQuotesPage from './portal/pages/PortalQuotesPage'
 import PortalOrdersPage from './portal/pages/PortalOrdersPage'
 import PortalRequestsPage from './portal/pages/PortalRequestsPage'
-import WorkorderInvoice from './pages/WorkorderInvoice';
-import './App.css'
-
-// --- Portal (new) ---
+import PortalPurchaseOrderView from './portal/pages/PortalPurchaseOrderView'
+import PortalMaterialRequisitionsPage from './portal/pages/PortalMaterialRequisitionsPage'
+import PortalMaterialRequisitionView from './portal/pages/PortalMaterialRequisitionView'
 import PortalLogin from './portal/pages/PortalLogin'
 import PortalDashboard from './portal/pages/PortalDashboard'
 import PortalProtectedRoute from './portal/components/PortalProtectedRoute'
 
-// Guards any route that requires login: no token -> kick to /login,
-// and remember where they were trying to go so we could send them
-// back after logging in (not wired up on the Login page yet, but
-// the location is preserved here if you want that later).
+// --- Team members / role-based access ---
+import UserManagementPage from './pages/UserManagementPage'
+import { canAccessModule, getModuleForPath } from './config/permissions'
+
+import './App.css'
+
 function ProtectedRoute({ children }) {
+  const token = localStorage.getItem('token');
+  const location = useLocation();
+
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const storedUser = localStorage.getItem('user');
+  const user = storedUser ? JSON.parse(storedUser) : null;
+  const moduleKey = getModuleForPath(location.pathname);
+
+  if (user && moduleKey && !canAccessModule(user.role, moduleKey)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children;
+}
+
+function AdminOnlyRoute({ children }) {
   const token = localStorage.getItem('token');
   if (!token) {
     return <Navigate to="/login" replace />;
   }
+
+  const storedUser = localStorage.getItem('user');
+  const user = storedUser ? JSON.parse(storedUser) : null;
+
+  if (!user || !['superadmin', 'admin'].includes(user.role)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return children;
 }
 
-// Keeps a logged-in user from seeing the login page again if they
-// navigate to /login directly (or land there after a stale bookmark).
 function PublicOnlyRoute({ children }) {
   const token = localStorage.getItem('token');
   if (token) {
@@ -143,8 +179,6 @@ function PublicOnlyRoute({ children }) {
   return children;
 }
 
-// Same idea as PublicOnlyRoute, but for the portal's own token —
-// completely independent of the ERP session above.
 function PortalPublicOnlyRoute({ children }) {
   const token = localStorage.getItem('portalToken');
   if (token) {
@@ -249,12 +283,12 @@ function App() {
         <Route path="/billing/period-bill-add/:id" element={<ProtectedRoute><PeriodBillPage /></ProtectedRoute>} />
         <Route path="/billing/adjustment_bill_list" element={<ProtectedRoute><AdjustmentBillList /></ProtectedRoute>} />
         <Route path="/billing/adjustment-bill" element={<ProtectedRoute><AdjustmentBillPage /></ProtectedRoute>} />
+        <Route path="/billing/adjustment-bill/:id" element={<ProtectedRoute><AdjustmentBillPage /></ProtectedRoute>} />
         <Route path="/accounts-module/expense_list" element={<ProtectedRoute><ExpenseListPage /></ProtectedRoute>} />
         <Route path="/accounts-module/expense" element={<ProtectedRoute><ExpensePage /></ProtectedRoute>} />
         <Route path="/accounts-module/expense/:id" element={<ProtectedRoute><ExpensePage /></ProtectedRoute>} />
         <Route path="/accounts-module/receipt-list" element={<ProtectedRoute><ReceiptVoucherPage /></ProtectedRoute>} />
         <Route path="/accounts-module/receipt-list/add" element={<ProtectedRoute><ReceiptVoucherPage /></ProtectedRoute>} />
-        <Route path="/billing/adjustment-bill/:id" element={<ProtectedRoute><AdjustmentBillPage /></ProtectedRoute>} />
         <Route path="/accounts-module/reports/payable-report" element={<ProtectedRoute><PayableReportPage /></ProtectedRoute>} />
         <Route path="/accounts-module/reports/expense-report" element={<ProtectedRoute><ExpenseReportPage /></ProtectedRoute>} />
         <Route path="/accounts-module/reports/receivable-report" element={<ProtectedRoute><ReceivableReportPage /></ProtectedRoute>} />
@@ -273,12 +307,19 @@ function App() {
         <Route path="/billing/contractor_bill_report" element={<ProtectedRoute><ContractorBillReportPage /></ProtectedRoute>} />
         <Route path="/accounts-module/journal_list" element={<ProtectedRoute><JournalVoucherListPage /></ProtectedRoute>} />
         <Route path="/accounts-module/journal_list_add" element={<ProtectedRoute><JournalVoucherPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/journal_list_add/:id" element={<ProtectedRoute><JournalVoucherPage /></ProtectedRoute>} />
         <Route path="/accounts-module/contra_list" element={<ProtectedRoute><ContraVoucherListPage /></ProtectedRoute>} />
         <Route path="/accounts-module/contra_list_add" element={<ProtectedRoute><ContraVoucherPage /></ProtectedRoute>} />
         <Route path="/accounts-module/contra_list_add/:id" element={<ProtectedRoute><ContraVoucherPage /></ProtectedRoute>} />
-        <Route path="/accounts-module/journal_list_add/:id" element={<ProtectedRoute><JournalVoucherPage /></ProtectedRoute>} />
         <Route path="/inventory-module/reports/stock" element={<ProtectedRoute><StockReportPage /></ProtectedRoute>} />
+        
+        {/* ========================================================
+            --- HRM MODULE ROUTES ---
+        ======================================================== */}
         <Route path="/hrm-module/employee" element={<ProtectedRoute><EmployeeListPage /></ProtectedRoute>} />
+        <Route path="/hrm-module/reports/:reportName" element={<ProtectedRoute><EmployeeListPage /></ProtectedRoute>} />
+        <Route path="/hrm-module/:subpage" element={<ProtectedRoute><EmployeeListPage /></ProtectedRoute>} />
+
         <Route path="/dashboard/accounts" element={<ProtectedRoute><AccountsDashboard /></ProtectedRoute>} />
         <Route path="/inventory-module/reports/purchase-order-receive-details" element={<ProtectedRoute><PurchaseOrderReceiveReportPage /></ProtectedRoute>} />
         <Route path="/inventory-module/reports/material-usage" element={<ProtectedRoute><MaterialUsageReportPage /></ProtectedRoute>} />
@@ -290,17 +331,32 @@ function App() {
         <Route path="/inventory-module/reports/purchase-details" element={<ProtectedRoute><PurchaseDetailsReportPage /></ProtectedRoute>} />
         <Route path="/accounts-module/reports/cash-flow-statement" element={<ProtectedRoute><CashFlowStatementPage /></ProtectedRoute>} />
         <Route path="/accounts-module/reports/balance-sheet" element={<ProtectedRoute><BalanceSheetPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/reports/trial-balance" element={<ProtectedRoute><TrialBalancePage /></ProtectedRoute>} />
+
+        {/* --- Office budget module --- */}
+        <Route path="/accounts-module/office-budget" element={<ProtectedRoute><OfficeBudgetPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/budget-categories" element={<ProtectedRoute><BudgetCategoryPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/office-expense-list" element={<ProtectedRoute><OfficeExpenseListPage /></ProtectedRoute>} />
+        <Route path="/accounts-module/office-expense" element={<ProtectedRoute><OfficeExpensePage /></ProtectedRoute>} />
+        <Route path="/accounts-module/office-expense/:id" element={<ProtectedRoute><OfficeExpensePage /></ProtectedRoute>} />
+        <Route path="/accounts-module/office-report" element={<ProtectedRoute><OfficeReportPage /></ProtectedRoute>} />
+
+        {/* --- Team members / role-based access --- */}
+        <Route path="/settings/users" element={<AdminOnlyRoute><UserManagementPage /></AdminOnlyRoute>} />
+
+        {/* --- Portal --- */}
+        <Route path="/portal/login" element={<PortalPublicOnlyRoute><PortalLogin /></PortalPublicOnlyRoute>} />
+        <Route path="/portal/dashboard" element={<PortalProtectedRoute><PortalDashboard /></PortalProtectedRoute>} />
         <Route path="/portal/invoices" element={<PortalProtectedRoute><PortalInvoices /></PortalProtectedRoute>} />
         <Route path="/portal/quotes" element={<PortalProtectedRoute><PortalQuotesPage /></PortalProtectedRoute>} />
         <Route path="/portal/orders" element={<PortalProtectedRoute><PortalOrdersPage /></PortalProtectedRoute>} />
+        <Route path="/portal/orders/:id" element={<PortalProtectedRoute><PortalPurchaseOrderView /></PortalProtectedRoute>} />
         <Route path="/portal/requests" element={<PortalProtectedRoute><PortalRequestsPage /></PortalProtectedRoute>} />
-        <Route path="/accounts-module/reports/trial-balance" element={<ProtectedRoute><TrialBalancePage /></ProtectedRoute>} />
-
-        {/* --- Portal (new) --- */}
-        <Route path="/portal/login" element={<PortalPublicOnlyRoute><PortalLogin /></PortalPublicOnlyRoute>} />
-        <Route path="/portal/dashboard" element={<PortalProtectedRoute><PortalDashboard /></PortalProtectedRoute>} />
+        <Route path="/portal/material-requisitions" element={<PortalProtectedRoute><PortalMaterialRequisitionsPage /></PortalProtectedRoute>} />
+        <Route path="/portal/material-requisitions/:id" element={<PortalProtectedRoute><PortalMaterialRequisitionView /></PortalProtectedRoute>} />
         <Route path="/portal" element={<Navigate to="/portal/dashboard" replace />} />
 
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>

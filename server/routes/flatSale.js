@@ -3,7 +3,7 @@ const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
 const {
   FlatSale, FlatSaleInstallment, FlatSaleInstallmentPayment,
-  Flat, Project, Site, Customer,
+  Flat, Project, Site, ChartOfAccount,
 } = require('../models/associations');
 
 function generateCode() {
@@ -14,7 +14,7 @@ const includeAll = [
   { model: Project, attributes: ['name'] },
   { model: Site, attributes: ['name'] },
   { model: Flat },
-  { model: Customer },
+  { model: ChartOfAccount },
   { model: FlatSaleInstallment, include: [{ model: FlatSaleInstallmentPayment }] },
 ];
 
@@ -41,7 +41,7 @@ router.get('/', auth, async (req, res) => {
         { model: Project, attributes: ['name'] },
         { model: Site, attributes: ['name'] },
         { model: Flat, attributes: ['flatLandNo'] },
-        { model: Customer, attributes: ['name'] },
+        { model: ChartOfAccount, attributes: ['name'] },
       ],
       order: [['createdAt', 'DESC']],
     });
@@ -65,7 +65,7 @@ router.get('/installment-report', auth, async (req, res) => {
       include: [
         { model: Project, attributes: ['name'] },
         { model: Flat, attributes: ['flatLandNo'] },
-        { model: Customer, attributes: ['name'] },
+        { model: ChartOfAccount, attributes: ['name'] },
         { model: FlatSaleInstallment },
       ],
     });
@@ -80,7 +80,7 @@ router.get('/installment-report', auth, async (req, res) => {
           installmentId: inst.id,
           project: sale.Project,
           flat: sale.Flat,
-          customerName: sale.Customer?.name || '-',
+          customerName: sale.ChartOfAccount?.name || '-',
           totalValue: sale.grandTotal,
           paid: sale.paid,
           due: sale.due,

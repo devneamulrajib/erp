@@ -7,13 +7,39 @@ import { getChartOfGroupOptions } from '../api/chartOfGroup';
 import {
   getContacts, getNextContactCode, createContact, updateContact, deleteContact,
 } from '../api/contactAccounts';
-import { Pencil, Trash2, User, Search, Plus, LayoutGrid, Building2, Eye, Mail, Phone, MapPin, CreditCard, Calendar, KeyRound } from 'lucide-react';
+import { Pencil, Trash2, User, Search, Plus, LayoutGrid, Building2, Eye, Mail, Phone, MapPin, CreditCard, Calendar, KeyRound, Users, ListFilter, X } from 'lucide-react';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const EMPTY_FORM = {
   code: '', name: '', businessName: '', email: '', mobile: '',
   address: '', creditLimit: '', dueDate: '', chartOfGroup: '',
 };
+
+function SummaryCard({ label, value, icon, tone, onClick, active }) {
+  const tones = {
+    indigo: 'from-indigo-500 to-indigo-600 shadow-indigo-500/25',
+    emerald: 'from-emerald-500 to-emerald-600 shadow-emerald-500/25',
+    amber: 'from-amber-500 to-amber-600 shadow-amber-500/25',
+    violet: 'from-violet-500 to-violet-600 shadow-violet-500/25',
+  };
+  const Comp = onClick ? 'button' : 'div';
+  return (
+    <Comp
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      className={`relative overflow-hidden rounded-xl px-4 py-3.5 text-left bg-gradient-to-br ${tones[tone]} shadow-lg ${
+        onClick ? 'cursor-pointer hover:scale-[1.02] active:scale-[0.99] transition-transform' : ''
+      } ${active ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-50' : ''}`}
+    >
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-white/80">{label}</span>
+        <span className="text-white/70">{icon}</span>
+      </div>
+      <div className="text-2xl font-bold text-white">{value}</div>
+      <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-white/10" />
+    </Comp>
+  );
+}
 
 export default function SupplierAccountsPage() {
   const [items, setItems] = useState([]);
@@ -67,6 +93,8 @@ export default function SupplierAccountsPage() {
     () => filtered.slice((page - 1) * pageSize, page * pageSize),
     [filtered, page, pageSize]
   );
+
+  const activeGroupName = groupOptions.find((g) => String(g.id) === String(groupFilter))?.name;
 
   async function openAddModal() {
     setEditingId(null);
@@ -166,36 +194,71 @@ export default function SupplierAccountsPage() {
           </button>
         </div>
 
-        {/* Summary strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Total Suppliers</div>
-            <div className="text-xl font-semibold text-slate-900">{items.length}</div>
+        {/* Summary strip + Chart of Group filter, combined into one row */}
+        <div className="flex flex-col lg:flex-row gap-3 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 flex-1">
+            <SummaryCard
+              label="Total Suppliers"
+              value={items.length}
+              icon={<Users size={16} />}
+              tone="indigo"
+              active={!groupFilter}
+              onClick={groupFilter ? () => setGroupFilter('') : undefined}
+            />
+            <SummaryCard
+              label="Matching Search"
+              value={filtered.length}
+              icon={<Search size={16} />}
+              tone="emerald"
+            />
+            <SummaryCard
+              label="Showing"
+              value={`${pageRows.length} / ${filtered.length}`}
+              icon={<LayoutGrid size={16} />}
+              tone="violet"
+            />
           </div>
-          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 col-span-2 sm:col-span-2">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Matching Search</div>
-            <div className="text-xl font-semibold text-slate-900">{filtered.length}</div>
-          </div>
-          <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Showing</div>
-            <div className="text-xl font-semibold text-slate-900">{pageRows.length} / {filtered.length}</div>
+
+          <div className="lg:w-64 shrink-0 bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-col justify-center">
+            <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400 uppercase tracking-wide mb-1.5">
+              <ListFilter size={12} /> Chart Of Group
+            </label>
+            <div className="relative">
+              <select
+                value={groupFilter}
+                onChange={(e) => setGroupFilter(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg pl-3 pr-8 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition appearance-none"
+              >
+                <option value="">All groups</option>
+                {groupOptions.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+              {groupFilter && (
+                <button
+                  type="button"
+                  onClick={() => setGroupFilter('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  title="Clear filter"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Filter */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 mb-6">
-          <label className="block text-xs font-medium text-slate-500 mb-1.5">Chart Of Group (Under)</label>
-          <select
-            value={groupFilter}
-            onChange={(e) => setGroupFilter(e.target.value)}
-            className="w-full max-w-sm border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
-          >
-            <option value="">Select value</option>
-            {groupOptions.map((g) => (
-              <option key={g.id} value={g.id}>{g.name}</option>
-            ))}
-          </select>
-        </div>
+        {activeGroupName && (
+          <div className="flex items-center gap-2 mb-4 text-xs text-slate-500">
+            <span>Filtering by:</span>
+            <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full font-medium ring-1 ring-inset ring-indigo-600/10">
+              {activeGroupName}
+              <button onClick={() => setGroupFilter('')} className="hover:text-indigo-800">
+                <X size={11} />
+              </button>
+            </span>
+          </div>
+        )}
 
         {/* Table panel */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -275,8 +338,12 @@ export default function SupplierAccountsPage() {
                       <td className="px-5 py-3.5 text-slate-700">{item.businessName || '-'}</td>
                       <td className="px-5 py-3.5 text-slate-700">{item.mobile || '-'}</td>
                       <td className="px-5 py-3.5 text-slate-700">{item.email || '-'}</td>
-                      <td className="px-5 py-3.5 text-slate-700">{item.address || '-'}</td>
-                      <td className="px-5 py-3.5 text-slate-700">{item.chartOfGroup?.name || '-'}</td>
+                      <td className="px-5 py-3.5 text-slate-700 max-w-[160px] truncate" title={item.address || ''}>
+                        {item.address || '-'}
+                      </td>
+                      <td className="px-5 py-3.5 text-slate-700 max-w-[140px] truncate" title={item.chartOfGroup?.name || ''}>
+                        {item.chartOfGroup?.name || '-'}
+                      </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center justify-end gap-1.5">
                           <button

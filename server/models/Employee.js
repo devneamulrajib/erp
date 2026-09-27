@@ -1,3 +1,4 @@
+// server/models/Employee.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/db');
 
@@ -25,6 +26,37 @@ const Employee = sequelize.define('Employee', {
     type: DataTypes.STRING,
   },
   email: {
+    type: DataTypes.STRING,
+  },
+  joiningDate: {
+    type: DataTypes.DATEONLY,
+  },
+  // Salary Structure
+  basicSalary: {
+    type: DataTypes.FLOAT,
+    defaultValue: 0,
+  },
+  houseRent: {
+    type: DataTypes.FLOAT,
+    defaultValue: 0,
+  },
+  medicalAllowance: {
+    type: DataTypes.FLOAT,
+    defaultValue: 0,
+  },
+  otherAllowance: {
+    type: DataTypes.FLOAT,
+    defaultValue: 0,
+  },
+  grossSalary: {
+    type: DataTypes.FLOAT,
+    defaultValue: 0,
+  },
+  // Banking Info
+  bankName: {
+    type: DataTypes.STRING,
+  },
+  bankAccountNo: {
     type: DataTypes.STRING,
   },
   status: {

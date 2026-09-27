@@ -1,4 +1,5 @@
 import portalApi from './portalAxios';
+import { disconnectPortalSocket } from './portalSocket';
 
 export async function portalLogin(email, password) {
   const res = await portalApi.post('/auth/login', { email, password });
@@ -8,6 +9,7 @@ export async function portalLogin(email, password) {
 }
 
 export function portalLogout() {
+  disconnectPortalSocket();
   localStorage.removeItem('portalToken');
   localStorage.removeItem('portalUser');
 }

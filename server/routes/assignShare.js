@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
-const { AssignShare, Project, ProjectType, Site, Flat, Customer } = require('../models/associations');
+const { AssignShare, Project, ProjectType, Site, Flat, ChartOfAccount } = require('../models/associations');
 
 function generateShareCode() {
   return 'SHR-' + Math.floor(100000 + Math.random() * 900000);
@@ -12,7 +12,7 @@ const includes = [
   { model: ProjectType, as: 'projectType', attributes: ['id', 'name'] },
   { model: Site, as: 'site', attributes: ['id', 'name'] },
   { model: Flat, as: 'flat', attributes: ['id', 'flatLandNo'] },
-  { model: Customer, as: 'customer', attributes: ['id', 'name', 'code'] },
+  { model: ChartOfAccount, as: 'customer', attributes: ['id', 'name', 'code'] },
 ];
 
 function serialize(row) {

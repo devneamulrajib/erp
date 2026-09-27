@@ -2,12 +2,17 @@ require('dotenv').config();
 require('./models/associations');
 const express = require('express');
 const cors = require('cors');
+const http = require('http');
 const sequelize = require('./config/db');
 const createSuperAdmin = require('./seed/createSuperAdmin');
+const { init: initSocket } = require('./utils/socket');
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+const server = http.createServer(app);
+initSocket(server);
 
 sequelize.authenticate()
   .then(async () => {
@@ -84,7 +89,13 @@ app.use('/api/portal/purchase-orders', require('./routes/portalPurchaseOrders'))
 app.use('/api/portal/material-requisitions', require('./routes/portalMaterialRequisitions'));
 app.use('/api/portal/requests', require('./routes/portalRequests'));
 app.use('/api/portalAuth', require('./routes/portalAuth'));
+app.use('/api/users', require('./routes/users'));
+app.use('/api/office-expenses', require('./routes/officeExpense'));
+app.use('/api/budget-categories', require('./routes/budgetCategory'));
+app.use('/api/monthly-budgets', require('./routes/monthlyBudget'));
+app.use('/api/portal/notifications', require('./routes/portalNotifications'));
+app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/assign-share', require('./routes/assignShare'));
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

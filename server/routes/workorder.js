@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
-const { Workorder, WorkorderItem, Customer, Project, Site } = require('../models/associations');
+const { Workorder, WorkorderItem, ChartOfAccount, Project, Site } = require('../models/associations');
 
 function generateCode() {
   return 'CW/' + Math.floor(1000000 + Math.random() * 9000000);
@@ -28,7 +28,7 @@ function computeTotals(body, items) {
 }
 
 const includeList = [
-  { model: Customer, as: 'customer', attributes: ['name'] },
+  { model: ChartOfAccount, as: 'customer', attributes: ['name'] },
   { model: Project, as: 'project', attributes: ['name'] },
   { model: WorkorderItem, as: 'items' },
 ];
@@ -59,7 +59,7 @@ router.get('/:id', auth, async (req, res) => {
   try {
     const order = await Workorder.findByPk(req.params.id, {
       include: [
-        { model: Customer, as: 'customer', attributes: ['name'] },
+        { model: ChartOfAccount, as: 'customer', attributes: ['name'] },
         { model: Project, as: 'project', attributes: ['name'] },
         { model: Site, as: 'site', attributes: ['name'] },
         { model: WorkorderItem, as: 'items' },

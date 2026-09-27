@@ -39,22 +39,32 @@ router.get('/', portalAuth, async (req, res) => {
     // supplier / vendor
     const [purchaseOrders, materialRequisitions, requests] = await Promise.all([
       PurchaseOrder.findAll({ where: { supplierId: customerId } }),
-      MaterialRequisition.findAll({ where: { supplierId: customerId } }),
+      MaterialRequisition.findAll({ where: { supplierId: customerId }, order: [['createdAt', 'DESC']] }),
       PortalRequest.findAll({ where: { customerId } }),
     ]);
+
+    // Bills carry no supplierId — join back through the POs that were
+    // converted into one.
+    const billIds = purchaseOrders.map((o) => o.convertedToBillId).filter(Boolean);
+    const bills = billIds.length ? await Bill.findAll({ where: { id: billIds } }) : [];
+
+    const outstandingBalance = bills.reduce((sum, b) => sum + (b.due || 0), 0);
+    const paidAmount = bills.reduce((sum, b) => sum + (b.paid || 0), 0);
 
     return res.json({
       role,
       cards: {
         totalOrders: purchaseOrders.length,
-        pendingRequests: requests.filter(r => r.status === 'Submitted' || r.status === 'Under Review').length,
+        pendingRequests: materialRequisitions.filter(r => r.status === 'Open').length,
         pendingQuotations: purchaseOrders.filter(po => po.status === 'Submitted').length,
-        outstandingBalance: 0, // wired up in Phase 2 once BillPayment ownership queries are added
-        paidAmount: 0,
-        pendingPayments: 0,
+        outstandingBalance,
+        paidAmount,
+        pendingPayments: bills.filter(b => (b.due || 0) > 0).length,
       },
-      recentInvoices: [],
-      recentRequests: requests.slice(-5).reverse(),
+      recentInvoices: bills.slice(-5).reverse().map((b) => ({
+        id: b.id, code: b.code, date: b.date, due: b.due, paid: b.paid,
+      })),
+      recentRequests: materialRequisitions.slice(0, 5),
     });
   } catch (err) {
     console.error('Portal dashboard error:', err);

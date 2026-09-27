@@ -40,7 +40,7 @@ async function generateVoucherNo(type) {
   return `${fullPrefix}-${seq}`;
 }
 
-const includeAll = [{ model: VoucherEntry, as: 'entries' }, { model: VoucherApproval }];
+const includeAll = [{ model: VoucherEntry }, { model: VoucherApproval }];
 
 router.get('/next-code', auth, async (req, res) => {
   try {

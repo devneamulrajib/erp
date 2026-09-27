@@ -30,6 +30,7 @@ export default function ExpensePage() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [warning, setWarning] = useState('');
 
   useEffect(() => {
     api.get('/projects').then((res) => setProjects(res.data ?? [])).catch(() => {});
@@ -61,6 +62,7 @@ export default function ExpensePage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setWarning('');
     if (!drAccount || !crAccount || !amount) {
       setError('Debit Account, Credit Account and Amount are required');
       return;
@@ -114,6 +116,9 @@ export default function ExpensePage() {
           {error && (
             <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-5">{error}</div>
           )}
+          {warning && (
+            <div className="bg-amber-50 border border-amber-100 text-amber-700 text-sm rounded-xl px-4 py-3 mb-5">{warning}</div>
+          )}
 
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
@@ -138,6 +143,11 @@ export default function ExpensePage() {
                   {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
                 </select>
               </Field>
+              <div />
+              <div />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
               <Field label="Debit Account" required>
                 <select value={drAccount} onChange={(e) => setDrAccount(e.target.value)} className={inputClass}>
                   <option value="">Select Chart Of Account</option>
@@ -150,15 +160,16 @@ export default function ExpensePage() {
                   {accounts.map((a) => <option key={a.id} value={a.name}>{a.name}</option>)}
                 </select>
               </Field>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <Field label="Amount" required>
                 <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className={inputClass} placeholder="Amount" />
               </Field>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <Field label="Attachment">
                 <input type="file" onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)} className={inputClass} />
               </Field>
+              <div />
             </div>
 
             <div className="flex justify-center pt-4 border-t border-slate-100">
