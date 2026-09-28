@@ -133,6 +133,7 @@ import PortalLeaveRequestPage from './portal/pages/PortalLeaveRequestPage'
 import PortalAdvanceRequestPage from './portal/pages/PortalAdvanceRequestPage'
 import PortalProtectedRoute from './portal/components/PortalProtectedRoute'
 
+import TitleManager from './components/TitleManager'
 // --- Team members / role-based access ---
 import UserManagementPage from './pages/UserManagementPage'
 import { canAccessModule, getModuleForPath } from './config/permissions'
@@ -201,6 +202,7 @@ function PortalDashboardRouter() {
 function App() {
   return (
     <BrowserRouter>
+    <TitleManager />
       <Routes>
         <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
