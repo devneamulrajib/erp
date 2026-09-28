@@ -5,6 +5,8 @@ const auth = require('../middleware/auth');
 const {
   Employee,
   EmployeeAdvance,
+  LeaveRequest,
+  Attendance,
   OfficeExpense,
   Voucher,
   VoucherEntry,
@@ -41,6 +43,16 @@ async function resolveAccountId(name) {
   if (!name) return null;
   const acc = await ChartOfAccount.findOne({ where: { name } });
   return acc ? acc.id : null;
+}
+
+// Marks every day in an approved leave range as "Leave" in attendance (max 62 days).
+async function markLeaveDays(employeeId, fromDate, toDate, markedBy) {
+  const start = new Date(`${fromDate}T00:00:00Z`).getTime();
+  const end = new Date(`${toDate}T00:00:00Z`).getTime();
+  for (let t = start, n = 0; t <= end && n < 62; t += 86400000, n += 1) {
+    const date = new Date(t).toISOString().slice(0, 10);
+    await Attendance.upsert({ employeeId, date, status: 'Leave', markedBy });
+  }
 }
 
 // ---------------- EMPLOYEE ROUTES ---------------- //
@@ -95,8 +107,8 @@ router.post('/', auth, async (req, res) => {
       designation,
       department,
       phone,
-      email,
-      joiningDate: parseValidDate(joiningDate), // Safely handles empty string or null
+      email: email ? String(email).trim() : null,
+      joiningDate: parseValidDate(joiningDate),
       basicSalary: basic,
       houseRent: rent,
       medicalAllowance: med,
@@ -119,7 +131,7 @@ router.put('/:id', auth, async (req, res) => {
     if (!employee) return res.status(404).json({ message: 'Not found' });
 
     const fields = [
-      'name', 'code', 'designation', 'department', 'phone', 'email', 'status',
+      'name', 'code', 'designation', 'department', 'phone', 'status',
       'basicSalary', 'houseRent', 'medicalAllowance', 'otherAllowance',
       'bankName', 'bankAccountNo',
     ];
@@ -127,6 +139,10 @@ router.put('/:id', auth, async (req, res) => {
     fields.forEach((key) => {
       if (req.body[key] !== undefined) employee[key] = req.body[key];
     });
+
+    if (req.body.email !== undefined) {
+      employee.email = req.body.email ? String(req.body.email).trim() : null;
+    }
 
     if (req.body.joiningDate !== undefined) {
       employee.joiningDate = parseValidDate(req.body.joiningDate);
@@ -156,6 +172,41 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // ---------------- ADVANCE SALARY / LOAN ROUTES ---------------- //
+
+router.get('/advances/summary', auth, async (req, res) => {
+  try {
+    const advances = await EmployeeAdvance.findAll({
+      where: { status: 'Disbursed' },
+      include: [{ model: Employee, as: 'employee' }],
+    });
+
+    const byEmployee = {};
+    advances.forEach((a) => {
+      const empId = a.employeeId;
+      if (!byEmployee[empId]) {
+        byEmployee[empId] = {
+          employeeId: empId,
+          employee: a.employee,
+          totalTaken: 0,
+          totalRepaid: 0,
+          requestCount: 0,
+        };
+      }
+      byEmployee[empId].totalTaken += Number(a.amount) || 0;
+      byEmployee[empId].totalRepaid += Number(a.paidAmount) || 0;
+      byEmployee[empId].requestCount += 1;
+    });
+
+    const rows = Object.values(byEmployee).map((r) => ({
+      ...r,
+      remaining: r.totalTaken - r.totalRepaid,
+    }));
+
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 router.get('/advances/all', auth, async (req, res) => {
   try {
@@ -199,6 +250,23 @@ router.post('/advances/request', auth, async (req, res) => {
   }
 });
 
+// Reject a pending advance/loan request — no accounting impact, just closes it out.
+router.post('/advances/:id/reject', auth, async (req, res) => {
+  try {
+    const advance = await EmployeeAdvance.findByPk(req.params.id);
+    if (!advance) return res.status(404).json({ message: 'Request not found' });
+    if (advance.status !== 'Pending') {
+      return res.status(400).json({ message: 'Only pending requests can be rejected' });
+    }
+    advance.status = 'Rejected';
+    advance.approvedBy = req.user?.name || 'Admin';
+    await advance.save();
+    res.json(advance);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Approve & Disburse Advance / Loan: Directly creates Office Expense & Accounting Voucher
 router.post('/advances/:id/disburse', auth, async (req, res) => {
   try {
@@ -234,13 +302,18 @@ router.post('/advances/:id/disburse', auth, async (req, res) => {
     });
 
     // 2. Post to Accounting Voucher
+    // NOTE: Voucher.type is a fixed ENUM ('Journal', 'Payment', 'Receipt',
+    // 'Contra', 'Expense', 'Purchase', 'Sales') — 'Office Expense' is NOT
+    // a valid value there and caused a "Data truncated" error. Use the
+    // existing 'Expense' type instead (same one the standalone Expense
+    // bridge uses), and keep the human-readable distinction in narration/reference.
     const drAccountId = await resolveAccountId(drAccount);
     const crAccountId = await resolveAccountId(crAccount);
 
     if (drAccountId && crAccountId) {
       const voucher = await Voucher.create({
         voucherNo: await generateVoucherNo(),
-        type: 'Office Expense',
+        type: 'Expense',
         date: new Date(),
         narration: title,
         reference: ref,
@@ -263,6 +336,87 @@ router.post('/advances/:id/disburse', auth, async (req, res) => {
     await advance.save();
 
     res.json({ message: 'Disbursed and recorded in Office Budget & Accounts successfully', advance, officeExpense });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ---------------- ATTENDANCE (admin marks daily) ---------------- //
+
+router.get('/attendance', auth, async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ message: 'date is required' });
+    const records = await Attendance.findAll({ where: { date } });
+    res.json(records);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/attendance/mark', auth, async (req, res) => {
+  try {
+    const { date, records } = req.body; // records: [{ employeeId, status }]
+    if (!date || !Array.isArray(records)) {
+      return res.status(400).json({ message: 'date and records[] are required' });
+    }
+    const markedBy = req.user?.name || 'Admin';
+    for (const r of records) {
+      if (!r.employeeId || !r.status) continue;
+      await Attendance.upsert({ employeeId: r.employeeId, date, status: r.status, markedBy });
+    }
+    res.json({ message: 'Attendance saved' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ---------------- LEAVE REQUESTS (admin approves/rejects) ---------------- //
+
+router.get('/leave-requests', auth, async (req, res) => {
+  try {
+    const requests = await LeaveRequest.findAll({
+      include: [{ model: Employee, as: 'employee', attributes: ['id', 'name', 'code'] }],
+      order: [['createdAt', 'DESC']],
+    });
+    res.json(requests);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/leave-requests/:id/approve', auth, async (req, res) => {
+  try {
+    const request = await LeaveRequest.findByPk(req.params.id);
+    if (!request) return res.status(404).json({ message: 'Not found' });
+    if (request.status !== 'Pending') {
+      return res.status(400).json({ message: 'Only pending requests can be approved' });
+    }
+    const admin = req.user?.name || 'Admin';
+    request.status = 'Approved';
+    request.approvedBy = admin;
+    if (req.body.adminNote) request.adminNote = req.body.adminNote;
+    await request.save();
+
+    await markLeaveDays(request.employeeId, request.fromDate, request.toDate, admin);
+    res.json(request);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/leave-requests/:id/reject', auth, async (req, res) => {
+  try {
+    const request = await LeaveRequest.findByPk(req.params.id);
+    if (!request) return res.status(404).json({ message: 'Not found' });
+    if (request.status !== 'Pending') {
+      return res.status(400).json({ message: 'Only pending requests can be rejected' });
+    }
+    request.status = 'Rejected';
+    request.approvedBy = req.user?.name || 'Admin';
+    if (req.body.adminNote) request.adminNote = req.body.adminNote;
+    await request.save();
+    res.json(request);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
