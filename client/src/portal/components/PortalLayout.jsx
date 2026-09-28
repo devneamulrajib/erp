@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Receipt, FileCheck2, MessageSquare, ShoppingCart, ClipboardList, Search, Bell } from 'lucide-react';
+import { LayoutDashboard, Receipt, FileCheck2, MessageSquare, ShoppingCart, ClipboardList, CalendarDays, Banknote, Search, Bell } from 'lucide-react';
 import { getPortalUser, portalLogout } from '../api/portalAuth';
 import { PortalNotificationsProvider, usePortalNotifications } from '../context/PortalNotificationsContext';
 
@@ -10,7 +10,9 @@ const NAV_ITEMS = [
   { to: '/portal/quotes', label: 'Quotes', icon: FileCheck2, roles: ['customer'] },
   { to: '/portal/orders', label: 'Orders', icon: ShoppingCart, roles: ['supplier', 'vendor'] },
   { to: '/portal/material-requisitions', label: 'Requisitions', icon: ClipboardList, roles: ['supplier', 'vendor'] },
-  { to: '/portal/requests', label: 'Requests', icon: MessageSquare, roles: null },
+  { to: '/portal/employee/leave', label: 'Leave', icon: CalendarDays, roles: ['employee'] },
+  { to: '/portal/employee/advance', label: 'Advance', icon: Banknote, roles: ['employee'] },
+  { to: '/portal/requests', label: 'Requests', icon: MessageSquare, roles: ['customer', 'supplier', 'vendor'] },
 ];
 
 function PortalLayoutInner({ children }) {

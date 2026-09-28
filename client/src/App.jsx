@@ -128,6 +128,9 @@ import PortalMaterialRequisitionsPage from './portal/pages/PortalMaterialRequisi
 import PortalMaterialRequisitionView from './portal/pages/PortalMaterialRequisitionView'
 import PortalLogin from './portal/pages/PortalLogin'
 import PortalDashboard from './portal/pages/PortalDashboard'
+import PortalEmployeeDashboard from './portal/pages/PortalEmployeeDashboard'
+import PortalLeaveRequestPage from './portal/pages/PortalLeaveRequestPage'
+import PortalAdvanceRequestPage from './portal/pages/PortalAdvanceRequestPage'
 import PortalProtectedRoute from './portal/components/PortalProtectedRoute'
 
 // --- Team members / role-based access ---
@@ -185,6 +188,14 @@ function PortalPublicOnlyRoute({ children }) {
     return <Navigate to="/portal/dashboard" replace />;
   }
   return children;
+}
+
+// Employees and customers/suppliers land on different dashboards after
+// login, but both use the same /portal/dashboard URL.
+function PortalDashboardRouter() {
+  const raw = localStorage.getItem('portalUser');
+  const user = raw ? JSON.parse(raw) : null;
+  return user?.role === 'employee' ? <PortalEmployeeDashboard /> : <PortalDashboard />;
 }
 
 function App() {
@@ -346,7 +357,9 @@ function App() {
 
         {/* --- Portal --- */}
         <Route path="/portal/login" element={<PortalPublicOnlyRoute><PortalLogin /></PortalPublicOnlyRoute>} />
-        <Route path="/portal/dashboard" element={<PortalProtectedRoute><PortalDashboard /></PortalProtectedRoute>} />
+        <Route path="/portal/dashboard" element={<PortalProtectedRoute><PortalDashboardRouter /></PortalProtectedRoute>} />
+        <Route path="/portal/employee/leave" element={<PortalProtectedRoute><PortalLeaveRequestPage /></PortalProtectedRoute>} />
+        <Route path="/portal/employee/advance" element={<PortalProtectedRoute><PortalAdvanceRequestPage /></PortalProtectedRoute>} />
         <Route path="/portal/invoices" element={<PortalProtectedRoute><PortalInvoices /></PortalProtectedRoute>} />
         <Route path="/portal/quotes" element={<PortalProtectedRoute><PortalQuotesPage /></PortalProtectedRoute>} />
         <Route path="/portal/orders" element={<PortalProtectedRoute><PortalOrdersPage /></PortalProtectedRoute>} />

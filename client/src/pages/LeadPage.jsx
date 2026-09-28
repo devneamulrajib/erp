@@ -133,7 +133,7 @@ export default function LeadPage() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    getUsers().then(({ data }) => setUsers(data)).catch(() => setUsers([]));
+    getUsers().then(setUsers).catch(() => setUsers([]));
     getLeadSources().then(({ data }) => setLeadSources(data)).catch(() => setLeadSources([]));
     getLeadCategories().then(({ data }) => setLeadCategories(data)).catch(() => setLeadCategories([]));
     getLeadStages().then(({ data }) => setLeadStages(data)).catch(() => setLeadStages([]));
