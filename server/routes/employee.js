@@ -2,6 +2,8 @@
 const router = require('express').Router();
 const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
+const { notifyEmployee } = require('../utils/notify');
+const { monthMatrix, WEEKLY_OFF_DAYS } = require('../utils/attendanceMatrix');
 const {
   Employee,
   EmployeeAdvance,
@@ -261,6 +263,13 @@ router.post('/advances/:id/reject', auth, async (req, res) => {
     advance.status = 'Rejected';
     advance.approvedBy = req.user?.name || 'Admin';
     await advance.save();
+
+    await notifyEmployee(
+      advance.employeeId, 'AdvanceRejected',
+      `Your ${advance.type} request of ৳${Number(advance.amount).toLocaleString()} was rejected`,
+      'EmployeeAdvance', advance.id,
+    );
+
     res.json(advance);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -335,6 +344,12 @@ router.post('/advances/:id/disburse', auth, async (req, res) => {
     advance.approvedBy = req.user?.name || 'Admin';
     await advance.save();
 
+    await notifyEmployee(
+      advance.employeeId, 'AdvanceDisbursed',
+      `Your ${advance.type} of ৳${Number(advance.amount).toLocaleString()} was approved and disbursed`,
+      'EmployeeAdvance', advance.id,
+    );
+
     res.json({ message: 'Disbursed and recorded in Office Budget & Accounts successfully', advance, officeExpense });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -342,6 +357,28 @@ router.post('/advances/:id/disburse', auth, async (req, res) => {
 });
 
 // ---------------- ATTENDANCE (admin marks daily) ---------------- //
+
+// Monthly attendance log for all employees
+router.get('/attendance/log', auth, async (req, res) => {
+  try {
+    const now = new Date();
+    const year = parseInt(req.query.year, 10) || now.getFullYear();
+    const month = parseInt(req.query.month, 10) || now.getMonth() + 1;
+    if (month < 1 || month > 12 || year < 2000 || year > 2100) {
+      return res.status(400).json({ message: 'Invalid year or month' });
+    }
+
+    const employees = await Employee.findAll({
+      attributes: ['id', 'code', 'name', 'department', 'designation', 'joiningDate'],
+      order: [['name', 'ASC']],
+    });
+
+    const result = await monthMatrix(employees, year, month);
+    res.json({ year, month, weeklyOffDays: WEEKLY_OFF_DAYS, ...result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 router.get('/attendance', auth, async (req, res) => {
   try {
@@ -399,6 +436,13 @@ router.post('/leave-requests/:id/approve', auth, async (req, res) => {
     await request.save();
 
     await markLeaveDays(request.employeeId, request.fromDate, request.toDate, admin);
+
+    await notifyEmployee(
+      request.employeeId, 'LeaveApproved',
+      `Your leave request (${request.fromDate} to ${request.toDate}) was approved`,
+      'LeaveRequest', request.id,
+    );
+
     res.json(request);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -416,6 +460,14 @@ router.post('/leave-requests/:id/reject', auth, async (req, res) => {
     request.approvedBy = req.user?.name || 'Admin';
     if (req.body.adminNote) request.adminNote = req.body.adminNote;
     await request.save();
+
+    const note = request.adminNote ? ` — ${request.adminNote}` : '';
+    await notifyEmployee(
+      request.employeeId, 'LeaveRejected',
+      `Your leave request (${request.fromDate} to ${request.toDate}) was rejected${note}`.slice(0, 250),
+      'LeaveRequest', request.id,
+    );
+
     res.json(request);
   } catch (err) {
     res.status(500).json({ message: err.message });

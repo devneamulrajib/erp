@@ -30,6 +30,8 @@ const RELATED_ROUTES = {
   DeliveryConfirmed: (id) => `/procurement-module/purchase-order-list?viewId=${id}`,
   PaymentConfirmedBySupplier: (id) => `/procurement-module/purchase-order-list?viewId=${id}`,
   PaymentRecorded: (id) => `/procurement-module/purchase-order-list?viewId=${id}`,
+  EmployeeLeaveRequest: () => '/hrm-module/employee?tab=leave',
+  EmployeeAdvanceRequest: () => '/hrm-module/employee?tab=advance',
 };
 
 const NOTIFICATION_MODULE_MAP = {
@@ -40,6 +42,8 @@ const NOTIFICATION_MODULE_MAP = {
   DeliveryConfirmed: 'inventory',
   PaymentConfirmedBySupplier: 'inventory',
   PaymentRecorded: 'inventory',
+  EmployeeLeaveRequest: 'hrm',
+  EmployeeAdvanceRequest: 'hrm',
 };
 
 export default function Topbar() {
@@ -109,7 +113,9 @@ export default function Topbar() {
     }
     setNotifOpen(false);
     const route = RELATED_ROUTES[n.type];
-    if (route && n.relatedId) navigate(route(n.relatedId));
+    if (route && (n.relatedId || route.length === 0)) {
+      navigate(route(n.relatedId));
+    }
   }
 
   async function handleMarkAllRead() {
