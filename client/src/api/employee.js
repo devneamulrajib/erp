@@ -19,3 +19,8 @@ export const markAttendance = (date, records) => api.post('/employee/attendance/
 export const getLeaveRequests = () => api.get('/employee/leave-requests');
 export const approveLeaveRequest = (id, adminNote) => api.post(`/employee/leave-requests/${id}/approve`, { adminNote });
 export const rejectLeaveRequest = (id, adminNote) => api.post(`/employee/leave-requests/${id}/reject`, { adminNote });
+
+export async function getAttendanceLog(params) {
+  const res = await api.get('/employee/attendance/log', { params });
+  return res.data;
+}

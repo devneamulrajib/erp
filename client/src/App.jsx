@@ -118,6 +118,8 @@ import OfficeExpensePage from './pages/OfficeExpensePage'
 import OfficeExpenseListPage from './pages/OfficeExpenseListPage'
 import OfficeReportPage from './pages/OfficeReportPage'
 
+import AttendanceLogPage from './pages/AttendanceLogPage'
+
 // --- Portal ---
 import PortalInvoices from './portal/pages/PortalInvoices'
 import PortalQuotesPage from './portal/pages/PortalQuotesPage'
@@ -128,6 +130,7 @@ import PortalMaterialRequisitionsPage from './portal/pages/PortalMaterialRequisi
 import PortalMaterialRequisitionView from './portal/pages/PortalMaterialRequisitionView'
 import PortalLogin from './portal/pages/PortalLogin'
 import PortalDashboard from './portal/pages/PortalDashboard'
+import PortalAttendancePage from './portal/pages/PortalAttendancePage'
 import PortalEmployeeDashboard from './portal/pages/PortalEmployeeDashboard'
 import PortalLeaveRequestPage from './portal/pages/PortalLeaveRequestPage'
 import PortalAdvanceRequestPage from './portal/pages/PortalAdvanceRequestPage'
@@ -315,6 +318,7 @@ function App() {
         <Route path="/billing/quote-list" element={<ProtectedRoute><QuoteList /></ProtectedRoute>} />
         <Route path="/billing/quote" element={<ProtectedRoute><QuotePage /></ProtectedRoute>} />
         <Route path="/billing/quote/:id" element={<ProtectedRoute><QuotePage /></ProtectedRoute>} />
+        <Route path="/portal/employee/attendance" element={<PortalProtectedRoute><PortalAttendancePage /></PortalProtectedRoute>} />
         <Route path="/accounts-module/payment-list" element={<ProtectedRoute><PaymentVoucherPage /></ProtectedRoute>} />
         <Route path="/accounts-module/payment-list/add" element={<ProtectedRoute><PaymentVoucherPage /></ProtectedRoute>} />
         <Route path="/billing/contractor_bill_report" element={<ProtectedRoute><ContractorBillReportPage /></ProtectedRoute>} />
@@ -325,6 +329,7 @@ function App() {
         <Route path="/accounts-module/contra_list_add" element={<ProtectedRoute><ContraVoucherPage /></ProtectedRoute>} />
         <Route path="/accounts-module/contra_list_add/:id" element={<ProtectedRoute><ContraVoucherPage /></ProtectedRoute>} />
         <Route path="/inventory-module/reports/stock" element={<ProtectedRoute><StockReportPage /></ProtectedRoute>} />
+        <Route path="/hrm-module/attendance-log" element={<ProtectedRoute><AttendanceLogPage /></ProtectedRoute>} />
         
         {/* ========================================================
             --- HRM MODULE ROUTES ---

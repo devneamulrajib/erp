@@ -41,7 +41,24 @@ async function notifyCustomer(customerId, type, message, relatedType, relatedId)
   }
 }
 
+// Notifies one employee portal user (audienceId = Employee.id) and pushes it
+// live to their socket room ("employee:<id>", already created by socket.js).
+async function notifyEmployee(employeeId, type, message, relatedType, relatedId) {
+  try {
+    const n = await Notification.create({
+      type, message, relatedType, relatedId,
+      audience: 'employee',
+      audienceId: employeeId,
+    });
+    const io = getIO();
+    if (io) io.to(`employee:${employeeId}`).emit('notification', n.toJSON());
+  } catch (err) {
+    console.error('Failed to create employee notification:', err.message);
+  }
+}
+
 module.exports = notifyAdmin;
 module.exports.notifyAdmin = notifyAdmin;
 module.exports.notifySupplier = notifySupplier;
 module.exports.notifyCustomer = notifyCustomer;
+module.exports.notifyEmployee = notifyEmployee;

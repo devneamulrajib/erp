@@ -1,6 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Receipt, FileCheck2, MessageSquare, ShoppingCart, ClipboardList, CalendarDays, Banknote, Search, Bell } from 'lucide-react';
+import {
+  LayoutDashboard,
+  Receipt,
+  FileCheck2,
+  MessageSquare,
+  ShoppingCart,
+  ClipboardList,
+  CalendarDays,
+  CalendarCheck,
+  Banknote,
+  Search,
+  Bell,
+} from 'lucide-react';
 import { getPortalUser, portalLogout } from '../api/portalAuth';
 import { PortalNotificationsProvider, usePortalNotifications } from '../context/PortalNotificationsContext';
 
@@ -10,6 +22,7 @@ const NAV_ITEMS = [
   { to: '/portal/quotes', label: 'Quotes', icon: FileCheck2, roles: ['customer'] },
   { to: '/portal/orders', label: 'Orders', icon: ShoppingCart, roles: ['supplier', 'vendor'] },
   { to: '/portal/material-requisitions', label: 'Requisitions', icon: ClipboardList, roles: ['supplier', 'vendor'] },
+  { to: '/portal/employee/attendance', label: 'Attendance', icon: CalendarCheck, roles: ['employee'] },
   { to: '/portal/employee/leave', label: 'Leave', icon: CalendarDays, roles: ['employee'] },
   { to: '/portal/employee/advance', label: 'Advance', icon: Banknote, roles: ['employee'] },
   { to: '/portal/requests', label: 'Requests', icon: MessageSquare, roles: ['customer', 'supplier', 'vendor'] },
@@ -19,7 +32,7 @@ function PortalLayoutInner({ children }) {
   const user = getPortalUser();
   const navigate = useNavigate();
   const location = useLocation();
-  const { unreadCount, notifications, isSupplier, refreshList, markAllRead } = usePortalNotifications();
+  const { unreadCount, notifications, refreshList, markAllRead } = usePortalNotifications();
   const [showNotifications, setShowNotifications] = useState(false);
   const panelRef = useRef(null);
 
@@ -34,11 +47,9 @@ function PortalLayoutInner({ children }) {
   async function toggleNotifications() {
     const next = !showNotifications;
     setShowNotifications(next);
-    if (next && isSupplier) {
+    if (next) {
       await refreshList();
-      if (unreadCount > 0) {
-        await markAllRead();
-      }
+      if (unreadCount > 0) await markAllRead();
     }
   }
 

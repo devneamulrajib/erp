@@ -10,28 +10,28 @@ const PortalNotificationsContext = createContext(null);
 
 export function PortalNotificationsProvider({ children }) {
   const user = getPortalUser();
+  const enabled = Boolean(user); // every portal role now gets notifications
   const isSupplier = user?.role === 'supplier' || user?.role === 'vendor';
 
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
 
   const refreshUnreadCount = useCallback(() => {
-    if (!isSupplier) return;
+    if (!enabled) return;
     getPortalUnreadCount().then(setUnreadCount).catch(() => {});
-  }, [isSupplier]);
+  }, [enabled]);
 
   const refreshList = useCallback(async () => {
-    if (!isSupplier) return;
+    if (!enabled) return;
     try {
-      const items = await getPortalNotifications();
-      setNotifications(items);
+      setNotifications(await getPortalNotifications());
     } catch {
       setNotifications([]);
     }
-  }, [isSupplier]);
+  }, [enabled]);
 
   const markAllRead = useCallback(async () => {
-    if (!isSupplier) return;
+    if (!enabled) return;
     try {
       await markAllPortalNotificationsRead();
       setUnreadCount(0);
@@ -39,10 +39,10 @@ export function PortalNotificationsProvider({ children }) {
     } catch {
       // leave state as-is on failure
     }
-  }, [isSupplier]);
+  }, [enabled]);
 
   useEffect(() => {
-    if (!isSupplier) return;
+    if (!enabled) return undefined;
     refreshUnreadCount();
     refreshList();
 
@@ -56,26 +56,21 @@ export function PortalNotificationsProvider({ children }) {
     }
 
     socket.on('notification', handleNotification);
-
-    // Fallback poll in case the socket connection drops without the client
-    // noticing right away — keeps the badge accurate either way.
     const interval = setInterval(refreshUnreadCount, 30000);
 
     return () => {
       socket.off('notification', handleNotification);
       clearInterval(interval);
     };
-  }, [isSupplier, refreshUnreadCount, refreshList]);
+  }, [enabled, refreshUnreadCount, refreshList]);
 
-  // Keys like "MaterialRequisition:12" or "PurchaseOrder:7" for every
-  // still-unread notification, so a list page can highlight the matching row.
   const unreadRelatedKeys = new Set(
     notifications.filter((n) => !n.read).map((n) => `${n.relatedType}:${n.relatedId}`)
   );
 
   return (
     <PortalNotificationsContext.Provider
-      value={{ unreadCount, notifications, unreadRelatedKeys, isSupplier, refreshList, markAllRead }}
+      value={{ unreadCount, notifications, unreadRelatedKeys, isSupplier, enabled, refreshList, markAllRead }}
     >
       {children}
     </PortalNotificationsContext.Provider>

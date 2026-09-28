@@ -10,6 +10,22 @@ export async function getEmployeeAttendance(month) {
   return res.data;
 }
 
+export async function getTodayAttendance() {
+  const res = await portalApi.get('/employee/attendance/today');
+  return res.data;
+}
+
+export async function checkInAttendance() {
+  const res = await portalApi.post('/employee/attendance/check-in');
+  return res.data;
+}
+
+// { view: 'month', year, month } or { view: 'year', year }
+export async function getAttendanceSummary(params) {
+  const res = await portalApi.get('/employee/attendance/summary', { params });
+  return res.data;
+}
+
 export async function getEmployeeAdvances() {
   const res = await portalApi.get('/employee/advances');
   return res.data;
