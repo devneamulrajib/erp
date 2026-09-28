@@ -824,6 +824,35 @@ INSERT INTO `assign_shares` VALUES (1,3,3,1,3,1,'SHR-818789',50,1000.00,200.00,'
 UNLOCK TABLES;
 
 --
+-- Table structure for table `attendances`
+--
+
+DROP TABLE IF EXISTS `attendances`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `attendances` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `employeeId` int NOT NULL,
+  `date` date NOT NULL,
+  `status` enum('Present','Absent','Leave','Holiday') DEFAULT 'Present',
+  `markedBy` varchar(255) DEFAULT NULL,
+  `createdAt` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `employee_date` (`employeeId`,`date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `attendances`
+--
+
+LOCK TABLES `attendances` WRITE;
+/*!40000 ALTER TABLE `attendances` DISABLE KEYS */;
+/*!40000 ALTER TABLE `attendances` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `bankaccounts`
 --
 
@@ -2929,7 +2958,7 @@ CREATE TABLE `employee_advances` (
   `createdAt` datetime NOT NULL,
   `updatedAt` datetime NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2938,7 +2967,7 @@ CREATE TABLE `employee_advances` (
 
 LOCK TABLES `employee_advances` WRITE;
 /*!40000 ALTER TABLE `employee_advances` DISABLE KEYS */;
-INSERT INTO `employee_advances` VALUES (1,2,'Advance Salary',5000,'2026-09-27',1,5000,0,'','Pending',NULL,NULL,NULL,'2026-09-27 02:44:34','2026-09-27 02:44:34');
+INSERT INTO `employee_advances` VALUES (1,2,'Advance Salary',5000,'2026-09-27',1,5000,0,'','Disbursed','2026-09-28',5,'Admin','2026-09-27 02:44:34','2026-09-27 21:23:23'),(2,3,'Advance Salary',2000,'2026-09-28',1,2000,0,'pocket money','Disbursed','2026-09-28',6,'Admin','2026-09-28 07:28:52','2026-09-28 07:29:21');
 /*!40000 ALTER TABLE `employee_advances` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -2968,9 +2997,13 @@ CREATE TABLE `employees` (
   `grossSalary` double DEFAULT '0',
   `bankName` varchar(255) DEFAULT NULL,
   `bankAccountNo` varchar(255) DEFAULT NULL,
+  `portalPassword` varchar(255) DEFAULT NULL,
+  `portalRole` varchar(50) DEFAULT 'employee',
+  `createUser` tinyint(1) DEFAULT '0',
+  `lastPortalLoginAt` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `code` (`code`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2979,7 +3012,7 @@ CREATE TABLE `employees` (
 
 LOCK TABLES `employees` WRITE;
 /*!40000 ALTER TABLE `employees` DISABLE KEYS */;
-INSERT INTO `employees` VALUES (1,'EMP129351877','Ashad Bhai','Site engineer ','Operation','01686610158','rajib.nir@gmail.com','Active','2026-08-23 09:49:55','2026-09-27 02:42:50',NULL,50000,0,0,0,50000,NULL,NULL),(2,'EMP232795','Rajib','CTO','IT','01648846858','rajib@gmail.com','Active','2026-09-27 02:42:37','2026-09-27 02:42:37',NULL,15000,5000,3000,2000,25000,'Bkash','01408367621');
+INSERT INTO `employees` VALUES (1,'EMP129351877','Ashad Bhai','Site engineer ','Operation','01686610158','rajib.nir@gmail.com','Active','2026-08-23 09:49:55','2026-09-27 02:42:50',NULL,50000,0,0,0,50000,NULL,NULL,NULL,'employee',0,NULL),(2,'EMP232795','Rajib','CTO','IT','01648846858','rajib@gmail.com','Active','2026-09-27 02:42:37','2026-09-27 02:42:37',NULL,15000,5000,3000,2000,25000,'Bkash','01408367621',NULL,'employee',0,NULL),(3,'EMP584763','Rajib','CTO','IT','','neamulislam.us@gmail.com','Active','2026-09-27 21:12:59','2026-09-28 07:27:15','2026-09-29',15000,5000,3000,2000,25000,'Bkash','0168','$2b$10$l4Cge2tA7WJKKQMIHQ7HoOoO9KzZIvV4Js7AElKSQ7E8lvaiKddOm','employee',1,'2026-09-28 07:27:15');
 /*!40000 ALTER TABLE `employees` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -5178,6 +5211,40 @@ LOCK TABLES `leadvisits` WRITE;
 UNLOCK TABLES;
 
 --
+-- Table structure for table `leave_requests`
+--
+
+DROP TABLE IF EXISTS `leave_requests`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `leave_requests` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `employeeId` int NOT NULL,
+  `fromDate` date NOT NULL,
+  `toDate` date NOT NULL,
+  `days` int DEFAULT '1',
+  `reason` text,
+  `status` enum('Pending','Approved','Rejected') DEFAULT 'Pending',
+  `adminNote` varchar(500) DEFAULT NULL,
+  `approvedBy` varchar(255) DEFAULT NULL,
+  `createdAt` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `employeeId` (`employeeId`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `leave_requests`
+--
+
+LOCK TABLES `leave_requests` WRITE;
+/*!40000 ALTER TABLE `leave_requests` DISABLE KEYS */;
+INSERT INTO `leave_requests` VALUES (1,3,'2026-09-29','2026-09-28',1,'family event','Approved',NULL,'Admin','2026-09-28 07:27:59','2026-09-28 07:28:26');
+/*!40000 ALTER TABLE `leave_requests` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `materialrequisitionapprovals`
 --
 
@@ -5981,7 +6048,7 @@ CREATE TABLE `notifications` (
 
 LOCK TABLES `notifications` WRITE;
 /*!40000 ALTER TABLE `notifications` DISABLE KEYS */;
-INSERT INTO `notifications` VALUES (1,'MaterialRequisitionQuotation','Quotation submitted for requisition REQ-665','MaterialRequisition',3,1,'2026-09-14 10:08:47','2026-09-14 10:11:38','admin',NULL),(2,'MaterialRequisitionQuotation','Quotation submitted for requisition REQ-993','MaterialRequisition',4,0,'2026-09-14 11:27:16','2026-09-14 11:27:16','admin',NULL),(3,'PurchaseOrderDelivered','Order PO-166841 was marked as delivered by the supplier','PurchaseOrder',3,1,'2026-09-14 12:12:02','2026-09-14 12:13:08','admin',NULL),(4,'PurchaseOrderConfirmed','Order PO-166841 was confirmed by the supplier','PurchaseOrder',3,1,'2026-09-14 12:12:50','2026-09-14 12:13:54','admin',NULL),(5,'MaterialRequisitionQuotation','Quotation submitted for requisition REQ-308','MaterialRequisition',5,1,'2026-09-15 12:38:57','2026-09-15 12:39:40','admin',NULL),(6,'PurchaseOrderConfirmed','Order PO-108755 was confirmed by the supplier','PurchaseOrder',4,0,'2026-09-15 12:40:35','2026-09-15 12:40:35','admin',NULL),(7,'PurchaseOrderDelivered','Order PO-108755 was marked as delivered by the supplier','PurchaseOrder',4,1,'2026-09-15 12:40:40','2026-09-15 12:40:58','admin',NULL),(8,'DeliveryConfirmed','Delivery confirmed for order PO-108755. An invoice has been generated.','PurchaseOrder',4,1,'2026-09-15 13:28:55','2026-09-17 09:50:10','supplier',12),(9,'PaymentRecorded','Payment recorded for order PO-108755. Please confirm receipt.','PurchaseOrder',4,1,'2026-09-17 09:15:04','2026-09-17 09:50:10','supplier',12),(10,'MaterialRequisitionQuotation','Quotation submitted for requisition REQ-765','MaterialRequisition',9,0,'2026-09-19 11:40:20','2026-09-19 11:40:20','admin',NULL),(11,'PurchaseOrderConfirmed','Order PO-607298 was confirmed by the supplier','PurchaseOrder',5,0,'2026-09-19 12:01:55','2026-09-19 12:01:55','admin',NULL),(12,'PurchaseOrderDelivered','Order PO-607298 was marked as delivered by the supplier','PurchaseOrder',5,1,'2026-09-19 12:02:12','2026-09-19 12:03:16','admin',NULL),(13,'DeliveryConfirmed','Delivery confirmed for order PO-607298. An invoice has been generated.','PurchaseOrder',5,1,'2026-09-19 12:03:33','2026-09-19 12:04:12','supplier',20),(14,'PaymentRecorded','Payment recorded for order PO-607298. Please confirm receipt.','PurchaseOrder',5,1,'2026-09-19 12:04:00','2026-09-19 12:04:12','supplier',20),(15,'PaymentConfirmedBySupplier','Supplier confirmed receipt of payment for order PO-607298','PurchaseOrder',5,0,'2026-09-19 12:04:40','2026-09-19 12:04:40','admin',NULL);
+INSERT INTO `notifications` VALUES (1,'MaterialRequisitionQuotation','Quotation submitted for requisition REQ-665','MaterialRequisition',3,1,'2026-09-14 10:08:47','2026-09-14 10:11:38','admin',NULL),(2,'MaterialRequisitionQuotation','Quotation submitted for requisition REQ-993','MaterialRequisition',4,0,'2026-09-14 11:27:16','2026-09-14 11:27:16','admin',NULL),(3,'PurchaseOrderDelivered','Order PO-166841 was marked as delivered by the supplier','PurchaseOrder',3,1,'2026-09-14 12:12:02','2026-09-14 12:13:08','admin',NULL),(4,'PurchaseOrderConfirmed','Order PO-166841 was confirmed by the supplier','PurchaseOrder',3,1,'2026-09-14 12:12:50','2026-09-14 12:13:54','admin',NULL),(5,'MaterialRequisitionQuotation','Quotation submitted for requisition REQ-308','MaterialRequisition',5,1,'2026-09-15 12:38:57','2026-09-15 12:39:40','admin',NULL),(6,'PurchaseOrderConfirmed','Order PO-108755 was confirmed by the supplier','PurchaseOrder',4,0,'2026-09-15 12:40:35','2026-09-15 12:40:35','admin',NULL),(7,'PurchaseOrderDelivered','Order PO-108755 was marked as delivered by the supplier','PurchaseOrder',4,1,'2026-09-15 12:40:40','2026-09-15 12:40:58','admin',NULL),(8,'DeliveryConfirmed','Delivery confirmed for order PO-108755. An invoice has been generated.','PurchaseOrder',4,1,'2026-09-15 13:28:55','2026-09-17 09:50:10','supplier',12),(9,'PaymentRecorded','Payment recorded for order PO-108755. Please confirm receipt.','PurchaseOrder',4,1,'2026-09-17 09:15:04','2026-09-17 09:50:10','supplier',12),(10,'MaterialRequisitionQuotation','Quotation submitted for requisition REQ-765','MaterialRequisition',9,0,'2026-09-19 11:40:20','2026-09-19 11:40:20','admin',NULL),(11,'PurchaseOrderConfirmed','Order PO-607298 was confirmed by the supplier','PurchaseOrder',5,0,'2026-09-19 12:01:55','2026-09-19 12:01:55','admin',NULL),(12,'PurchaseOrderDelivered','Order PO-607298 was marked as delivered by the supplier','PurchaseOrder',5,1,'2026-09-19 12:02:12','2026-09-19 12:03:16','admin',NULL),(13,'DeliveryConfirmed','Delivery confirmed for order PO-607298. An invoice has been generated.','PurchaseOrder',5,1,'2026-09-19 12:03:33','2026-09-19 12:04:12','supplier',20),(14,'PaymentRecorded','Payment recorded for order PO-607298. Please confirm receipt.','PurchaseOrder',5,1,'2026-09-19 12:04:00','2026-09-19 12:04:12','supplier',20),(15,'PaymentConfirmedBySupplier','Supplier confirmed receipt of payment for order PO-607298','PurchaseOrder',5,1,'2026-09-19 12:04:40','2026-09-27 20:57:00','admin',NULL);
 /*!40000 ALTER TABLE `notifications` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -6036,7 +6103,7 @@ CREATE TABLE `officeexpenses` (
   `createdAt` datetime NOT NULL,
   `updatedAt` datetime NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -6045,7 +6112,7 @@ CREATE TABLE `officeexpenses` (
 
 LOCK TABLES `officeexpenses` WRITE;
 /*!40000 ALTER TABLE `officeexpenses` DISABLE KEYS */;
-INSERT INTO `officeexpenses` VALUES (1,'2026-09-25 00:00:00',1,'test 1','Electricity Bill','CHEAP BANK',5000,'OEXP00001','pending','/uploads/office-expenses/1790380701990-471278951.pdf',NULL,'Admin','2026-09-25 23:58:21','2026-09-25 23:58:21');
+INSERT INTO `officeexpenses` VALUES (1,'2026-09-25 00:00:00',1,'test 1','Electricity Bill','CHEAP BANK',5000,'OEXP00001','pending','/uploads/office-expenses/1790380701990-471278951.pdf',NULL,'Admin','2026-09-25 23:58:21','2026-09-25 23:58:21'),(2,'2026-09-27 21:17:49',1,'Advance Salary Disbursed to Rajib (EMP232795)','CHEAP BANK','CHEAP BANK',5000,'OEXP00002','approved','',NULL,'Admin','2026-09-27 21:17:49','2026-09-27 21:17:49'),(3,'2026-09-27 21:17:58',1,'Advance Salary Disbursed to Rajib (EMP232795)','CHEAP BANK','Rajib portal',5000,'OEXP00003','approved','',NULL,'Admin','2026-09-27 21:17:58','2026-09-27 21:17:58'),(4,'2026-09-27 21:19:30',1,'Advance Salary Disbursed to Rajib (EMP232795)','Electricity Bill','CHEAP BANK',5000,'OEXP00004','approved','',NULL,'Admin','2026-09-27 21:19:30','2026-09-27 21:19:30'),(5,'2026-09-27 21:23:22',1,'Advance Salary Disbursed to Rajib (EMP232795)','CHEAP BANK','Electricity Bill',5000,'OEXP00005','approved','',3,'Admin','2026-09-27 21:23:22','2026-09-27 21:23:23'),(6,'2026-09-28 07:29:21',1,'Advance Salary Disbursed to Rajib (EMP584763)','CHEAP BANK','CHEAP BANK',2000,'OEXP00006','approved','',4,'Admin','2026-09-28 07:29:21','2026-09-28 07:29:21');
 /*!40000 ALTER TABLE `officeexpenses` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -8994,7 +9061,7 @@ CREATE TABLE `voucherentries` (
   CONSTRAINT `voucherentries_ibfk_7` FOREIGN KEY (`voucherId`) REFERENCES `vouchers` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `voucherentries_ibfk_8` FOREIGN KEY (`voucherId`) REFERENCES `vouchers` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `voucherentries_ibfk_9` FOREIGN KEY (`voucherId`) REFERENCES `vouchers` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -9003,7 +9070,7 @@ CREATE TABLE `voucherentries` (
 
 LOCK TABLES `voucherentries` WRITE;
 /*!40000 ALTER TABLE `voucherentries` DISABLE KEYS */;
-INSERT INTO `voucherentries` VALUES (1,16,0,500,NULL,1),(2,17,500,0,NULL,1),(3,16,1200,0,NULL,2),(4,15,0,1200,NULL,2);
+INSERT INTO `voucherentries` VALUES (1,16,0,500,NULL,1),(2,17,500,0,NULL,1),(3,16,1200,0,NULL,2),(4,15,0,1200,NULL,2),(5,16,5000,0,NULL,3),(6,15,0,5000,NULL,3),(7,16,2000,0,NULL,4),(8,16,0,2000,NULL,4);
 /*!40000 ALTER TABLE `voucherentries` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -9220,7 +9287,7 @@ CREATE TABLE `vouchers` (
   CONSTRAINT `vouchers_ibfk_97` FOREIGN KEY (`projectId`) REFERENCES `projects` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `vouchers_ibfk_98` FOREIGN KEY (`contactId`) REFERENCES `parties` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `vouchers_ibfk_99` FOREIGN KEY (`bankId`) REFERENCES `bankaccounts` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -9229,7 +9296,7 @@ CREATE TABLE `vouchers` (
 
 LOCK TABLES `vouchers` WRITE;
 /*!40000 ALTER TABLE `vouchers` DISABLE KEYS */;
-INSERT INTO `vouchers` VALUES (1,'RV260908-0001','Receipt','2026-09-08 00:00:00',3,NULL,NULL,NULL,'Pending','','',500,'Admin','pending','2026-09-08 12:49:08','2026-09-08 12:49:08',0,'','Trikon Office','','','Green Valley Site','','',NULL,'Cash','',''),(2,'PV260908-0001','Payment','2026-09-08 00:00:00',4,NULL,NULL,NULL,'Pending','','',1200,'Admin','pending','2026-09-08 12:49:50','2026-09-08 12:49:50',0,'','Real Estate','','','Green Valley Site','','',NULL,'','','');
+INSERT INTO `vouchers` VALUES (1,'RV260908-0001','Receipt','2026-09-08 00:00:00',3,NULL,NULL,NULL,'Pending','','',500,'Admin','pending','2026-09-08 12:49:08','2026-09-08 12:49:08',0,'','Trikon Office','','','Green Valley Site','','',NULL,'Cash','',''),(2,'PV260908-0001','Payment','2026-09-08 00:00:00',4,NULL,NULL,NULL,'Pending','','',1200,'Admin','pending','2026-09-08 12:49:50','2026-09-08 12:49:50',0,'','Real Estate','','','Green Valley Site','','',NULL,'','',''),(3,'OE260928-0001','Expense','2026-09-27 21:23:22',NULL,NULL,NULL,NULL,'Pending','Advance Salary Disbursed to Rajib (EMP232795)','OEXP00005',5000,'Admin','pending','2026-09-27 21:23:22','2026-09-27 21:23:22',0,NULL,NULL,NULL,NULL,NULL,NULL,'',NULL,NULL,NULL,NULL),(4,'OE260928-0002','Expense','2026-09-28 07:29:21',NULL,NULL,NULL,NULL,'Pending','Advance Salary Disbursed to Rajib (EMP584763)','OEXP00006',2000,'Admin','pending','2026-09-28 07:29:21','2026-09-28 07:29:21',0,NULL,NULL,NULL,NULL,NULL,NULL,'',NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `vouchers` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -9460,4 +9527,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-09-27  8:49:22
+-- Dump completed on 2026-09-28 13:53:50

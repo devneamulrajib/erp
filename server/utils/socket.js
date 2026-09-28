@@ -28,7 +28,15 @@ function init(server) {
 
   io.on('connection', (socket) => {
     const { customerId, role } = socket.portalUser;
-    const audience = role === 'customer' ? 'customer' : 'supplier';
+
+    // Customers and suppliers/vendors keep their existing rooms. Any other
+    // role (e.g. 'employee') gets its own namespace, so ids from different
+    // tables can never share a room.
+    let audience;
+    if (role === 'customer') audience = 'customer';
+    else if (role === 'supplier' || role === 'vendor') audience = 'supplier';
+    else audience = role;
+
     socket.join(`${audience}:${customerId}`);
   });
 

@@ -162,6 +162,8 @@ const OfficeExpense = require('./OfficeExpense');
 
 const Employee = require('./Employee');
 const EmployeeAdvance = require('./EmployeeAdvance');
+const LeaveRequest = require('./LeaveRequest');
+const Attendance = require('./Attendance');
 
 
 // Add relations:
@@ -170,6 +172,13 @@ EmployeeAdvance.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' }
 
 OfficeExpense.hasOne(EmployeeAdvance, { foreignKey: 'officeExpenseId' });
 EmployeeAdvance.belongsTo(OfficeExpense, { as: 'officeExpense', foreignKey: 'officeExpenseId' });
+
+// ---- LeaveRequest / Attendance (Employee Portal) ----
+Employee.hasMany(LeaveRequest, { as: 'leaveRequests', foreignKey: 'employeeId', onDelete: 'CASCADE' });
+LeaveRequest.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
+
+Employee.hasMany(Attendance, { as: 'attendanceRecords', foreignKey: 'employeeId', onDelete: 'CASCADE' });
+Attendance.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
 
 // ---- AssignShare ----
 Project.hasMany(AssignShare, { foreignKey: 'projectId' });
@@ -832,6 +841,8 @@ module.exports = {
   OfficeExpense,
   Employee,
   EmployeeAdvance,
+  LeaveRequest,
+  Attendance,
   PortalRequest,
   Notification,
 };

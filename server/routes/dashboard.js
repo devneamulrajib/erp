@@ -8,7 +8,7 @@ const VoucherApproval = require('../models/VoucherApproval');
 const BankAccount = require('../models/BankAccount');
 const Property = require('../models/Property');
 const Party = require('../models/Party');
-const { Comment, CommentAttachment } = require('../models/associations');
+const { Comment, CommentAttachment, BudgetCategory, MonthlyBudget, OfficeExpense, EmployeeAdvance } = require('../models/associations');
 const ChartOfAccount = require('../models/ChartOfAccount');
 const Sale = require('../models/Sale');
 const Purchase = require('../models/Purchase');
@@ -35,6 +35,18 @@ function getRangeBounds(range) {
       break;
   }
   return { [Op.gte]: start };
+}
+
+// Maps the main dashboard's 30d/6m/12m range toggle to a month window.
+// Kept separate from getRangeBounds() above, which uses a different
+// vocabulary (today/weekly/monthly/yearly/all) for the Accounts dashboard.
+function monthsForRange(range) {
+  switch (range) {
+    case '30d': return 1;
+    case '6m': return 6;
+    case '12m':
+    default: return 12;
+  }
 }
 
 // Top stat cards: Expenses / Material Req / Service Req / Sales / Purchases / Receipt
@@ -104,40 +116,51 @@ router.get('/projects', auth, async (req, res) => {
   }
 });
 
-// Expense donut chart, last 12 months
+// Expense donut chart. Accepts ?months=1|6|12 (defaults to 12) so the
+// dashboard's 30 Days / 6 Months / 12 Months toggle actually changes the window.
 router.get('/expense-chart', auth, async (req, res) => {
   try {
-    const twelveMonthsAgo = new Date();
-    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+    const months = monthsForRange(req.query.range) || Number(req.query.months) || 12;
+    const since = new Date();
+    since.setMonth(since.getMonth() - months);
 
     const rows = await Expense.findAll({
       attributes: [
         [fn('DATE_FORMAT', col('date'), '%Y-%m'), 'month'],
         [fn('SUM', col('amount')), 'total'],
       ],
-      where: { date: { [Op.gte]: twelveMonthsAgo } },
+      where: { date: { [Op.gte]: since } },
       group: [literal('month')],
       order: [[literal('month'), 'ASC']],
     });
 
-    res.json(rows.map((r) => ({ month: r.get('month'), total: Number(r.get('total')) || 0 })));
+    // `name`/`value` are aliases for the frontend's expense-breakdown legend,
+    // which reads c.name ?? c.category and c.value ?? c.amount — neither of
+    // which matched `month`/`total` before, so the legend/percentages were
+    // silently blank. Kept `month`/`total` too, in case anything else reads them.
+    res.json(rows.map((r) => {
+      const month = r.get('month');
+      const total = Number(r.get('total')) || 0;
+      return { month, total, name: month, value: total };
+    }));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// Inflow vs Outflow bar chart
+// Inflow vs Outflow bar chart. Accepts ?months=1|6|12 (defaults to 12).
 router.get('/inflow-outflow', auth, async (req, res) => {
   try {
-    const twelveMonthsAgo = new Date();
-    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+    const months = monthsForRange(req.query.range) || Number(req.query.months) || 12;
+    const since = new Date();
+    since.setMonth(since.getMonth() - months);
 
     const inflowRows = await Voucher.findAll({
       attributes: [
         [fn('DATE_FORMAT', col('date'), '%Y-%m'), 'month'],
         [fn('SUM', col('amount')), 'total'],
       ],
-      where: { type: 'Receipt', date: { [Op.gte]: twelveMonthsAgo } },
+      where: { type: 'Receipt', date: { [Op.gte]: since } },
       group: [literal('month')],
       order: [[literal('month'), 'ASC']],
     });
@@ -146,7 +169,7 @@ router.get('/inflow-outflow', auth, async (req, res) => {
         [fn('DATE_FORMAT', col('date'), '%Y-%m'), 'month'],
         [fn('SUM', col('amount')), 'total'],
       ],
-      where: { type: 'Payment', date: { [Op.gte]: twelveMonthsAgo } },
+      where: { type: 'Payment', date: { [Op.gte]: since } },
       group: [literal('month')],
       order: [[literal('month'), 'ASC']],
     });
@@ -229,6 +252,7 @@ router.get('/pending-vouchers', auth, async (req, res) => {
       amount: v.amount,
       project: v.project?.name || '-',
       contact: v.contact?.name || '',
+      description: v.narration || `${v.type} — ${v.contact?.name || v.project?.name || v.voucherNo}`,
       reference: v.voucherNo,
       addedBy: v.addedBy,
       date: v.date,
@@ -246,6 +270,25 @@ router.get('/pending-vouchers', auth, async (req, res) => {
   }
 });
 
+// Approve a pending voucher — marks it approved so it drops off the pending
+// feed. Uses the same `status: 'pending'` field the feed above filters on,
+// rather than VoucherApproval (whose exact columns weren't confirmed), so
+// this works regardless of how per-approver approval rows are structured.
+router.patch('/pending-vouchers/:id/approve', auth, async (req, res) => {
+  try {
+    const voucher = await Voucher.findByPk(req.params.id);
+    if (!voucher) return res.status(404).json({ message: 'Not found' });
+    if (voucher.status !== 'pending') {
+      return res.status(400).json({ message: 'This voucher is not pending' });
+    }
+    voucher.status = 'approved';
+    await voucher.save();
+    res.json({ approved: true, id: voucher.id });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Latest Comments
 router.get('/comments', auth, async (req, res) => {
   try {
@@ -255,6 +298,89 @@ router.get('/comments', auth, async (req, res) => {
       limit: 10,
     });
     res.json(comments);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Office & Payroll overview panel: current-month office budget totals
+// (allocated / spent / remaining, across all top-level BudgetCategory rows),
+// the "Payroll" category's own allocation for the month (matched by name —
+// requires a top-level Budget Category literally named containing "payroll"),
+// total disbursed employee advances/loans, and vendor/customer counts.
+router.get('/office-overview', auth, async (req, res) => {
+  try {
+    const now = new Date();
+    const year = Number(req.query.year) || now.getFullYear();
+    const month = Number(req.query.month) || now.getMonth() + 1;
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 1);
+
+    const allCategories = await BudgetCategory.findAll();
+    const topCategories = allCategories.filter((c) => !c.parentId);
+    const subsByParent = {};
+    allCategories.forEach((c) => {
+      if (c.parentId) (subsByParent[c.parentId] = subsByParent[c.parentId] || []).push(c);
+    });
+
+    const budgets = await MonthlyBudget.findAll({ where: { year, month } });
+    const budgetByCategory = Object.fromEntries(budgets.map((b) => [b.budgetCategoryId, b]));
+
+    async function spentFor(categoryId) {
+      const spent = await OfficeExpense.sum('amount', {
+        where: { budgetCategoryId: categoryId, date: { [Op.gte]: startDate, [Op.lt]: endDate } },
+      });
+      return Number(spent) || 0;
+    }
+
+    let allocatedTotal = 0;
+    let spentTotal = 0;
+    let payroll = null;
+
+    for (const cat of topCategories) {
+      const subs = subsByParent[cat.id] || [];
+      const ownSpent = await spentFor(cat.id);
+      let subSpentTotal = 0;
+      for (const s of subs) {
+        subSpentTotal += await spentFor(s.id);
+      }
+      const spentAmount = ownSpent + subSpentTotal;
+      const budget = budgetByCategory[cat.id];
+      const allocatedAmount = budget ? Number(budget.allocatedAmount) : 0;
+
+      allocatedTotal += allocatedAmount;
+      spentTotal += spentAmount;
+
+      if (cat.name && cat.name.toLowerCase().includes('payroll')) {
+        payroll = {
+          categoryName: cat.name,
+          allocatedAmount,
+          spentAmount,
+          remainingAmount: allocatedAmount - spentAmount,
+        };
+      }
+    }
+
+    const disbursedAdvances = await EmployeeAdvance.sum('amount', {
+      where: { status: { [Op.in]: ['Disbursed', 'Completed'] } },
+    }).catch(() => 0) || 0;
+
+    const vendors = await ChartOfAccount.count({ where: { contactType: 'Supplier' } });
+    const customers = await ChartOfAccount.count({ where: { contactType: 'Customer' } });
+
+    res.json({
+      year,
+      month,
+      officeTotals: {
+        allocatedAmount: allocatedTotal,
+        spentAmount: spentTotal,
+        remainingAmount: allocatedTotal - spentTotal,
+      },
+      payroll, // null if no "Payroll" category exists yet
+      disbursedAdvances,
+      vendors,
+      customers,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

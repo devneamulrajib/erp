@@ -90,6 +90,7 @@ app.use('/api/portal/material-requisitions', require('./routes/portalMaterialReq
 app.use('/api/portal/requests', require('./routes/portalRequests'));
 app.use('/api/portalAuth', require('./routes/portalAuth'));
 app.use('/api/users', require('./routes/users'));
+app.use('/api/portal/employee', require('./routes/portalEmployee'));
 app.use('/api/office-expenses', require('./routes/officeExpense'));
 app.use('/api/budget-categories', require('./routes/budgetCategory'));
 app.use('/api/monthly-budgets', require('./routes/monthlyBudget'));
