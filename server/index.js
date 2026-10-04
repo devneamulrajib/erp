@@ -98,6 +98,7 @@ app.use('/api/portal/notifications', require('./routes/portalNotifications'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/assign-share', require('./routes/assignShare'));
 app.use('/api/payslip', require('./routes/paySlip'));
+app.use('/api/activity-log', require('./routes/activityLog'));
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

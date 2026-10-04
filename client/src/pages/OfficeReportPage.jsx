@@ -1,12 +1,30 @@
+// client/src/pages/OfficeReportPage.jsx
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, TrendingUp, TrendingDown, AlertCircle, Wallet, FileSpreadsheet,
-  ChevronLeft, ChevronRight, Award, PieChart, CalendarDays,
+  ArrowLeft,
+  TrendingUp,
+  TrendingDown,
+  AlertCircle,
+  Wallet,
+  FileSpreadsheet,
+  ChevronLeft,
+  ChevronRight,
+  Award,
+  PieChart,
+  CalendarDays,
+  Activity,
+  Pencil,
+  Trash2,
+  PlusCircle,
+  Wallet as WalletIcon,
+  Banknote,
+  Undo2,
 } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import { getOfficeExpenseReport } from '../api/officeExpense';
+import { getActivityLog } from '../api/activityLog';
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTH_LABELS_FULL = [
@@ -45,6 +63,11 @@ export default function OfficeReportPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Activity Feed States
+  const [activity, setActivity] = useState([]);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [activityModuleFilter, setActivityModuleFilter] = useState('');
+
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -61,14 +84,28 @@ export default function OfficeReportPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Reset month filter whenever the year changes, so you don't silently
-  // stay on "October" after jumping to a year you haven't looked at yet.
+  // Reset month filter whenever the year changes
   useEffect(() => { setSelectedMonth(0); }, [year]);
 
-  // Per-month totals across ALL categories — powers the new Monthly
-  // Breakdown table below. Derived from each category's own
-  // allocatedByMonth/spentByMonth arrays, since the backend doesn't
-  // send a pre-summed monthly total for allocation (only spend).
+  // Load Activity Log Callback & Effect
+  const loadActivity = useCallback(async () => {
+    setActivityLoading(true);
+    try {
+      const params = { year };
+      if (selectedMonth !== 0) params.month = selectedMonth;
+      if (activityModuleFilter) params.module = activityModuleFilter;
+      const rows = await getActivityLog(params);
+      setActivity(rows || []);
+    } catch {
+      setActivity([]);
+    } finally {
+      setActivityLoading(false);
+    }
+  }, [year, selectedMonth, activityModuleFilter]);
+
+  useEffect(() => { loadActivity(); }, [loadActivity]);
+
+  // Per-month totals across ALL categories
   const monthlyBreakdown = useMemo(() => {
     if (!data) return [];
     return Array.from({ length: 12 }, (_, i) => {
@@ -84,8 +121,7 @@ export default function OfficeReportPage() {
     });
   }, [data]);
 
-  // The view totals that drive the KPI cards + category table, switching
-  // between the full-year numbers and a single selected month's numbers.
+  // The view totals that drive the KPI cards + category table
   const viewTotals = useMemo(() => {
     if (!data) return { allocatedAmount: 0, spentAmount: 0, remainingAmount: 0 };
     if (selectedMonth === 0) return data.totals;
@@ -328,7 +364,7 @@ export default function OfficeReportPage() {
               </div>
             </div>
 
-            {/* Monthly breakdown table (new) */}
+            {/* Monthly breakdown table */}
             <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden mb-6">
               <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                 <div>
@@ -430,7 +466,7 @@ export default function OfficeReportPage() {
             </div>
 
             {/* Category breakdown table */}
-            <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
+            <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden mb-6">
               <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/50">
                 <h2 className="text-sm font-bold text-slate-800">Category Breakdown — {periodLabel}</h2>
                 <p className="text-xs text-slate-400 mt-0.5">{viewCategories.length} budget heads</p>
@@ -501,6 +537,43 @@ export default function OfficeReportPage() {
                 </table>
               </div>
             </div>
+
+            {/* Activity feed */}
+            <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden mt-6">
+              <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Activity size={14} className="text-slate-400" />
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-800">Activity Feed</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">Every expense, budget, category and salary action — {periodLabel}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+                  {['', 'Expense', 'Budget', 'Category', 'Salary'].map((m) => (
+                    <button
+                      key={m || 'all'}
+                      type="button"
+                      onClick={() => setActivityModuleFilter(m)}
+                      className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                        activityModuleFilter === m ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      {m || 'All'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="max-h-[480px] overflow-y-auto divide-y divide-slate-100">
+                {activityLoading ? (
+                  <div className="py-10 text-center text-slate-400 text-sm">Loading activity…</div>
+                ) : activity.length === 0 ? (
+                  <div className="py-10 text-center text-slate-400 text-sm">No activity recorded for {periodLabel}.</div>
+                ) : (
+                  activity.map((a) => <ActivityRow key={a.id} entry={a} />)
+                )}
+              </div>
+            </div>
           </>
         )}
       </main>
@@ -563,6 +636,54 @@ function YearTrendChart({ values, selectedMonth, onSelectMonth }) {
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function activityIconFor(entry) {
+  if (entry.module === 'Salary') {
+    if (entry.action === 'Paid') return { Icon: Banknote, tone: 'text-emerald-600 bg-emerald-50' };
+    if (entry.action === 'Unpaid') return { Icon: Undo2, tone: 'text-amber-600 bg-amber-50' };
+    return { Icon: Banknote, tone: 'text-slate-600 bg-slate-100' };
+  }
+  if (entry.action === 'Created') return { Icon: PlusCircle, tone: 'text-emerald-600 bg-emerald-50' };
+  if (entry.action === 'Updated') return { Icon: Pencil, tone: 'text-indigo-600 bg-indigo-50' };
+  if (entry.action === 'Deleted') return { Icon: Trash2, tone: 'text-rose-600 bg-rose-50' };
+  if (entry.module === 'Budget') return { Icon: WalletIcon, tone: 'text-sky-600 bg-sky-50' };
+  return { Icon: Activity, tone: 'text-slate-600 bg-slate-100' };
+}
+
+function ActivityRow({ entry }) {
+  const { Icon, tone } = activityIconFor(entry);
+  const when = new Date(entry.createdAt).toLocaleString('en-GB', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+  return (
+    <div className="flex items-start gap-3 px-5 py-3.5 hover:bg-slate-50/60 transition">
+      <span className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${tone}`}>
+        <Icon size={14} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-slate-800 leading-snug">{entry.message}</p>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[11px] text-slate-400">
+          <span className="font-medium text-slate-500">{entry.module}</span>
+          <span>·</span>
+          <span>{when}</span>
+          <span>·</span>
+          <span>{entry.performedBy || 'Admin'}</span>
+          {entry.budgetCategoryName && (
+            <>
+              <span>·</span>
+              <span>{entry.budgetCategoryName}</span>
+            </>
+          )}
+        </div>
+      </div>
+      {entry.amount != null && (
+        <span className="shrink-0 text-sm font-semibold text-slate-700 font-mono">
+          ৳{Number(entry.amount).toLocaleString()}
+        </span>
+      )}
     </div>
   );
 }

@@ -26,6 +26,12 @@ const PaySlip = sequelize.define('PaySlip', {
   status: { type: DataTypes.ENUM('Draft', 'Paid'), defaultValue: 'Draft' },
   paidDate: { type: DataTypes.DATEONLY, allowNull: true },
   voucherId: { type: DataTypes.INTEGER, allowNull: true },
+
+  // NEW: links this paid slip to the OfficeExpense row that deducted it
+  // from the office budget, and which budget category it was deducted from.
+  officeExpenseId: { type: DataTypes.INTEGER, allowNull: true },
+  budgetCategoryId: { type: DataTypes.INTEGER, allowNull: true },
+
   generatedBy: DataTypes.STRING,
 }, {
   tableName: 'pay_slips',
