@@ -1,3 +1,4 @@
+// server/routes/officeExpense.js
 const router = require('express').Router();
 const multer = require('multer');
 const path = require('path');
@@ -113,9 +114,6 @@ router.get('/next-code', auth, async (req, res) => {
   }
 });
 
-// Full-year rollup: per-category yearly allocated vs spent, a 12-month spend
-// trend for the whole office budget, and a status breakdown — everything
-// the Office Report page needs in one call.
 router.get('/report', auth, async (req, res) => {
   try {
     const year = Number(req.query.year) || new Date().getFullYear();
@@ -143,11 +141,9 @@ router.get('/report', auth, async (req, res) => {
     const categoryIdToTop = {};
     allCategories.forEach((c) => { categoryIdToTop[c.id] = c.parentId || c.id; });
 
-    // Per-category (own only, not rolled up) monthly + yearly spend
     const spentByCategory = {};
     allCategories.forEach((c) => { spentByCategory[c.id] = { yearly: 0, monthly: Array(12).fill(0) }; });
 
-    // Whole-office monthly trend and status totals
     const monthlyTotals = Array(12).fill(0);
     const statusTotals = {};
 
@@ -270,6 +266,7 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
       amount: Number(amount),
       reference: reference || await generateReference(),
       date: date || Date.now(),
+      status: 'pending',
       addedBy: req.user?.name || 'Admin',
       attachment: req.file ? `/uploads/office-expenses/${req.file.filename}` : '',
     });
@@ -295,6 +292,39 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
     });
 
     res.status(201).json({ ...officeExpense.toJSON(), budgetWarning });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Update status (Approve / Reject / Pending)
+router.patch('/:id/status', auth, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const normalizedStatus = String(status || '').toLowerCase();
+    if (!['approved', 'pending', 'rejected'].includes(normalizedStatus)) {
+      return res.status(400).json({ message: 'Status must be approved, pending, or rejected' });
+    }
+
+    const officeExpense = await OfficeExpense.findByPk(req.params.id, { include: listInclude });
+    if (!officeExpense) return res.status(404).json({ message: 'Expense record not found' });
+
+    const previousStatus = officeExpense.status;
+    officeExpense.status = normalizedStatus;
+    await officeExpense.save();
+
+    await logActivity({
+      module: 'Expense',
+      action: normalizedStatus === 'approved' ? 'Approved' : normalizedStatus === 'rejected' ? 'Rejected' : 'Updated',
+      message: `${normalizedStatus.toUpperCase()} expense "${officeExpense.title || officeExpense.reference}" (${officeExpense.reference})`,
+      amount: officeExpense.amount,
+      budgetCategoryId: officeExpense.budgetCategoryId,
+      relatedType: 'OfficeExpense',
+      relatedId: officeExpense.id,
+      performedBy: req.user?.name || 'Admin',
+    });
+
+    res.json(officeExpense);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
