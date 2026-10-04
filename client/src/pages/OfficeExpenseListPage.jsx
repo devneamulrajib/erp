@@ -1,16 +1,20 @@
-// src/pages/OfficeExpenseListPage.jsx
+// client/src/pages/OfficeExpenseListPage.jsx
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Plus, Calendar, Eye, Pencil, Trash2, Clock, CheckCircle2,
   XCircle, FileText, ArrowUpRight, X, TrendingUp, TrendingDown,
-  Download, Layers, RefreshCw
+  Download, Layers, RefreshCw, Check
 } from 'lucide-react';
 
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import { resolveFileUrl } from '../api/axios';
-import { getOfficeExpenses, deleteOfficeExpense } from '../api/officeExpense';
+import {
+  getOfficeExpenses,
+  deleteOfficeExpense,
+  updateOfficeExpenseStatus,
+} from '../api/officeExpense';
 
 // ---- Status Styling ----
 const STATUS = {
@@ -34,7 +38,6 @@ const STATUS = {
   },
 };
 
-// Subtle palette for category badges
 const CATEGORY_COLORS = [
   'bg-slate-100 text-slate-700 border-slate-200',
   'bg-sky-50 text-sky-800 border-sky-200',
@@ -87,6 +90,7 @@ export default function OfficeExpenseListPage() {
   const [page, setPage] = useState(1);
 
   const [viewing, setViewing] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -167,6 +171,26 @@ export default function OfficeExpenseListPage() {
     return ((curr - prev) / prev) * 100;
   }, [monthlyTrend]);
 
+  // Handle Approve / Reject
+  const handleStatusChange = async (item, newStatus) => {
+    const verb = newStatus === 'approved' ? 'approve' : 'reject';
+    if (!window.confirm(`Are you sure you want to ${verb} "${item.title || item.reference}" for ৳${money(item.amount)}?`)) {
+      return;
+    }
+    setUpdatingId(item.id);
+    try {
+      const updated = await updateOfficeExpenseStatus(item.id, newStatus);
+      setRows((prev) => prev.map((r) => (r.id === item.id ? { ...r, status: newStatus } : r)));
+      if (viewing && viewing.id === item.id) {
+        setViewing((prev) => ({ ...prev, status: newStatus }));
+      }
+    } catch (error) {
+      alert(error?.response?.data?.message || `Failed to ${verb} expense.`);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this expense record?')) return;
     try {
@@ -219,14 +243,14 @@ export default function OfficeExpenseListPage() {
           ]}
         />
 
-        {/* Clean, Non-AI Page Header */}
+        {/* Page Header */}
         <div className="mt-3 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
               Office Expenses
             </h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              Review disbursements, manage vouchers, and track expense statuses.
+              Review disbursements, approve pending vouchers, and manage records.
             </p>
           </div>
 
@@ -252,7 +276,6 @@ export default function OfficeExpenseListPage() {
 
         {/* Analytics & Metrics Grid */}
         <section className="grid gap-5 lg:grid-cols-[380px_minmax(0,1fr)] mb-6">
-          {/* Total Expense Overview Card */}
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
@@ -276,7 +299,6 @@ export default function OfficeExpenseListPage() {
               </div>
             </div>
 
-            {/* Status breakdown pill stats */}
             <div className="mt-6 pt-4 border-t border-slate-100 grid grid-cols-3 gap-2.5">
               <StatPill label="Approved" count={approvedCount} statusKey="approved" />
               <StatPill label="Pending" count={pendingCount} statusKey="pending" />
@@ -284,7 +306,6 @@ export default function OfficeExpenseListPage() {
             </div>
           </div>
 
-          {/* Monthly Spending Trend Chart */}
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 flex flex-col justify-between">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
@@ -320,10 +341,8 @@ export default function OfficeExpenseListPage() {
 
         {/* Ledger Section */}
         <section className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
-          {/* Controls & Filters Bar */}
           <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/60">
             <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3.5">
-              {/* Search */}
               <div className="relative w-full xl:max-w-sm">
                 <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
@@ -335,7 +354,6 @@ export default function OfficeExpenseListPage() {
                 />
               </div>
 
-              {/* Filter inputs */}
               <div className="flex flex-wrap items-center gap-2">
                 <DateFilter value={fromDate} onChange={setFromDate} placeholder="From date" />
                 <DateFilter value={toDate} onChange={setToDate} placeholder="To date" />
@@ -377,7 +395,6 @@ export default function OfficeExpenseListPage() {
             </div>
           </div>
 
-          {/* Subheader: Row count + Segmented Status Tabs */}
           <div className="px-5 py-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-white">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Records</span>
@@ -386,7 +403,6 @@ export default function OfficeExpenseListPage() {
               </span>
             </div>
 
-            {/* Segmented Filter Pills */}
             <div className="inline-flex p-1 rounded-xl bg-slate-100/90 border border-slate-200/70 text-xs">
               {['all', 'approved', 'pending', 'rejected'].map((status) => {
                 const active = statusFilter === status;
@@ -408,9 +424,9 @@ export default function OfficeExpenseListPage() {
             </div>
           </div>
 
-          {/* Table View */}
+          {/* Table */}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1020px] text-left text-xs sm:text-sm">
+            <table className="w-full min-w-[1040px] text-left text-xs sm:text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   <th className="py-3.5 px-4">Date</th>
@@ -433,9 +449,11 @@ export default function OfficeExpenseListPage() {
                     <ExpenseRow
                       key={item.id}
                       item={item}
+                      updating={updatingId === item.id}
                       onView={() => setViewing(item)}
                       onEdit={() => navigate(`/accounts-module/office-expense/${item.id}`)}
                       onDelete={() => handleDelete(item.id)}
+                      onStatusChange={handleStatusChange}
                     />
                   ))
                 )}
@@ -443,7 +461,6 @@ export default function OfficeExpenseListPage() {
             </table>
           </div>
 
-          {/* Pagination Footer */}
           {!loading && filteredRows.length > 0 && (
             <div className="flex flex-col sm:flex-row items-center justify-between px-5 py-4 border-t border-slate-100 gap-3 bg-slate-50/30">
               <p className="text-xs text-slate-500">
@@ -478,7 +495,7 @@ export default function OfficeExpenseListPage() {
         </section>
       </main>
 
-      {/* Slide-Over Transaction Detail Drawer */}
+      {/* Slide-Over Drawer */}
       {viewing && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div
@@ -487,7 +504,6 @@ export default function OfficeExpenseListPage() {
           />
 
           <div className="relative w-full max-w-lg h-full bg-white shadow-2xl flex flex-col z-10 overflow-hidden">
-            {/* Drawer Header */}
             <div className="px-6 py-5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
               <div>
                 <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
@@ -506,9 +522,7 @@ export default function OfficeExpenseListPage() {
               </button>
             </div>
 
-            {/* Drawer Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Highlight Amount Card */}
               <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-slate-100/50 p-4 flex items-center justify-between">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Disbursed Amount</p>
@@ -519,7 +533,6 @@ export default function OfficeExpenseListPage() {
                 <StatusBadge status={viewing.status} />
               </div>
 
-              {/* Transaction Key Data */}
               <div>
                 <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Details</h4>
                 <div className="grid grid-cols-2 gap-3">
@@ -534,7 +547,6 @@ export default function OfficeExpenseListPage() {
                 </div>
               </div>
 
-              {/* Title & Author */}
               <div className="p-3.5 rounded-xl border border-slate-200">
                 <span className="text-[10px] text-slate-400 uppercase font-medium">Expense Title</span>
                 <p className="text-sm font-semibold text-slate-900 mt-0.5">{textValue(viewing.title)}</p>
@@ -543,7 +555,6 @@ export default function OfficeExpenseListPage() {
                 </p>
               </div>
 
-              {/* Double-Entry Ledger Preview */}
               <div>
                 <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Accounting Ledger</h4>
                 <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden text-xs">
@@ -564,7 +575,6 @@ export default function OfficeExpenseListPage() {
                 </div>
               </div>
 
-              {/* Description */}
               {viewing.description && (
                 <div>
                   <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Narration / Note</h4>
@@ -574,7 +584,6 @@ export default function OfficeExpenseListPage() {
                 </div>
               )}
 
-              {/* Attachment Preview Card */}
               {viewing.attachment && (
                 <div>
                   <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Voucher Attachment</h4>
@@ -596,27 +605,63 @@ export default function OfficeExpenseListPage() {
               )}
             </div>
 
-            {/* Drawer Footer Actions */}
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={() => setViewing(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 transition"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const id = viewing.id;
-                  setViewing(null);
-                  navigate(`/accounts-module/office-expense/${id}`);
-                }}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 transition"
-              >
-                <Pencil size={13} />
-                Edit Record
-              </button>
+            {/* Drawer Footer Actions with Approve/Reject */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2">
+                {textValue(viewing.status).toLowerCase() === 'pending' ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={updatingId === viewing.id}
+                      onClick={() => handleStatusChange(viewing, 'approved')}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 transition shadow-2xs"
+                    >
+                      <Check size={14} strokeWidth={2.5} />
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      disabled={updatingId === viewing.id}
+                      onClick={() => handleStatusChange(viewing, 'rejected')}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 disabled:opacity-50 transition"
+                    >
+                      <X size={14} strokeWidth={2.5} />
+                      Reject
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={updatingId === viewing.id}
+                    onClick={() => handleStatusChange(viewing, 'pending')}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 disabled:opacity-50 transition"
+                  >
+                    Reset to Pending
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setViewing(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 transition"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = viewing.id;
+                    setViewing(null);
+                    navigate(`/accounts-module/office-expense/${id}`);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 transition"
+                >
+                  <Pencil size={13} />
+                  Edit Record
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -624,8 +669,6 @@ export default function OfficeExpenseListPage() {
     </div>
   );
 }
-
-/* ---- Stat Pill Subcomponent ---- */
 
 function StatPill({ label, count, statusKey }) {
   const conf = STATUS[statusKey];
@@ -639,8 +682,6 @@ function StatPill({ label, count, statusKey }) {
     </div>
   );
 }
-
-/* ---- SVG Area Trendline Subcomponent ---- */
 
 function TrendChart({ data }) {
   const width = 560;
@@ -693,8 +734,6 @@ function TrendChart({ data }) {
   );
 }
 
-/* ---- Date Input ---- */
-
 function DateFilter({ value, onChange, placeholder }) {
   return (
     <div className="relative">
@@ -710,11 +749,12 @@ function DateFilter({ value, onChange, placeholder }) {
   );
 }
 
-/* ---- Table Row Subcomponent ---- */
+/* ---- Table Row with Quick Approve / Reject ---- */
 
-function ExpenseRow({ item, onView, onEdit, onDelete }) {
-  const status = textValue(item.status);
+function ExpenseRow({ item, updating, onView, onEdit, onDelete, onStatusChange }) {
+  const status = textValue(item.status).toLowerCase();
   const category = textValue(item.budgetCategory);
+  const isPending = status === 'pending';
 
   return (
     <tr className="hover:bg-slate-50/70 transition group">
@@ -776,8 +816,32 @@ function ExpenseRow({ item, onView, onEdit, onDelete }) {
         )}
       </td>
 
+      {/* Action Column with Quick Approve/Reject buttons */}
       <td className="py-3.5 px-4 text-right whitespace-nowrap">
         <div className="flex items-center justify-end gap-1">
+          {isPending && (
+            <>
+              <button
+                type="button"
+                disabled={updating}
+                onClick={() => onStatusChange(item, 'approved')}
+                title="Approve Voucher"
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-emerald-600 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-700 disabled:opacity-50 transition"
+              >
+                <Check size={14} strokeWidth={2.5} />
+              </button>
+              <button
+                type="button"
+                disabled={updating}
+                onClick={() => onStatusChange(item, 'rejected')}
+                title="Reject Voucher"
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 disabled:opacity-50 transition"
+              >
+                <X size={14} strokeWidth={2.5} />
+              </button>
+            </>
+          )}
+
           <button
             type="button"
             onClick={onView}
@@ -808,8 +872,6 @@ function ExpenseRow({ item, onView, onEdit, onDelete }) {
   );
 }
 
-/* ---- Status Badge Subcomponent ---- */
-
 function StatusBadge({ status }) {
   const key = textValue(status).toLowerCase();
   const config = STATUS[key] || STATUS.pending;
@@ -820,8 +882,6 @@ function StatusBadge({ status }) {
     </span>
   );
 }
-
-/* ---- Loading Skeleton Rows ---- */
 
 function LoadingRows() {
   return Array.from({ length: 6 }).map((_, r) => (
@@ -837,8 +897,6 @@ function LoadingRows() {
     </tr>
   ));
 }
-
-/* ---- Empty State ---- */
 
 function EmptyState({ hasFilters, onClear }) {
   return (
