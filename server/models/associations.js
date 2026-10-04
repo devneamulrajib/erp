@@ -183,6 +183,14 @@ Employee.hasMany(Attendance, { as: 'attendanceRecords', foreignKey: 'employeeId'
 Attendance.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
 
 // ---- PaySlip / SalaryDeduction (Payroll) ----
+// Links a paid slip to the OfficeExpense row that deducted it from the
+// office budget (see routes/paySlip.js -> POST /:id/pay).
+OfficeExpense.hasOne(PaySlip, { foreignKey: 'officeExpenseId' });
+PaySlip.belongsTo(OfficeExpense, { as: 'officeExpense', foreignKey: 'officeExpenseId' });
+
+BudgetCategory.hasMany(PaySlip, { foreignKey: 'budgetCategoryId' });
+PaySlip.belongsTo(BudgetCategory, { as: 'budgetCategory', foreignKey: 'budgetCategoryId' });
+
 Employee.hasMany(PaySlip, { as: 'paySlips', foreignKey: 'employeeId', onDelete: 'CASCADE' });
 PaySlip.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
 

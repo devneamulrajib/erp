@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Printer, X } from 'lucide-react';
+import { Printer, X, Download, FileSpreadsheet } from 'lucide-react';
 import Topbar from '../components/Topbar';
-import { getPaySlips, getPaySlip } from '../api/paySlip';
+import { getPaySlips, getPaySlip, downloadPaySlipPdf, downloadPayrollReportPdf } from '../api/paySlip';
 import { getEmployees } from '../api/employee';
 
 const MONTHS = Array.from({ length: 12 }, (_, i) =>
@@ -14,10 +14,21 @@ function fmt(n) {
 
 function PaySlipDetail({ id, onClose }) {
   const [slip, setSlip] = useState(null);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     getPaySlip(id).then(setSlip).catch(() => setSlip(null));
   }, [id]);
+
+  async function handleDownload() {
+    if (!slip) return;
+    setDownloading(true);
+    try {
+      await downloadPaySlipPdf(slip);
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   if (!slip) return null;
 
@@ -27,6 +38,10 @@ function PaySlipDetail({ id, onClose }) {
         <div className="mb-5 flex items-center justify-between print:hidden">
           <h3 className="text-sm font-bold text-slate-900">Pay Slip</h3>
           <div className="flex items-center gap-2">
+            <button onClick={handleDownload} disabled={downloading}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-50">
+              <Download size={14} />
+            </button>
             <button onClick={() => window.print()} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100">
               <Printer size={14} />
             </button>
@@ -113,6 +128,8 @@ export default function PaySlip() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState(null);
+  const [downloadingId, setDownloadingId] = useState(null);
+  const [downloadingReport, setDownloadingReport] = useState(false);
 
   useEffect(() => {
     getEmployees().then((res) => setEmployees(res.data || [])).catch(() => {});
@@ -126,15 +143,45 @@ export default function PaySlip() {
       .finally(() => setLoading(false));
   }, [year, month, status, employeeId]);
 
+  async function handleRowDownload(e, row) {
+    e.stopPropagation();
+    setDownloadingId(row.id);
+    try {
+      await downloadPaySlipPdf(row);
+    } finally {
+      setDownloadingId(null);
+    }
+  }
+
+  async function handleReportDownload() {
+    setDownloadingReport(true);
+    try {
+      await downloadPayrollReportPdf({ year, month, status, employeeId });
+    } finally {
+      setDownloadingReport(false);
+    }
+  }
+
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
   const selectCls = 'h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-slate-400';
+
+  const totalPaid = rows.filter((r) => r.status === 'Paid').reduce((sum, r) => sum + Number(r.netSalary || 0), 0);
+  const paidCount = rows.filter((r) => r.status === 'Paid').length;
 
   return (
     <div className="min-h-screen bg-slate-50">
       <Topbar />
       <main className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
-        <h1 className="text-2xl font-bold text-slate-900">Pay Slips</h1>
-        <p className="mb-5 text-sm text-slate-500">Browse and review past salary payments.</p>
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Pay Slips</h1>
+            <p className="text-sm text-slate-500">Browse and review past salary payments.</p>
+          </div>
+          <button onClick={handleReportDownload} disabled={downloadingReport || rows.length === 0}
+            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">
+            <FileSpreadsheet size={15} /> {downloadingReport ? 'Preparing…' : 'Download Full Report'}
+          </button>
+        </div>
 
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <select className={selectCls} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
@@ -167,12 +214,13 @@ export default function PaySlip() {
                 <th className="px-3 py-3 text-right">Addition</th>
                 <th className="px-3 py-3 text-right">Net</th>
                 <th className="px-3 py-3 text-center">Status</th>
+                <th className="px-3 py-3 text-center">Download</th>
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">Loading…</td></tr>}
+              {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">Loading…</td></tr>}
               {!loading && rows.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">No payslips found.</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">No payslips found.</td></tr>
               )}
               {rows.map((r) => (
                 <tr key={r.id} onClick={() => setOpenId(r.id)}
@@ -193,10 +241,25 @@ export default function PaySlip() {
                       {r.status}
                     </span>
                   </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <button onClick={(e) => handleRowDownload(e, r)} disabled={downloadingId === r.id}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-50">
+                      <Download size={13} />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+
+          {paidCount > 0 && (
+            <div className="flex items-center justify-between border-t border-slate-200 bg-emerald-50/60 px-4 py-3.5">
+              <span className="text-sm font-semibold text-slate-700">
+                Total Amount Paid <span className="font-normal text-slate-400">({paidCount} of {rows.length} shown)</span>
+              </span>
+              <span className="text-lg font-bold text-emerald-700">{fmt(totalPaid)}</span>
+            </div>
+          )}
         </div>
       </main>
 

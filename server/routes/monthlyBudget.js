@@ -5,6 +5,7 @@ const auth = require('../middleware/auth');
 const { BudgetCategory, MonthlyBudget, OfficeExpense } = require('../models/associations');
 const MonthlyBudgetAuditLog = require('../models/MonthlyBudgetAuditLog');
 const MonthlyBudgetCashReceipt = require('../models/MonthlyBudgetCashReceipt');
+const logActivity = require('../utils/activityLog');
 
 router.get('/summary', auth, async (req, res) => {
   try {
@@ -154,6 +155,16 @@ router.post('/', auth, async (req, res) => {
       performedBy,
     });
 
+    await logActivity({
+      module: 'Budget', action,
+      message: action === 'Created'
+        ? `Set ${category.name} budget for ${month}/${year} to ৳${nextAmount.toLocaleString()}`
+        : `Changed ${category.name} budget for ${month}/${year} from ৳${(previousAmount || 0).toLocaleString()} to ৳${nextAmount.toLocaleString()}`,
+      amount: nextAmount, budgetCategoryId,
+      relatedType: 'MonthlyBudget', relatedId: budget.id,
+      performedBy,
+    });
+
     res.status(201).json(budget);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -174,6 +185,15 @@ router.delete('/:id', auth, async (req, res) => {
       previousAmount: Number(budget.allocatedAmount),
       newAmount: null,
       note: req.body?.note || '',
+      performedBy: req.user?.name || 'Admin',
+    });
+
+    const category = await BudgetCategory.findByPk(budget.budgetCategoryId);
+    await logActivity({
+      module: 'Budget', action: 'Deleted',
+      message: `Removed ${category?.name || 'budget'} allocation of ৳${Number(budget.allocatedAmount).toLocaleString()} for ${budget.month}/${budget.year}`,
+      amount: budget.allocatedAmount, budgetCategoryId: budget.budgetCategoryId,
+      relatedType: 'MonthlyBudget', relatedId: budget.id,
       performedBy: req.user?.name || 'Admin',
     });
 
@@ -236,6 +256,14 @@ router.post('/cash-receipts', auth, async (req, res) => {
       receivedBy: req.user?.name || 'Accounts Manager',
     });
 
+    await logActivity({
+      module: 'Budget', action: 'CashReceived',
+      message: `Recorded cash receipt of ৳${Number(receipt.amount).toLocaleString()} from ${receipt.receivedFrom} for ${month}/${year}`,
+      amount: receipt.amount, budgetCategoryId: receipt.budgetCategoryId,
+      relatedType: 'MonthlyBudgetCashReceipt', relatedId: receipt.id,
+      performedBy: req.user?.name || 'Accounts Manager',
+    });
+
     res.status(201).json(receipt);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -269,6 +297,15 @@ router.put('/cash-receipts/:id', auth, async (req, res) => {
     }
 
     await receipt.save();
+
+    await logActivity({
+      module: 'Budget', action: 'CashReceiptUpdated',
+      message: `Updated cash receipt #${receipt.id} (৳${Number(receipt.amount).toLocaleString()}) for ${receipt.month}/${receipt.year}`,
+      amount: receipt.amount, budgetCategoryId: receipt.budgetCategoryId,
+      relatedType: 'MonthlyBudgetCashReceipt', relatedId: receipt.id,
+      performedBy: req.user?.name || 'Admin',
+    });
+
     res.json(receipt);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -280,6 +317,14 @@ router.delete('/cash-receipts/:id', auth, async (req, res) => {
   try {
     const receipt = await MonthlyBudgetCashReceipt.findByPk(req.params.id);
     if (!receipt) return res.status(404).json({ message: 'Cash receipt not found' });
+
+    await logActivity({
+      module: 'Budget', action: 'CashReceiptDeleted',
+      message: `Deleted cash receipt #${receipt.id} (৳${Number(receipt.amount).toLocaleString()}) for ${receipt.month}/${receipt.year}`,
+      amount: receipt.amount, budgetCategoryId: receipt.budgetCategoryId,
+      relatedType: 'MonthlyBudgetCashReceipt', relatedId: receipt.id,
+      performedBy: req.user?.name || 'Admin',
+    });
 
     await receipt.destroy();
     res.json({ deleted: true });

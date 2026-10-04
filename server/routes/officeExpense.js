@@ -7,6 +7,7 @@ const { Op } = require('sequelize');
 const {
   OfficeExpense, Voucher, VoucherEntry, ChartOfAccount, BudgetCategory, MonthlyBudget,
 } = require('../models/associations');
+const logActivity = require('../utils/activityLog');
 
 const uploadDir = path.join(__dirname, '..', 'uploads', 'office-expenses');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -285,6 +286,14 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
       return res.status(201).json({ ...officeExpense.toJSON(), ledgerWarning: voucherErr.message, budgetWarning });
     }
 
+    await logActivity({
+      module: 'Expense', action: 'Created',
+      message: `Added expense "${officeExpense.title || officeExpense.reference}" (${officeExpense.reference})`,
+      amount: officeExpense.amount, budgetCategoryId: officeExpense.budgetCategoryId,
+      relatedType: 'OfficeExpense', relatedId: officeExpense.id,
+      performedBy: req.user?.name || 'Admin',
+    });
+
     res.status(201).json({ ...officeExpense.toJSON(), budgetWarning });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -295,6 +304,8 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
   try {
     const officeExpense = await OfficeExpense.findByPk(req.params.id);
     if (!officeExpense) return res.status(404).json({ message: 'Not found' });
+
+    const previousAmount = Number(officeExpense.amount);
 
     const fields = ['title', 'drAccount', 'crAccount', 'amount', 'reference', 'date', 'status'];
     fields.forEach((key) => {
@@ -322,6 +333,14 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
       return res.json({ ...officeExpense.toJSON(), ledgerWarning: voucherErr.message, budgetWarning });
     }
 
+    await logActivity({
+      module: 'Expense', action: 'Updated',
+      message: `Updated expense "${officeExpense.title || officeExpense.reference}" (${officeExpense.reference}) — ৳${previousAmount.toLocaleString()} → ৳${Number(officeExpense.amount).toLocaleString()}`,
+      amount: officeExpense.amount, budgetCategoryId: officeExpense.budgetCategoryId,
+      relatedType: 'OfficeExpense', relatedId: officeExpense.id,
+      performedBy: req.user?.name || 'Admin',
+    });
+
     res.json({ ...officeExpense.toJSON(), budgetWarning });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -336,6 +355,15 @@ router.delete('/:id', auth, async (req, res) => {
     if (officeExpense.voucherId) {
       await Voucher.destroy({ where: { id: officeExpense.voucherId } });
     }
+
+    await logActivity({
+      module: 'Expense', action: 'Deleted',
+      message: `Deleted expense "${officeExpense.title || officeExpense.reference}" (${officeExpense.reference})`,
+      amount: officeExpense.amount, budgetCategoryId: officeExpense.budgetCategoryId,
+      relatedType: 'OfficeExpense', relatedId: officeExpense.id,
+      performedBy: req.user?.name || 'Admin',
+    });
+
     await officeExpense.destroy();
     res.json({ deleted: true });
   } catch (err) {
