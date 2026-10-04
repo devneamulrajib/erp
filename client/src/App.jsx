@@ -136,6 +136,9 @@ import PortalLeaveRequestPage from './portal/pages/PortalLeaveRequestPage'
 import PortalAdvanceRequestPage from './portal/pages/PortalAdvanceRequestPage'
 import PortalProtectedRoute from './portal/components/PortalProtectedRoute'
 
+import PaySlipProcess from './pages/PaySlipProcess'
+import PaySlip from './pages/PaySlip'
+
 import TitleManager from './components/TitleManager'
 // --- Team members / role-based access ---
 import UserManagementPage from './pages/UserManagementPage'
@@ -358,6 +361,9 @@ function App() {
         <Route path="/accounts-module/office-expense" element={<ProtectedRoute><OfficeExpensePage /></ProtectedRoute>} />
         <Route path="/accounts-module/office-expense/:id" element={<ProtectedRoute><OfficeExpensePage /></ProtectedRoute>} />
         <Route path="/accounts-module/office-report" element={<ProtectedRoute><OfficeReportPage /></ProtectedRoute>} />
+
+        <Route path="/hrm-module/pay-slip-process" element={<ProtectedRoute><PaySlipProcess /></ProtectedRoute>} />
+<Route path="/hrm-module/pay-slip" element={<ProtectedRoute><PaySlip /></ProtectedRoute>} />
 
         {/* --- Team members / role-based access --- */}
         <Route path="/settings/users" element={<AdminOnlyRoute><UserManagementPage /></AdminOnlyRoute>} />

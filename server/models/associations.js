@@ -164,6 +164,8 @@ const Employee = require('./Employee');
 const EmployeeAdvance = require('./EmployeeAdvance');
 const LeaveRequest = require('./LeaveRequest');
 const Attendance = require('./Attendance');
+const PaySlip = require('./PaySlip');
+const SalaryDeduction = require('./SalaryDeduction');
 
 
 // Add relations:
@@ -179,6 +181,19 @@ LeaveRequest.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
 
 Employee.hasMany(Attendance, { as: 'attendanceRecords', foreignKey: 'employeeId', onDelete: 'CASCADE' });
 Attendance.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
+
+// ---- PaySlip / SalaryDeduction (Payroll) ----
+Employee.hasMany(PaySlip, { as: 'paySlips', foreignKey: 'employeeId', onDelete: 'CASCADE' });
+PaySlip.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
+
+Employee.hasMany(SalaryDeduction, { as: 'salaryDeductions', foreignKey: 'employeeId', onDelete: 'CASCADE' });
+SalaryDeduction.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
+
+PaySlip.hasMany(SalaryDeduction, { as: 'appliedDeductions', foreignKey: 'paySlipId' });
+SalaryDeduction.belongsTo(PaySlip, { as: 'paySlip', foreignKey: 'paySlipId' });
+
+Voucher.hasOne(PaySlip, { foreignKey: 'voucherId' });
+PaySlip.belongsTo(Voucher, { foreignKey: 'voucherId' });
 
 // ---- AssignShare ----
 Project.hasMany(AssignShare, { foreignKey: 'projectId' });
@@ -843,6 +858,8 @@ module.exports = {
   EmployeeAdvance,
   LeaveRequest,
   Attendance,
+  PaySlip,
+  SalaryDeduction,
   PortalRequest,
   Notification,
 };

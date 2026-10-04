@@ -2,8 +2,8 @@
 const router = require('express').Router();
 const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
-const { notifyEmployee } = require('../utils/notify');
 const { monthMatrix, WEEKLY_OFF_DAYS } = require('../utils/attendanceMatrix');
+const { syncDraftPaySlip } = require('../utils/payroll');
 const {
   Employee,
   EmployeeAdvance,
@@ -14,6 +14,7 @@ const {
   VoucherEntry,
   ChartOfAccount,
 } = require('../models/associations');
+const { notifyEmployee } = require('../utils/notify');
 
 function generateCode() {
   return 'EMP' + Math.floor(100000 + Math.random() * 900000);
@@ -48,11 +49,15 @@ async function resolveAccountId(name) {
 }
 
 // Marks every day in an approved leave range as "Leave" in attendance (max 62 days).
+// A day already recorded as "Present" (a real check-in / admin mark) is left
+// alone — leave approval must never silently erase an actual attendance record.
 async function markLeaveDays(employeeId, fromDate, toDate, markedBy) {
   const start = new Date(`${fromDate}T00:00:00Z`).getTime();
   const end = new Date(`${toDate}T00:00:00Z`).getTime();
   for (let t = start, n = 0; t <= end && n < 62; t += 86400000, n += 1) {
     const date = new Date(t).toISOString().slice(0, 10);
+    const existing = await Attendance.findOne({ where: { employeeId, date } });
+    if (existing?.status === 'Present') continue; // don't overwrite a real check-in
     await Attendance.upsert({ employeeId, date, status: 'Leave', markedBy });
   }
 }
@@ -344,6 +349,14 @@ router.post('/advances/:id/disburse', auth, async (req, res) => {
     advance.approvedBy = req.user?.name || 'Admin';
     await advance.save();
 
+    // 4. Keep this month's Draft payslip in sync if one already exists —
+    // so a newly disbursed advance shows up immediately instead of only
+    // appearing the next time payroll is generated.
+    try {
+      const now = new Date();
+      await syncDraftPaySlip(advance.employeeId, now.getFullYear(), now.getMonth() + 1, req.user?.name);
+    } catch { /* non-critical, payroll sync failure must not block disbursement */ }
+
     await notifyEmployee(
       advance.employeeId, 'AdvanceDisbursed',
       `Your ${advance.type} of ৳${Number(advance.amount).toLocaleString()} was approved and disbursed`,
@@ -357,28 +370,6 @@ router.post('/advances/:id/disburse', auth, async (req, res) => {
 });
 
 // ---------------- ATTENDANCE (admin marks daily) ---------------- //
-
-// Monthly attendance log for all employees
-router.get('/attendance/log', auth, async (req, res) => {
-  try {
-    const now = new Date();
-    const year = parseInt(req.query.year, 10) || now.getFullYear();
-    const month = parseInt(req.query.month, 10) || now.getMonth() + 1;
-    if (month < 1 || month > 12 || year < 2000 || year > 2100) {
-      return res.status(400).json({ message: 'Invalid year or month' });
-    }
-
-    const employees = await Employee.findAll({
-      attributes: ['id', 'code', 'name', 'department', 'designation', 'joiningDate'],
-      order: [['name', 'ASC']],
-    });
-
-    const result = await monthMatrix(employees, year, month);
-    res.json({ year, month, weeklyOffDays: WEEKLY_OFF_DAYS, ...result });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
 
 router.get('/attendance', auth, async (req, res) => {
   try {
@@ -403,6 +394,28 @@ router.post('/attendance/mark', auth, async (req, res) => {
       await Attendance.upsert({ employeeId: r.employeeId, date, status: r.status, markedBy });
     }
     res.json({ message: 'Attendance saved' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Monthly attendance log for all employees
+router.get('/attendance/log', auth, async (req, res) => {
+  try {
+    const now = new Date();
+    const year = parseInt(req.query.year, 10) || now.getFullYear();
+    const month = parseInt(req.query.month, 10) || now.getMonth() + 1;
+    if (month < 1 || month > 12 || year < 2000 || year > 2100) {
+      return res.status(400).json({ message: 'Invalid year or month' });
+    }
+
+    const employees = await Employee.findAll({
+      attributes: ['id', 'code', 'name', 'department', 'designation', 'joiningDate'],
+      order: [['name', 'ASC']],
+    });
+
+    const result = await monthMatrix(employees, year, month);
+    res.json({ year, month, weeklyOffDays: WEEKLY_OFF_DAYS, ...result });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

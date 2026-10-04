@@ -15,6 +15,7 @@ const todayStr = () => new Date().toLocaleDateString('en-CA', { timeZone: TIMEZO
 const parseDay = (s) => new Date(`${s}T00:00:00Z`);
 const fmtDay = (d) => d.toISOString().slice(0, 10);
 const isWeeklyOff = (s) => WEEKLY_OFF_DAYS.includes(parseDay(s).getUTCDay());
+const isValidDateStr = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(parseDay(s).getTime());
 
 const findApprovedLeave = (employeeId, date) =>
   LeaveRequest.findOne({
@@ -261,10 +262,17 @@ router.get('/leave-requests', async (req, res) => {
 router.post('/leave-requests', async (req, res) => {
   try {
     const { fromDate, toDate, reason } = req.body;
-    if (!fromDate || !toDate) {
-      return res.status(400).json({ message: 'From date and To date are required' });
+
+    if (!isValidDateStr(fromDate) || !isValidDateStr(toDate)) {
+      return res.status(400).json({ message: 'Valid From date and To date are required' });
     }
-    const days = Math.max(1, Math.round((new Date(toDate) - new Date(fromDate)) / 86400000) + 1);
+    // FIX: reject a reversed range (toDate before fromDate) instead of
+    // silently accepting it — a backwards range broke leave-day marking.
+    if (toDate < fromDate) {
+      return res.status(400).json({ message: 'To date cannot be before From date' });
+    }
+
+    const days = Math.round((parseDay(toDate) - parseDay(fromDate)) / 86400000) + 1;
 
     const request = await LeaveRequest.create({
       employeeId: req.portalUser.customerId,

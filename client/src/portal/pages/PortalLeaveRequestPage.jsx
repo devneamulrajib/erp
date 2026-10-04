@@ -31,11 +31,31 @@ export default function PortalLeaveRequestPage() {
   }
   useEffect(load, []);
 
+  // FIX: if an already-picked "To date" ends up before a newly-picked
+  // "From date", clear it instead of leaving a silently-invalid range.
+  function handleFromDateChange(value) {
+    setFromDate(value);
+    if (toDate && value && toDate < value) {
+      setToDate('');
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!fromDate || !toDate) return;
-    setSubmitting(true);
     setError('');
+
+    if (!fromDate || !toDate) {
+      setError('Please select both a From date and a To date');
+      return;
+    }
+    // FIX: reject a reversed range client-side too, so the person gets
+    // instant feedback instead of relying on the server response alone.
+    if (toDate < fromDate) {
+      setError('To date cannot be before From date');
+      return;
+    }
+
+    setSubmitting(true);
     try {
       await requestEmployeeLeave({ fromDate, toDate, reason });
       setFromDate('');
@@ -61,11 +81,22 @@ export default function PortalLeaveRequestPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1.5">From Date</label>
-            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400 transition" />
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => handleFromDateChange(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400 transition"
+            />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1.5">To Date</label>
-            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400 transition" />
+            <input
+              type="date"
+              value={toDate}
+              min={fromDate || undefined}
+              onChange={(e) => setToDate(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400 transition"
+            />
           </div>
         </div>
         <div className="mb-5">

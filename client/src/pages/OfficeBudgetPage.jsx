@@ -23,6 +23,9 @@ import {
   SlidersHorizontal,
   CheckCircle2,
   Folder,
+  ArrowDownLeft,
+  Coins,
+  BadgeDollarSign,
 } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
@@ -31,11 +34,14 @@ import {
   saveMonthlyBudget,
   deleteMonthlyBudget,
   getMonthlyBudgetLogs,
+  getCashReceipts,
+  saveCashReceipt,
+  deleteCashReceipt,
 } from '../api/monthlyBudget';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
+  'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
 const money = (val) =>
@@ -44,23 +50,450 @@ const money = (val) =>
     maximumFractionDigits: 2,
   });
 
-function EditBudgetModal({ row, year, month, onClose, onSaved }) {
-  const [amount, setAmount] = useState(row.allocatedAmount || 0);
+// Modal to record a partial cash installment received
+function ReceiveCashModal({ initialData, rows = [], year, month, onClose, onSaved }) {
+  const [amount, setAmount] = useState(initialData?.amount ? String(initialData.amount) : '');
+  const [receivedDate, setReceivedDate] = useState(
+    initialData?.receivedDate || new Date().toISOString().slice(0, 10)
+  );
+  const [receivedFrom, setReceivedFrom] = useState(initialData?.receivedFrom || 'Management');
+  const [paymentMethod, setPaymentMethod] = useState(initialData?.paymentMethod || 'Cash');
+  const [referenceNo, setReferenceNo] = useState(initialData?.referenceNo || '');
+  const [budgetCategoryId, setBudgetCategoryId] = useState(
+    initialData?.budgetCategoryId ? String(initialData.budgetCategoryId) : ''
+  );
+  const [note, setNote] = useState(initialData?.note || '');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const isEdit = !!initialData?.id;
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!amount || Number(amount) <= 0) {
+      setError('Please enter a valid cash amount');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+
+    try {
+      await saveCashReceipt({
+        id: initialData?.id,
+        year,
+        month,
+        amount: Number(amount),
+        receivedDate,
+        receivedFrom,
+        paymentMethod,
+        referenceNo,
+        budgetCategoryId: budgetCategoryId || null,
+        note,
+      });
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to save cash receipt');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 relative border border-slate-100">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition"
+        >
+          <X size={16} />
+        </button>
+
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <ArrowDownLeft size={16} />
+          </div>
+          <h2 className="text-lg font-bold text-slate-900">
+            {isEdit ? 'Edit Cash Receipt' : 'Record Cash Inflow (Disbursement)'}
+          </h2>
+        </div>
+        <p className="text-xs text-slate-500 mb-4 ml-10">
+          For {MONTH_NAMES[month - 1]} {year}
+        </p>
+
+        {error && (
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-xl p-3 mb-4 text-xs font-medium">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Cash Received Amount (৳) *
+              </label>
+              <input
+                type="number"
+                min="1"
+                step="any"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="e.g. 20000"
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                autoFocus
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Date Received *
+              </label>
+              <input
+                type="date"
+                value={receivedDate}
+                onChange={(e) => setReceivedDate(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Received From
+              </label>
+              <input
+                type="text"
+                value={receivedFrom}
+                onChange={(e) => setReceivedFrom(e.target.value)}
+                placeholder="e.g. MD Sir / Bank Withdrawal"
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Payment Method
+              </label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              >
+                <option value="Cash">Cash in Hand</option>
+                <option value="Cheque">Cheque</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Mobile Banking">bKash / Nagad</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Reference / Cheque / Voucher #
+              </label>
+              <input
+                type="text"
+                value={referenceNo}
+                onChange={(e) => setReferenceNo(e.target.value)}
+                placeholder="e.g. CHQ-98124 or VR-01"
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Tag to Category (Optional)
+              </label>
+              <select
+                value={budgetCategoryId}
+                onChange={(e) => setBudgetCategoryId(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              >
+                <option value="">General Office Fund (All Categories)</option>
+                {rows.map((cat) => (
+                  <option key={cat.budgetCategoryId} value={cat.budgetCategoryId}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Note / Remarks
+            </label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              placeholder="e.g. First tranche of office operating cash for this month..."
+              className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs disabled:opacity-50 transition"
+            >
+              {submitting ? 'Saving…' : isEdit ? 'Save Changes' : 'Record Cash Received'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Modal showing the list of all cash receipts for the month
+function CashReceiptsListModal({ year, month, rows = [], onClose, onReceiptUpdated }) {
+  const [receipts, setReceipts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editingReceipt, setEditingReceipt] = useState(null);
+  const [isAddingNew, setIsAddingNew] = useState(false);
+
+  const fetchReceipts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getCashReceipts(year, month);
+      setReceipts(data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [year, month]);
+
+  useEffect(() => {
+    fetchReceipts();
+  }, [fetchReceipts]);
+
+  const handleDelete = async (id, amt) => {
+    if (!window.confirm(`Delete cash receipt of ৳${money(amt)}?`)) return;
+    try {
+      await deleteCashReceipt(id);
+      await fetchReceipts();
+      onReceiptUpdated();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to delete');
+    }
+  };
+
+  const totalReceiptsAmount = receipts.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col p-6 relative border border-slate-100">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition"
+        >
+          <X size={16} />
+        </button>
+
+        <div className="flex items-center justify-between mb-4 pr-8">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <Coins size={16} />
+              </span>
+              <h2 className="text-base font-bold text-slate-900">Cash Inflow Receipts History</h2>
+            </div>
+            <p className="text-xs text-slate-500 ml-10">
+              Installments disbursed to Accounts for {MONTH_NAMES[month - 1]} {year}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsAddingNew(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition"
+          >
+            <Plus size={13} />
+            Receive Cash
+          </button>
+        </div>
+
+        {/* Summary Card */}
+        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 flex items-center justify-between mb-4">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              Total Cash Received in Tranches
+            </span>
+            <span className="text-xl font-extrabold text-emerald-600">
+              ৳{money(totalReceiptsAmount)}
+            </span>
+          </div>
+          <span className="text-xs font-semibold text-slate-500">
+            {receipts.length} installment{receipts.length !== 1 ? 's' : ''} logged
+          </span>
+        </div>
+
+        {/* Receipts List */}
+        <div className="overflow-y-auto space-y-2.5 pr-1 flex-1">
+          {loading ? (
+            <div className="text-center py-12 text-slate-400 text-xs">Loading cash receipts…</div>
+          ) : receipts.length === 0 ? (
+            <div className="text-center py-12 text-slate-400 text-xs">
+              No cash receipts recorded yet for this month. Click "+ Receive Cash" above to log one.
+            </div>
+          ) : (
+            receipts.map((rcpt) => (
+              <div
+                key={rcpt.id}
+                className="border border-slate-200/80 hover:border-slate-300 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white transition"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-slate-900">
+                      ৳{money(rcpt.amount)}
+                    </span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                      {rcpt.paymentMethod}
+                    </span>
+                    {rcpt.referenceNo && (
+                      <span className="text-[11px] font-mono text-slate-400">
+                        Ref: {rcpt.referenceNo}
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-slate-600 mt-1">
+                    From: <span className="font-semibold text-slate-800">{rcpt.receivedFrom || 'Management'}</span>
+                    {' • '}
+                    Date: <span className="text-slate-500">{rcpt.receivedDate}</span>
+                  </p>
+
+                  {rcpt.note && (
+                    <p className="text-[11px] text-slate-500 italic mt-0.5">"{rcpt.note}"</p>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setEditingReceipt(rcpt)}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
+                    title="Edit"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(rcpt.id, rcpt.amount)}
+                    className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition"
+                    title="Delete"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Edit Single Receipt Modal */}
+      {editingReceipt && (
+        <ReceiveCashModal
+          initialData={editingReceipt}
+          rows={rows}
+          year={year}
+          month={month}
+          onClose={() => setEditingReceipt(null)}
+          onSaved={() => {
+            fetchReceipts();
+            onReceiptUpdated();
+          }}
+        />
+      )}
+
+      {/* Add Single Receipt from inside History Modal */}
+      {isAddingNew && (
+        <ReceiveCashModal
+          rows={rows}
+          year={year}
+          month={month}
+          onClose={() => setIsAddingNew(false)}
+          onSaved={() => {
+            fetchReceipts();
+            onReceiptUpdated();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Modal for Setting / Editing Budget Limit
+function EditBudgetModal({ row, rows = [], year, month, onClose, onSaved }) {
+  const [selectedCatId, setSelectedCatId] = useState(
+    row?.budgetCategoryId || rows?.[0]?.budgetCategoryId || ''
+  );
+
+  const selectedCategory = useMemo(() => {
+    if (row && row.budgetCategoryId) return row;
+    return rows.find((r) => String(r.budgetCategoryId) === String(selectedCatId)) || {};
+  }, [row, rows, selectedCatId]);
+
+  const [amount, setAmount] = useState(
+    selectedCategory.allocatedAmount !== undefined && selectedCategory.allocatedAmount !== null
+      ? String(selectedCategory.allocatedAmount)
+      : ''
+  );
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const isNew = !row.monthlyBudgetId;
+
+  const isNew = !selectedCategory.monthlyBudgetId;
+
+  const handleCategoryChange = (e) => {
+    const catId = e.target.value;
+    setSelectedCatId(catId);
+    const cat = rows.find((r) => String(r.budgetCategoryId) === String(catId));
+    if (cat) {
+      setAmount(
+        cat.allocatedAmount !== undefined && cat.allocatedAmount !== null
+          ? String(cat.allocatedAmount)
+          : ''
+      );
+    } else {
+      setAmount('');
+    }
+  };
 
   async function handleSubmit(e) {
     e.preventDefault();
     setSubmitting(true);
     setError('');
+
+    const targetCatId = selectedCategory.budgetCategoryId || selectedCatId;
+    if (!targetCatId) {
+      setError('Please select a category');
+      setSubmitting(false);
+      return;
+    }
+
     try {
       await saveMonthlyBudget({
-        budgetCategoryId: row.budgetCategoryId,
+        budgetCategoryId: targetCatId,
         year,
         month,
-        allocatedAmount: Number(amount) || 0,
+        allocatedAmount: amount === '' ? 0 : Number(amount),
         note,
       });
       onSaved();
@@ -82,10 +515,10 @@ function EditBudgetModal({ row, year, month, onClose, onSaved }) {
           <X size={16} />
         </button>
         <h2 className="text-lg font-bold text-slate-900 mb-0.5">
-          {isNew ? 'Set Budget' : 'Edit Budget'}
+          {isNew ? 'Set Budget Allocation' : 'Edit Budget Allocation'}
         </h2>
         <p className="text-xs text-slate-500 mb-4">
-          {row.name} — {MONTH_NAMES[month - 1]} {year}
+          For {MONTH_NAMES[month - 1]} {year}
         </p>
 
         {error && (
@@ -95,12 +528,40 @@ function EditBudgetModal({ row, year, month, onClose, onSaved }) {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {!row?.budgetCategoryId ? (
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Budget Category
+              </label>
+              <select
+                value={selectedCatId}
+                onChange={handleCategoryChange}
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+              >
+                {rows.map((cat) => (
+                  <option key={cat.budgetCategoryId} value={cat.budgetCategoryId}>
+                    {cat.name} {cat.allocatedAmount ? `(Current: ৳${money(cat.allocatedAmount)})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                Category
+              </span>
+              <span className="text-sm font-bold text-slate-900">{selectedCategory.name}</span>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Monthly Allocation (৳)
+              Monthly Budget Amount (৳)
             </label>
             <input
               type="number"
+              min="0"
+              step="any"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="e.g. 50000"
@@ -108,6 +569,7 @@ function EditBudgetModal({ row, year, month, onClose, onSaved }) {
               autoFocus
             />
           </div>
+
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
               Note <span className="text-slate-400 font-normal">(optional)</span>
@@ -116,10 +578,11 @@ function EditBudgetModal({ row, year, month, onClose, onSaved }) {
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={3}
-              placeholder="Why is this being set or changed?"
+              placeholder="Reason for setting or adjusting this budget..."
               className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition resize-none"
             />
           </div>
+
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
@@ -131,7 +594,7 @@ function EditBudgetModal({ row, year, month, onClose, onSaved }) {
             <button
               type="submit"
               disabled={submitting}
-              className="px-4.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs disabled:opacity-50 transition"
+              className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs disabled:opacity-50 transition"
             >
               {submitting ? 'Saving…' : isNew ? 'Set Budget' : 'Save Changes'}
             </button>
@@ -181,7 +644,7 @@ function BudgetLogModal({ row, year, month, onClose }) {
 
         <div className="overflow-y-auto space-y-3 pr-1">
           {loading ? (
-            <div className="text-center py-10 text-slate-400 text-xs">Loading…</div>
+            <div className="text-center py-10 text-slate-400 text-xs">Loading history…</div>
           ) : logs.length === 0 ? (
             <div className="text-center py-10 text-slate-400 text-xs">
               No changes recorded yet for this period.
@@ -245,11 +708,20 @@ export default function OfficeBudgetPage() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [rows, setRows] = useState([]);
-  const [totals, setTotals] = useState({ allocatedAmount: 0, spentAmount: 0, remainingAmount: 0 });
+  const [totals, setTotals] = useState({
+    allocatedAmount: 0,
+    spentAmount: 0,
+    remainingAmount: 0,
+    cashReceivedAmount: 0,
+    cashInHand: 0,
+    pendingCash: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState({});
   const [editingRow, setEditingRow] = useState(null);
   const [viewingLogsRow, setViewingLogsRow] = useState(null);
+  const [isReceivingCash, setIsReceivingCash] = useState(false);
+  const [isViewingReceipts, setIsViewingReceipts] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [search, setSearch] = useState('');
 
@@ -258,7 +730,16 @@ export default function OfficeBudgetPage() {
     try {
       const data = await getMonthlyBudgetSummary(year, month);
       setRows(data.rows || []);
-      setTotals(data.totals || { allocatedAmount: 0, spentAmount: 0, remainingAmount: 0 });
+      setTotals(
+        data.totals || {
+          allocatedAmount: 0,
+          spentAmount: 0,
+          remainingAmount: 0,
+          cashReceivedAmount: 0,
+          cashInHand: 0,
+          pendingCash: 0,
+        }
+      );
     } catch (err) {
       console.error('Failed to load budget summary', err);
     } finally {
@@ -306,32 +787,58 @@ export default function OfficeBudgetPage() {
     setExpanded((e) => ({ ...e, [id]: !e[id] }));
   }
 
-  // Filtered rows for search
   const filteredRows = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return rows;
     return rows.filter((r) => r.name.toLowerCase().includes(term));
   }, [rows, search]);
 
+  const summaryTotals = useMemo(() => {
+    let calcAllocated = 0;
+    let calcSpent = 0;
+
+    rows.forEach((r) => {
+      const rAlloc = Number(r.allocatedAmount) || 0;
+      const subSpent = (r.subcategories || []).reduce(
+        (sum, s) => sum + (Number(s.spentAmount) || 0),
+        0
+      );
+      const rSpent = Number(r.spentAmount) || subSpent || 0;
+      calcAllocated += rAlloc;
+      calcSpent += rSpent;
+    });
+
+    const finalAllocated = totals.allocatedAmount > 0 ? Number(totals.allocatedAmount) : calcAllocated;
+    const finalSpent = totals.spentAmount > 0 ? Number(totals.spentAmount) : calcSpent;
+    const finalCashReceived = Number(totals.cashReceivedAmount) || 0;
+    const finalCashInHand = finalCashReceived - finalSpent;
+
+    return {
+      allocatedAmount: finalAllocated,
+      spentAmount: finalSpent,
+      remainingAmount: finalAllocated - finalSpent,
+      cashReceivedAmount: finalCashReceived,
+      cashInHand: finalCashInHand,
+      pendingCash: Math.max(0, finalAllocated - finalCashReceived),
+    };
+  }, [rows, totals]);
+
   const totalBurnRate =
-    totals.allocatedAmount > 0
-      ? Math.min(100, (totals.spentAmount / totals.allocatedAmount) * 100)
+    summaryTotals.allocatedAmount > 0
+      ? Math.min(100, (summaryTotals.spentAmount / summaryTotals.allocatedAmount) * 100)
       : 0;
 
-  const remainingHealth =
-    totals.allocatedAmount > 0
-      ? Math.max(0, Math.min(100, (totals.remainingAmount / totals.allocatedAmount) * 100))
-      : 100;
-
-  const allWithinBudget = rows.every((r) => (r.remainingAmount || 0) >= 0);
+  const allWithinBudget = rows.every((r) => {
+    const allocated = Number(r.allocatedAmount) || 0;
+    const spent = Number(r.spentAmount) || 0;
+    return allocated - spent >= 0;
+  });
 
   return (
     <div className="min-h-screen w-full bg-[#f8fafc] text-slate-800 flex flex-col font-sans">
       <Topbar />
 
-      {/* Main Container: Full width matching Topbar with generous padding */}
-      <main className="w-full px-4 sm:px-6 lg:px-10 py-5 space-y-5">
-        {/* Breadcrumb */}
+      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <Breadcrumb
           items={[
             { label: 'Home', to: '/dashboard' },
@@ -347,25 +854,33 @@ export default function OfficeBudgetPage() {
               Office Budget
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1 font-normal">
-              Allocate monthly spending limits per category and track expenditures
+              Track allocated limits, cash received in installments, and actual expenses
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setIsViewingReceipts(true)}
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-white border border-slate-200/90 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition"
+            >
+              <Coins size={15} className="text-emerald-600" />
+              Cash Inflow Log
+            </button>
+
             <button
               type="button"
               onClick={() => navigate('/accounts-module/office-expense-list')}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200/90 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition"
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-white border border-slate-200/90 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition"
             >
               <FileText size={15} className="text-slate-400" />
               Expense Ledger
-              <ChevronDown size={14} className="text-slate-400 ml-0.5" />
             </button>
 
             <button
               type="button"
               onClick={() => navigate('/accounts-module/budget-categories')}
-              className="inline-flex items-center gap-2 px-4.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs sm:text-sm font-semibold shadow-xs transition"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs sm:text-sm font-semibold shadow-xs transition"
             >
               <Settings size={15} />
               Manage Categories
@@ -373,7 +888,7 @@ export default function OfficeBudgetPage() {
           </div>
         </div>
 
-        {/* Budget Month Selector Bar */}
+        {/* Budget Month Selector Bar with Receive Cash CTA */}
         <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:px-6 sm:py-3.5 shadow-2xs flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
@@ -389,7 +904,7 @@ export default function OfficeBudgetPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
               onClick={handlePrevMonth}
@@ -399,7 +914,6 @@ export default function OfficeBudgetPage() {
               <ChevronLeft size={16} />
             </button>
 
-            {/* Seamless Month-Year Selector Dropdown */}
             <div className="relative inline-flex items-center border border-slate-200 rounded-lg px-3 py-1.5 bg-white shadow-2xs">
               <select
                 value={`${month}-${year}`}
@@ -410,7 +924,6 @@ export default function OfficeBudgetPage() {
                 }}
                 className="appearance-none bg-transparent text-xs font-bold text-slate-800 pr-5 focus:outline-none cursor-pointer"
               >
-                {/* 2 years back and 2 years forward */}
                 {[-1, 0, 1].map((yearOffset) => {
                   const targetYear = now.getFullYear() + yearOffset;
                   return MONTH_NAMES.map((mName, mIdx) => (
@@ -432,82 +945,139 @@ export default function OfficeBudgetPage() {
               <ChevronRight size={16} />
             </button>
 
+            {/* Quick Receive Cash Action */}
             <button
               type="button"
-              onClick={() => {
-                if (rows.length > 0) setEditingRow(rows[0]);
-              }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition ml-1"
+              onClick={() => setIsReceivingCash(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition ml-1 cursor-pointer"
+            >
+              <ArrowDownLeft size={14} />
+              Receive Cash
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setEditingRow({})}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
             >
               <Plus size={14} />
-              Create Month
+              Set Budget
             </button>
           </div>
         </div>
 
-        {/* 3 Metric Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Card 1: TOTAL ALLOCATED */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs flex flex-col justify-between h-[126px]">
+        {/* 4 Metric Cards for Real-World Cash Flow & Budget Control */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: TOTAL ALLOCATED BUDGET */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs flex flex-col justify-between min-h-[125px]">
             <div className="flex items-center gap-2.5">
-              <div className="w-6 h-6 rounded-md bg-slate-100 text-slate-600 flex items-center justify-center">
-                <Wallet size={14} />
+              <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
+                <Wallet size={15} />
               </div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Total Allocated
+                Total Budget
               </span>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                ৳{money(totals.allocatedAmount)}
+            <div className="flex items-baseline justify-between mt-3">
+              <span className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+                ৳{money(summaryTotals.allocatedAmount)}
               </span>
-              <span className="text-xs text-slate-400 font-medium">
-                Across {rows.length} categories
+              <span className="text-[11px] text-slate-400 font-medium">
+                Approved limit
               </span>
             </div>
           </div>
 
-          {/* Card 2: TOTAL SPENT */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs flex flex-col justify-between h-[126px]">
+          {/* Card 2: CASH RECEIVED (TRANCHES) */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs flex flex-col justify-between min-h-[125px]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <Coins size={15} />
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Cash Received
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsReceivingCash(true)}
+                className="text-[10px] font-bold text-emerald-600 hover:underline"
+              >
+                + Add
+              </button>
+            </div>
+            <div className="flex items-baseline justify-between mt-3">
+              <span className="text-xl sm:text-2xl font-extrabold text-emerald-600 tracking-tight">
+                ৳{money(summaryTotals.cashReceivedAmount)}
+              </span>
+              <span className="text-[11px] text-slate-400 font-medium">
+                {summaryTotals.pendingCash > 0
+                  ? `৳${money(summaryTotals.pendingCash)} pending`
+                  : 'Fully disbursed'}
+              </span>
+            </div>
+          </div>
+
+          {/* Card 3: TOTAL SPENT */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs flex flex-col justify-between min-h-[125px]">
             <div className="flex items-center gap-2.5">
-              <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center">
-                <CreditCard size={14} />
+              <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                <CreditCard size={15} />
               </div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Total Spent
               </span>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl sm:text-3xl font-extrabold text-blue-600 tracking-tight">
-                ৳{money(totals.spentAmount)}
+            <div className="flex items-baseline justify-between mt-3">
+              <span className="text-xl sm:text-2xl font-extrabold text-blue-600 tracking-tight">
+                ৳{money(summaryTotals.spentAmount)}
               </span>
-              <span className="text-xs text-slate-400 font-medium">
-                {totalBurnRate.toFixed(0)}% of total budget
+              <span className="text-[11px] text-slate-400 font-medium">
+                {totalBurnRate.toFixed(0)}% of budget
               </span>
             </div>
           </div>
 
-          {/* Card 3: REMAINING BALANCE */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs flex flex-col justify-between h-[126px]">
+          {/* Card 4: CASH IN HAND (RECEIVED - SPENT) */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs flex flex-col justify-between min-h-[125px]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                  <Wallet size={14} />
+                <div
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                    summaryTotals.cashInHand < 0
+                      ? 'bg-rose-50 text-rose-600'
+                      : 'bg-emerald-50 text-emerald-600'
+                  }`}
+                >
+                  <BadgeDollarSign size={15} />
                 </div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Remaining Balance
+                  Cash in Hand
                 </span>
               </div>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 ring-1 ring-emerald-500/20">
-                <TrendingUp size={11} /> {remainingHealth.toFixed(0)}% Healthy
-              </span>
+
+              {summaryTotals.cashInHand < 0 ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-rose-50 text-rose-600 ring-1 ring-rose-500/20">
+                  Deficit
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-600 ring-1 ring-emerald-500/20">
+                  Available
+                </span>
+              )}
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl sm:text-3xl font-extrabold text-emerald-600 tracking-tight">
-                ৳{money(totals.remainingAmount)}
+
+            <div className="flex items-baseline justify-between mt-3">
+              <span
+                className={`text-xl sm:text-2xl font-extrabold tracking-tight ${
+                  summaryTotals.cashInHand < 0 ? 'text-rose-600' : 'text-emerald-600'
+                }`}
+              >
+                ৳{money(summaryTotals.cashInHand)}
               </span>
-              <span className="text-xs text-slate-400 font-medium">
-                Available to spend
+              <span className="text-[11px] text-slate-400 font-medium">
+                Received − Spent
               </span>
             </div>
           </div>
@@ -515,14 +1085,11 @@ export default function OfficeBudgetPage() {
 
         {/* Category Allocations Table Card */}
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
-          {/* Table Toolbar */}
           <div className="p-4 sm:px-6 sm:py-4.5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-bold text-slate-900">
-                Category Allocations
-              </h2>
+              <h2 className="text-base font-bold text-slate-900">Category Allocations</h2>
               <p className="text-xs text-slate-400 font-normal">
-                {rows.length} budget heads defined
+                {rows.length} budget heads defined for this period
               </p>
             </div>
 
@@ -536,7 +1103,7 @@ export default function OfficeBudgetPage() {
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search categories"
+                  placeholder="Search categories..."
                   className="w-48 sm:w-64 h-9 pl-8 pr-3 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
                 />
               </div>
@@ -551,17 +1118,16 @@ export default function OfficeBudgetPage() {
             </div>
           </div>
 
-          {/* Table Container */}
           <div className="w-full overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 bg-white text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  <th className="py-3.5 px-6 min-w-[240px]">Category</th>
-                  <th className="py-3.5 px-4 min-w-[120px]">Budget</th>
-                  <th className="py-3.5 px-4 min-w-[120px]">Spent</th>
-                  <th className="py-3.5 px-4 min-w-[120px]">Remaining</th>
-                  <th className="py-3.5 px-4 min-w-[170px]">Budget Utilization</th>
-                  <th className="py-3.5 pr-6 pl-2 min-w-[210px] text-right">Actions</th>
+                <tr className="border-b border-slate-100 bg-slate-50/50 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <th className="py-3.5 px-6 min-w-[220px]">Category</th>
+                  <th className="py-3.5 px-4 min-w-[110px]">Budget</th>
+                  <th className="py-3.5 px-4 min-w-[110px]">Spent</th>
+                  <th className="py-3.5 px-4 min-w-[110px]">Remaining</th>
+                  <th className="py-3.5 px-4 min-w-[150px]">Utilization</th>
+                  <th className="py-3.5 pr-6 pl-2 min-w-[220px] text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -579,9 +1145,13 @@ export default function OfficeBudgetPage() {
                   </tr>
                 ) : (
                   filteredRows.map((row) => {
-                    const allocated = row.allocatedAmount || 0;
-                    const spent = row.spentAmount || 0;
-                    const remaining = row.remainingAmount || 0;
+                    const subSpentTotal = (row.subcategories || []).reduce(
+                      (acc, s) => acc + (Number(s.spentAmount) || 0),
+                      0
+                    );
+                    const allocated = Number(row.allocatedAmount) || 0;
+                    const spent = Number(row.spentAmount) || subSpentTotal || 0;
+                    const remaining = allocated - spent;
                     const pct = allocated > 0 ? (spent / allocated) * 100 : 0;
                     const overBudget = remaining < 0;
                     const hasSubs = row.subcategories && row.subcategories.length > 0;
@@ -591,8 +1161,12 @@ export default function OfficeBudgetPage() {
                     let statusColor = 'text-emerald-600';
                     let barColor = 'bg-emerald-500';
 
-                    if (spent === 0) {
-                      statusLabel = 'Not used';
+                    if (allocated === 0 && spent === 0) {
+                      statusLabel = 'Not allocated';
+                      statusColor = 'text-slate-400';
+                      barColor = 'bg-slate-200';
+                    } else if (spent === 0) {
+                      statusLabel = 'Unspent';
                       statusColor = 'text-slate-400';
                       barColor = 'bg-slate-200';
                     } else if (overBudget) {
@@ -607,8 +1181,7 @@ export default function OfficeBudgetPage() {
 
                     return (
                       <Fragment key={row.budgetCategoryId}>
-                        <tr className="hover:bg-slate-50/60 transition">
-                          {/* Category Name & Icon */}
+                        <tr className="hover:bg-slate-50/70 transition">
                           <td className="py-4 px-6">
                             <div className="flex items-center gap-3">
                               {hasSubs ? (
@@ -623,8 +1196,8 @@ export default function OfficeBudgetPage() {
                                 <span className="w-5 shrink-0" />
                               )}
 
-                              <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                                <Folder size={17} />
+                              <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                                <Folder size={15} />
                               </div>
 
                               <div className="min-w-0">
@@ -638,30 +1211,26 @@ export default function OfficeBudgetPage() {
                             </div>
                           </td>
 
-                          {/* Budget */}
                           <td className="py-4 px-4 font-bold text-slate-900 text-xs sm:text-sm whitespace-nowrap">
                             ৳{money(allocated)}
                           </td>
 
-                          {/* Spent */}
                           <td className="py-4 px-4 font-semibold text-slate-600 text-xs sm:text-sm whitespace-nowrap">
                             ৳{money(spent)}
                           </td>
 
-                          {/* Remaining */}
                           <td className="py-4 px-4 font-bold text-xs sm:text-sm whitespace-nowrap">
                             <span className={overBudget ? 'text-rose-600' : 'text-emerald-600'}>
                               ৳{money(remaining)}
                             </span>
                           </td>
 
-                          {/* Budget Utilization Progress Bar */}
                           <td className="py-4 px-4">
-                            <div className="w-full max-w-[150px]">
+                            <div className="w-full max-w-[130px]">
                               <div className="flex items-center justify-between text-xs mb-1.5 font-medium">
                                 <span className={statusColor}>{statusLabel}</span>
                                 <span className="font-bold text-slate-700">
-                                  {pct.toFixed(pct % 1 === 0 ? 0 : 2)}%
+                                  {pct.toFixed(pct % 1 === 0 ? 0 : 1)}%
                                 </span>
                               </div>
                               <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
@@ -673,13 +1242,13 @@ export default function OfficeBudgetPage() {
                             </div>
                           </td>
 
-                          {/* Action Buttons: Full Width, Never Cut Off */}
                           <td className="py-4 pr-6 pl-2 text-right">
                             <div className="inline-flex items-center justify-end gap-1.5 shrink-0">
                               <button
                                 type="button"
                                 onClick={() => setViewingLogsRow(row)}
                                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100 transition whitespace-nowrap"
+                                title="View change history"
                               >
                                 <Eye size={13} />
                                 View
@@ -688,43 +1257,79 @@ export default function OfficeBudgetPage() {
                               <button
                                 type="button"
                                 onClick={() => setEditingRow(row)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200/80 transition whitespace-nowrap"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition whitespace-nowrap"
                               >
                                 <Pencil size={12} />
-                                Edit
+                                {row.monthlyBudgetId ? 'Edit' : 'Set Budget'}
                               </button>
 
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(row)}
-                                disabled={!row.monthlyBudgetId || deletingId === row.monthlyBudgetId}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 text-rose-600 hover:bg-rose-100 disabled:opacity-30 disabled:cursor-not-allowed transition whitespace-nowrap"
-                              >
-                                <Trash2 size={12} />
-                                Delete
-                              </button>
+                              {row.monthlyBudgetId ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(row)}
+                                  disabled={deletingId === row.monthlyBudgetId}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200/60 shadow-2xs transition whitespace-nowrap cursor-pointer"
+                                  title="Remove budget allocation"
+                                >
+                                  <Trash2 size={12} />
+                                  {deletingId === row.monthlyBudgetId ? 'Deleting…' : 'Delete'}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-100/80 text-slate-400 border border-slate-200/60 cursor-not-allowed transition whitespace-nowrap"
+                                  title="No budget allocated to delete for this month"
+                                >
+                                  <Trash2 size={12} />
+                                  Delete
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
 
-                        {/* Nested Subcategories */}
                         {isOpen &&
                           hasSubs &&
-                          row.subcategories.map((sub) => (
-                            <tr key={sub.budgetCategoryId} className="bg-slate-50/50">
-                              <td className="py-2.5 px-6 pl-14 text-xs text-slate-600 flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-                                {sub.name}
-                              </td>
-                              <td className="py-2.5 px-4 text-xs text-slate-400 font-mono whitespace-nowrap">—</td>
-                              <td className="py-2.5 px-4 text-xs font-semibold text-slate-600 whitespace-nowrap">
-                                ৳{money(sub.spentAmount)}
-                              </td>
-                              <td className="py-2.5 px-4 text-xs text-slate-400 font-mono whitespace-nowrap">—</td>
-                              <td className="py-2.5 px-4 text-xs text-slate-400 font-mono">—</td>
-                              <td className="py-2.5 pr-6 pl-2" />
-                            </tr>
-                          ))}
+                          row.subcategories.map((sub) => {
+                            const subAlloc = Number(sub.allocatedAmount) || 0;
+                            const subSp = Number(sub.spentAmount) || 0;
+                            const subRem = subAlloc > 0 ? subAlloc - subSp : null;
+
+                            return (
+                              <tr key={sub.budgetCategoryId} className="bg-slate-50/50">
+                                <td className="py-2.5 px-6 pl-14 text-xs text-slate-600 flex items-center gap-2">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                                  {sub.name}
+                                </td>
+                                <td className="py-2.5 px-4 text-xs text-slate-600 font-medium whitespace-nowrap">
+                                  {subAlloc > 0 ? `৳${money(subAlloc)}` : '—'}
+                                </td>
+                                <td className="py-2.5 px-4 text-xs font-semibold text-slate-600 whitespace-nowrap">
+                                  ৳{money(subSp)}
+                                </td>
+                                <td className="py-2.5 px-4 text-xs font-medium whitespace-nowrap">
+                                  {subRem !== null ? (
+                                    <span className={subRem < 0 ? 'text-rose-600' : 'text-emerald-600'}>
+                                      ৳{money(subRem)}
+                                    </span>
+                                  ) : (
+                                    '—'
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-4 text-xs text-slate-400 font-mono">—</td>
+                                <td className="py-2.5 pr-6 pl-2 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingRow(sub)}
+                                    className="text-[11px] font-semibold text-blue-600 hover:underline px-2 py-1"
+                                  >
+                                    {sub.monthlyBudgetId ? 'Edit' : 'Set'}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                       </Fragment>
                     );
                   })
@@ -733,14 +1338,16 @@ export default function OfficeBudgetPage() {
             </table>
           </div>
 
-          {/* Table Footer Banner */}
           <div className="px-6 py-3.5 bg-white border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
             <div className="flex items-center gap-2 text-slate-600">
-              <CheckCircle2 size={15} className="text-emerald-500" />
+              <CheckCircle2
+                size={15}
+                className={allWithinBudget ? 'text-emerald-500' : 'text-amber-500'}
+              />
               <span>
                 {allWithinBudget
-                  ? 'All category budgets are within their allocated limits.'
-                  : 'Some category budgets require review.'}
+                  ? 'All category budgets are currently within allocated limits.'
+                  : 'One or more category budgets have exceeded their allocated limits.'}
               </span>
             </div>
             <span className="text-slate-400">
@@ -750,10 +1357,33 @@ export default function OfficeBudgetPage() {
         </div>
       </main>
 
-      {/* Edit Budget Modal */}
+      {/* Receive Cash Modal */}
+      {isReceivingCash && (
+        <ReceiveCashModal
+          rows={rows}
+          year={year}
+          month={month}
+          onClose={() => setIsReceivingCash(false)}
+          onSaved={load}
+        />
+      )}
+
+      {/* Cash Inflow Receipts History Modal */}
+      {isViewingReceipts && (
+        <CashReceiptsListModal
+          year={year}
+          month={month}
+          rows={rows}
+          onClose={() => setIsViewingReceipts(false)}
+          onReceiptUpdated={load}
+        />
+      )}
+
+      {/* Set / Edit Budget Modal */}
       {editingRow && (
         <EditBudgetModal
           row={editingRow}
+          rows={rows}
           year={year}
           month={month}
           onClose={() => setEditingRow(null)}
