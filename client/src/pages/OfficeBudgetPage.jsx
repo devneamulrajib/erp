@@ -938,8 +938,7 @@ function BudgetRequestReviewModal({ row, year, month, onClose, onDone }) {
                   <TriangleAlert size={14} className="shrink-0 mt-0.5" />
                   <span>
                     The current preview payslip total (৳{money(slipTotals.net)}) doesn't match the requested amount
-                    (৳{money(requested)}) — deductions or employees may have changed since the request was submitted.
-                    {' '}
+                    (৳{money(requested)}) — deductions or employees may have changed since the request was submitted.{' '}
                     <button
                       type="button"
                       onClick={() => setApprovedAmount(String(slipTotals.net))}
@@ -1022,7 +1021,7 @@ function BudgetRequestReviewModal({ row, year, month, onClose, onDone }) {
                   onChange={(e) => setReason(e.target.value)}
                   rows={3}
                   placeholder="e.g. Deductions look incomplete, please re-generate payslips first..."
-                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition resize-none"
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:rose-500/20 focus:border-rose-500 transition resize-none"
                   autoFocus
                   required
                 />
@@ -1505,7 +1504,8 @@ export default function OfficeBudgetPage() {
                   <th className="py-3.5 px-4 min-w-[110px]">Budget</th>
                   <th className="py-3.5 px-4 min-w-[120px]">Cash Received</th>
                   <th className="py-3.5 px-4 min-w-[110px]">Spent</th>
-                  <th className="py-3.5 px-4 min-w-[110px]">Remaining</th>
+                  <th className="py-3.5 px-4 min-w-[120px]">Cash Remaining</th>
+                  <th className="py-3.5 px-4 min-w-[120px]">Budget Remaining</th>
                   <th className="py-3.5 px-4 min-w-[150px]">Utilization</th>
                   <th className="py-3.5 pr-6 pl-2 min-w-[220px] text-right">Actions</th>
                 </tr>
@@ -1513,13 +1513,13 @@ export default function OfficeBudgetPage() {
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-16 text-slate-400 text-xs">
+                    <td colSpan={8} className="text-center py-16 text-slate-400 text-xs">
                       Loading budget entries...
                     </td>
                   </tr>
                 ) : filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-16 text-slate-400 text-xs">
+                    <td colSpan={8} className="text-center py-16 text-slate-400 text-xs">
                       No categories found matching your search.
                     </td>
                   </tr>
@@ -1532,9 +1532,10 @@ export default function OfficeBudgetPage() {
                     const allocated = Number(row.allocatedAmount) || 0;
                     const spent = Number(row.spentAmount) || subSpentTotal || 0;
                     const cashReceived = Number(row.cashReceivedAmount) || 0;
-                    const remaining = allocated - spent;
+                    const budgetRemaining = allocated - spent;
+                    const cashRemaining = cashReceived - spent;
                     const pct = allocated > 0 ? (spent / allocated) * 100 : 0;
-                    const overBudget = remaining < 0;
+                    const overBudget = budgetRemaining < 0;
                     const hasSubs = row.subcategories && row.subcategories.length > 0;
                     const isOpen = !!expanded[row.budgetCategoryId];
 
@@ -1617,8 +1618,18 @@ export default function OfficeBudgetPage() {
                           </td>
 
                           <td className="py-4 px-4 font-bold text-xs sm:text-sm whitespace-nowrap">
-                            <span className={overBudget ? 'text-rose-600' : 'text-emerald-600'}>
-                              ৳{money(remaining)}
+                            {cashReceived > 0 || spent > 0 ? (
+                              <span className={cashRemaining < 0 ? 'text-rose-600' : 'text-emerald-600'}>
+                                ৳{money(cashRemaining)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 font-normal">—</span>
+                            )}
+                          </td>
+
+                          <td className="py-4 px-4 font-bold text-xs sm:text-sm whitespace-nowrap">
+                            <span className={budgetRemaining < 0 ? 'text-rose-600' : 'text-emerald-600'}>
+                              ৳{money(budgetRemaining)}
                             </span>
                           </td>
 
@@ -1722,6 +1733,7 @@ export default function OfficeBudgetPage() {
                                 <td className="py-2.5 px-4 text-xs font-semibold text-slate-600 whitespace-nowrap">
                                   ৳{money(subSp)}
                                 </td>
+                                <td className="py-2.5 px-4 text-xs text-slate-400 font-mono">—</td>
                                 <td className="py-2.5 px-4 text-xs font-medium whitespace-nowrap">
                                   {subRem !== null ? (
                                     <span className={subRem < 0 ? 'text-rose-600' : 'text-emerald-600'}>
