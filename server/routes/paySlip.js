@@ -12,6 +12,7 @@ const {
   Employee, EmployeeAdvance, PaySlip, SalaryDeduction,
   Voucher, VoucherEntry, ChartOfAccount, OfficeExpense, BudgetCategory,
 } = require('../models/associations');
+const StandingDeduction = require('../models/StandingDeduction');
 
 async function generateVoucherNo() {
   const d = new Date();
@@ -29,9 +30,6 @@ async function resolveAccountId(name) {
   return acc ? acc.id : null;
 }
 
-// Finds the top-level "Salary" budget category (case-insensitive), if one
-// exists, so salary payments can auto-deduct from it without the admin
-// having to pick it every time. Admin can still override via req.body.budgetCategory.
 async function resolveSalaryBudgetCategory() {
   try {
     return await BudgetCategory.findOne({ where: { name: 'Salary', parentId: null } });
@@ -39,6 +37,72 @@ async function resolveSalaryBudgetCategory() {
     return null;
   }
 }
+
+/* ---------------- Standing (recurring) deductions/additions ---------------- */
+
+router.get('/standing-deductions', auth, async (req, res) => {
+  try {
+    const rows = await StandingDeduction.findAll({ order: [['createdAt', 'DESC']] });
+    const employeeIds = [...new Set(rows.filter((r) => r.employeeId).map((r) => r.employeeId))];
+    const employees = employeeIds.length
+      ? await Employee.findAll({ where: { id: employeeIds }, attributes: ['id', 'name', 'code'] })
+      : [];
+    const byId = Object.fromEntries(employees.map((e) => [e.id, e]));
+    res.json(rows.map((r) => ({ ...r.toJSON(), employee: r.employeeId ? byId[r.employeeId] : null })));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/standing-deductions', auth, async (req, res) => {
+  try {
+    const { title, amount, type, appliesTo, employeeId, startMonth, startYear } = req.body;
+    if (!title || !amount) {
+      return res.status(400).json({ message: 'Title and amount are required' });
+    }
+    const scope = appliesTo === 'Employee' ? 'Employee' : 'All';
+    if (scope === 'Employee' && !employeeId) {
+      return res.status(400).json({ message: 'Select an employee when scope is "Employee"' });
+    }
+
+    const row = await StandingDeduction.create({
+      title,
+      amount: Number(amount),
+      type: type === 'Addition' ? 'Addition' : 'Deduction',
+      appliesTo: scope,
+      employeeId: scope === 'Employee' ? employeeId : null,
+      startMonth: startMonth ? Number(startMonth) : null,
+      startYear: startYear ? Number(startYear) : null,
+      addedBy: req.user?.name || 'Admin',
+    });
+
+    res.status(201).json(row);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.patch('/standing-deductions/:id/toggle', auth, async (req, res) => {
+  try {
+    const row = await StandingDeduction.findByPk(req.params.id);
+    if (!row) return res.status(404).json({ message: 'Not found' });
+    row.active = !row.active;
+    await row.save();
+    res.json(row);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.delete('/standing-deductions/:id', auth, async (req, res) => {
+  try {
+    const deleted = await StandingDeduction.destroy({ where: { id: req.params.id } });
+    if (!deleted) return res.status(404).json({ message: 'Not found' });
+    res.json({ deleted: true });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 /* ---------------- Preview (no DB writes) ---------------- */
 
@@ -53,8 +117,9 @@ router.get('/preview', auth, async (req, res) => {
     const rows = [];
     for (const emp of employees) {
       const gross = grossOf(emp);
-      const { total: advanceDeduction, breakdown } = await computeAdvanceDeduction(emp.id);
-      const { deductionTotal, additionTotal, deductionRows, additionRows } = await computeAdjustments(emp.id, year, month);
+      const { total: advanceDeduction, breakdown } = await computeAdvanceDeduction(emp.id, year, month);
+      const { deductionTotal, additionTotal, deductionRows, additionRows, standingRows } =
+        await computeAdjustments(emp.id, year, month);
       const totalDeduction = advanceDeduction + deductionTotal;
 
       rows.push({
@@ -71,6 +136,7 @@ router.get('/preview', auth, async (req, res) => {
         breakdown,
         deductionRows,
         additionRows,
+        standingRows,
       });
     }
 
@@ -113,8 +179,6 @@ router.post('/generate', auth, async (req, res) => {
         slip = await PaySlip.create(data);
         isNew = true;
       }
-      // isNew tells the frontend which rows can be safely "Undone" (deleted)
-      // right after this generate call without losing anything that existed before.
       results.push({ ...slip.toJSON(), isNew });
     }
 
@@ -144,7 +208,6 @@ router.post('/deductions', auth, async (req, res) => {
       note: note || '', type: kind, addedBy: req.user?.name || 'Admin',
     });
 
-    // Keep an already-generated Draft in sync immediately.
     await syncDraftPaySlip(employeeId, Number(year), Number(month), req.user?.name);
 
     res.status(201).json(row);
@@ -213,8 +276,6 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// Full payroll report PDF — same filters as the list endpoint. Declared
-// before '/:id' routes so 'report' is never mistaken for an :id param.
 router.get('/report/pdf', auth, async (req, res) => {
   try {
     const { year, month, status, employeeId } = req.query;
@@ -262,6 +323,7 @@ router.get('/:id', auth, async (req, res) => {
     res.json({
       ...slip.toJSON(),
       advanceBreakdown: slip.advanceBreakdown ? JSON.parse(slip.advanceBreakdown) : [],
+      standingBreakdown: slip.standingBreakdown ? JSON.parse(slip.standingBreakdown) : [],
       deductions: adjustments.filter((a) => a.type !== 'Addition'),
       additions: adjustments.filter((a) => a.type === 'Addition'),
     });
@@ -270,7 +332,6 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-// Individual payslip PDF.
 router.get('/:id/pdf', auth, async (req, res) => {
   try {
     const slip = await PaySlip.findByPk(req.params.id, {
@@ -288,6 +349,7 @@ router.get('/:id/pdf', auth, async (req, res) => {
 
     const slipData = {
       ...slip.toJSON(),
+      standingBreakdown: slip.standingBreakdown ? JSON.parse(slip.standingBreakdown) : [],
       deductions: adjustments.filter((a) => a.type !== 'Addition'),
       additions: adjustments.filter((a) => a.type === 'Addition'),
     };
@@ -319,10 +381,8 @@ router.post('/:id/pay', auth, async (req, res) => {
       return res.status(400).json({ message: 'This payslip is already paid' });
     }
 
-    // Recompute fresh right before paying — advances/deductions could have
-    // changed since the draft was last generated or synced.
-    const { total: advanceDeduction, breakdown } = await computeAdvanceDeduction(slip.employeeId);
-    const { deductionTotal, additionTotal, deductionRows, additionRows } =
+    const { total: advanceDeduction, breakdown } = await computeAdvanceDeduction(slip.employeeId, slip.year, slip.month);
+    const { deductionTotal, additionTotal, deductionRows, additionRows, standingRows } =
       await computeAdjustments(slip.employeeId, slip.year, slip.month);
     const totalDeduction = advanceDeduction + deductionTotal;
     const netSalary = Number(slip.grossSalary) - totalDeduction + additionTotal;
@@ -334,11 +394,6 @@ router.post('/:id/pay', auth, async (req, res) => {
       return res.status(400).json({ message: 'Debit/Credit account not found in Chart of Accounts' });
     }
 
-    // Resolve which Office Budget category this salary payment deducts
-    // from: explicit choice from the Pay dialog wins, otherwise auto-detect
-    // a top-level category named "Salary". If neither exists, the payment
-    // still goes through (so payroll is never blocked by budget setup),
-    // but a warning is returned so the admin knows nothing was deducted.
     let resolvedCategoryId = budgetCategory || null;
     let budgetWarning = null;
     if (!resolvedCategoryId) {
@@ -361,9 +416,6 @@ router.post('/:id/pay', auth, async (req, res) => {
     await VoucherEntry.create({ accountId: drAccountId, debit: netSalary, credit: 0, voucherId: voucher.id }, { transaction: t });
     await VoucherEntry.create({ accountId: crAccountId, debit: 0, credit: netSalary, voucherId: voucher.id }, { transaction: t });
 
-    // This is the actual fix: record an OfficeExpense sharing the same
-    // voucher, so this payment counts against the Salary (or chosen)
-    // budget category — same mechanism every other office spend uses.
     let officeExpense = null;
     if (resolvedCategoryId) {
       officeExpense = await OfficeExpense.create({
@@ -400,6 +452,7 @@ router.post('/:id/pay', auth, async (req, res) => {
     slip.totalDeduction = totalDeduction;
     slip.netSalary = netSalary;
     slip.advanceBreakdown = JSON.stringify(breakdown);
+    slip.standingBreakdown = JSON.stringify(standingRows);
     slip.status = 'Paid';
     slip.paidDate = new Date();
     slip.voucherId = voucher.id;
@@ -430,10 +483,6 @@ router.post('/:id/pay', auth, async (req, res) => {
   }
 });
 
-// Reverses a paid payslip: deletes the linked OfficeExpense + Voucher (so
-// the budget deduction is undone), restores any advance balances that were
-// paid down, reverts one-off deductions/bonuses back to Pending, and puts
-// the payslip back to Draft. Safe to re-run generate/pay afterward.
 router.post('/:id/unpay', auth, async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -489,8 +538,6 @@ router.post('/:id/unpay', auth, async (req, res) => {
       performedBy: req.user?.name || 'Admin',
     });
 
-    // Refresh the draft numbers from current advances/deductions (should
-    // match what was reverted, but this guarantees consistency).
     const refreshed = await syncDraftPaySlip(slip.employeeId, slip.year, slip.month, req.user?.name);
 
     res.json(refreshed || slip);

@@ -30,11 +30,9 @@ const findApprovedLeave = (employeeId, date) =>
 const emptyCounts = () => ({ present: 0, absent: 0, leave: 0, holiday: 0, off: 0 });
 function bump(counts, status) {
   const key = status.toLowerCase();
-  if (key in counts) counts[key] += 1; // 'Pending' (today, unmarked) isn't counted
+  if (key in counts) counts[key] += 1;
 }
 
-// One entry per day from max(from, joining date) to min(to, today).
-// Order of precedence: stored record → weekly off → approved leave → Absent.
 async function buildDays(employeeId, joiningDate, from, to) {
   const today = todayStr();
   const start = joiningDate && joiningDate > from ? joiningDate : from;
@@ -57,7 +55,7 @@ async function buildDays(employeeId, joiningDate, from, to) {
   ]);
 
   const byDate = {};
-  records.forEach((r) => { byDate[r.date] = r.status; }); // if duplicated, latest row wins
+  records.forEach((r) => { byDate[r.date] = r.status; });
 
   const days = [];
   for (let t = parseDay(start).getTime(); t <= parseDay(end).getTime(); t += 86400000) {
@@ -65,7 +63,7 @@ async function buildDays(employeeId, joiningDate, from, to) {
     const off = isWeeklyOff(date);
     let status = byDate[date];
 
-    if (status === 'Leave' && off) status = 'Off'; // leave never consumes a weekly off
+    if (status === 'Leave' && off) status = 'Off';
     if (!status) {
       if (off) status = 'Off';
       else if (leaves.some((l) => l.fromDate <= date && date <= l.toDate)) status = 'Leave';
@@ -78,6 +76,16 @@ async function buildDays(employeeId, joiningDate, from, to) {
 }
 
 const joinDay = (e) => (e?.joiningDate ? new Date(e.joiningDate).toISOString().slice(0, 10) : null);
+
+// Next calendar month after "now", as { year, month } — default target
+// period for an advance request if the employee leaves it blank.
+function nextMonth() {
+  const d = new Date();
+  const m = d.getMonth() + 2;
+  const year = d.getFullYear() + Math.floor((m - 1) / 12);
+  const month = ((m - 1) % 12) + 1;
+  return { year, month };
+}
 
 /* ---------- Profile ---------- */
 
@@ -99,7 +107,6 @@ router.get('/profile', async (req, res) => {
 
 /* ---------- Attendance ---------- */
 
-// Legacy: raw records + counts for a month (kept for compatibility)
 router.get('/attendance', async (req, res) => {
   try {
     const { month } = req.query;
@@ -114,7 +121,6 @@ router.get('/attendance', async (req, res) => {
   }
 });
 
-// Today's status (server date, not the phone's)
 router.get('/attendance/today', async (req, res) => {
   try {
     const employeeId = req.portalUser.customerId;
@@ -131,7 +137,6 @@ router.get('/attendance/today', async (req, res) => {
   }
 });
 
-// Employee marks themselves Present for today
 router.post('/attendance/check-in', async (req, res) => {
   try {
     const employeeId = req.portalUser.customerId;
@@ -161,8 +166,6 @@ router.post('/attendance/check-in', async (req, res) => {
   }
 });
 
-// GET /attendance/summary?view=month&year=2026&month=9
-// GET /attendance/summary?view=year&year=2026
 router.get('/attendance/summary', async (req, res) => {
   try {
     const employeeId = req.portalUser.customerId;
@@ -216,8 +219,19 @@ router.get('/advances', async (req, res) => {
 
 router.post('/advances', async (req, res) => {
   try {
-    const { type, amount, repaymentMonths, reason } = req.body;
+    const { type, amount, repaymentMonths, reason, targetMonth, targetYear } = req.body;
     if (!amount) return res.status(400).json({ message: 'Amount is required' });
+
+    let tMonth = targetMonth ? Number(targetMonth) : null;
+    let tYear = targetYear ? Number(targetYear) : null;
+    if (tMonth && (tMonth < 1 || tMonth > 12)) {
+      return res.status(400).json({ message: 'Target month must be between 1 and 12' });
+    }
+    if (!tMonth || !tYear) {
+      const def = nextMonth();
+      tMonth = def.month;
+      tYear = def.year;
+    }
 
     const months = Number(repaymentMonths) || 1;
     const advance = await EmployeeAdvance.create({
@@ -228,13 +242,15 @@ router.post('/advances', async (req, res) => {
       repaymentMonths: months,
       monthlyDeduction: Number(amount) / months,
       reason: reason || '',
+      targetMonth: tMonth,
+      targetYear: tYear,
       status: 'Pending',
     });
 
     const emp = await Employee.findByPk(req.portalUser.customerId, { attributes: ['name', 'code'] });
     await notifyAdmin(
       'EmployeeAdvanceRequest',
-      `${emp?.name} (${emp?.code}) requested ${advance.type}: ৳${Number(advance.amount).toLocaleString()}`,
+      `${emp?.name} (${emp?.code}) requested ${advance.type}: ৳${Number(advance.amount).toLocaleString()}, starting ${tMonth}/${tYear}`,
       'EmployeeAdvance',
       advance.id,
     );
@@ -266,8 +282,6 @@ router.post('/leave-requests', async (req, res) => {
     if (!isValidDateStr(fromDate) || !isValidDateStr(toDate)) {
       return res.status(400).json({ message: 'Valid From date and To date are required' });
     }
-    // FIX: reject a reversed range (toDate before fromDate) instead of
-    // silently accepting it — a backwards range broke leave-day marking.
     if (toDate < fromDate) {
       return res.status(400).json({ message: 'To date cannot be before From date' });
     }
