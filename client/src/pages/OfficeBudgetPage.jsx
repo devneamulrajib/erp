@@ -9,8 +9,6 @@ import {
   Calendar,
   Wallet,
   CreditCard,
-  TrendingUp,
-  AlertCircle,
   FileText,
   Pencil,
   Eye,
@@ -20,7 +18,6 @@ import {
   Clock,
   Plus,
   Search,
-  SlidersHorizontal,
   CheckCircle2,
   XCircle,
   ClipboardCheck,
@@ -30,6 +27,7 @@ import {
   BadgeDollarSign,
   Users,
   TriangleAlert,
+  Download,
 } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
@@ -56,6 +54,110 @@ const money = (val) =>
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
+
+// Export CSV Report Helper
+function exportBudgetReport({ year, month, rows, summaryTotals }) {
+  const monthName = MONTH_NAMES[month - 1];
+  const dateStr = new Date().toLocaleString('en-GB');
+
+  const escapeCsv = (val) => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val).replace(/"/g, '""');
+    return `"${str}"`;
+  };
+
+  const lines = [
+    ['OFFICE BUDGET & CASH INFLOW REPORT'],
+    [`Period: ${monthName} ${year}`, `Generated At: ${dateStr}`],
+    [],
+    ['EXECUTIVE SUMMARY'],
+    ['Metric', 'Amount (BDT)', 'Notes'],
+    ['Total Budget Allocation', summaryTotals.allocatedAmount, 'Approved category limits'],
+    ['Total Cash Received (Tranches)', summaryTotals.cashReceivedAmount, 'Disbursed to Accounts'],
+    ['Untagged General Cash', summaryTotals.generalCashReceived, 'Not tied to specific head'],
+    ['Total Spent', summaryTotals.spentAmount, 'Actual recorded expenses'],
+    ['Cash in Hand (Net Liquidity)', summaryTotals.cashInHand, 'Cash Received - Spent'],
+    ['Pending Cash Disbursement', summaryTotals.pendingCash, 'Budget - Cash Received'],
+    [],
+    ['CATEGORY ALLOCATIONS BREAKDOWN'],
+    [
+      'Category Name',
+      'Type',
+      'Status',
+      'Allocated Budget (BDT)',
+      'Cash Received (BDT)',
+      'Spent (BDT)',
+      'Cash Remaining (BDT)',
+      'Budget Remaining (BDT)',
+      'Burn Rate (%)',
+      'Description / Notes',
+    ],
+  ];
+
+  rows.forEach((r) => {
+    const subSpentTotal = (r.subcategories || []).reduce(
+      (acc, s) => acc + (Number(s.spentAmount) || 0),
+      0
+    );
+    const allocated = Number(r.allocatedAmount) || 0;
+    const spent = Number(r.spentAmount) || subSpentTotal || 0;
+    const cashReceived = Number(r.cashReceivedAmount) || 0;
+    const budgetRemaining = allocated - spent;
+    const cashRemaining = cashReceived - spent;
+    const pct = allocated > 0 ? ((spent / allocated) * 100).toFixed(1) : '0';
+
+    lines.push([
+      r.name,
+      'Main Category',
+      r.status || 'Active',
+      allocated,
+      cashReceived,
+      spent,
+      cashRemaining,
+      budgetRemaining,
+      `${pct}%`,
+      r.description || '',
+    ]);
+
+    if (r.subcategories && r.subcategories.length > 0) {
+      r.subcategories.forEach((sub) => {
+        const subAlloc = Number(sub.allocatedAmount) || 0;
+        const subSp = Number(sub.spentAmount) || 0;
+        const subRem = subAlloc > 0 ? subAlloc - subSp : 0;
+        const subPct = subAlloc > 0 ? ((subSp / subAlloc) * 100).toFixed(1) : '0';
+
+        lines.push([
+          `   - ${sub.name}`,
+          'Subcategory',
+          sub.status || 'Active',
+          subAlloc,
+          '-',
+          subSp,
+          '-',
+          subRem,
+          `${subPct}%`,
+          sub.description || '',
+        ]);
+      });
+    }
+  });
+
+  const csvContent =
+    '\uFEFF' + lines.map((row) => row.map(escapeCsv).join(',')).join('\r\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute(
+    'download',
+    `Office_Budget_Report_${monthName}_${year}.csv`
+  );
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
 // Modal to record a partial cash installment received
 function ReceiveCashModal({ initialData, rows = [], year, month, onClose, onSaved }) {
@@ -107,38 +209,38 @@ function ReceiveCashModal({ initialData, rows = [], year, month, onClose, onSave
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 relative border border-slate-100">
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-4 sm:p-5 relative border border-slate-100">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition"
+          className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition"
         >
-          <X size={16} />
+          <X size={14} />
         </button>
 
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-            <ArrowDownLeft size={16} />
+        <div className="flex items-center gap-2 mb-0.5">
+          <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <ArrowDownLeft size={14} />
           </div>
-          <h2 className="text-lg font-bold text-slate-900">
-            {isEdit ? 'Edit Cash Receipt' : 'Record Cash Inflow (Disbursement)'}
+          <h2 className="text-sm font-bold text-slate-900">
+            {isEdit ? 'Edit Cash Receipt' : 'Record Cash Inflow'}
           </h2>
         </div>
-        <p className="text-xs text-slate-500 mb-4 ml-10">
+        <p className="text-[11px] text-slate-500 mb-3 ml-8">
           For {MONTH_NAMES[month - 1]} {year}
         </p>
 
         {error && (
-          <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-xl p-3 mb-4 text-xs font-medium">
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-lg p-2.5 mb-3 text-xs font-medium">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-3.5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <form onSubmit={handleSubmit} className="space-y-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Cash Received Amount (৳) *
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                Cash Amount (৳) *
               </label>
               <input
                 type="number"
@@ -147,48 +249,48 @@ function ReceiveCashModal({ initialData, rows = [], year, month, onClose, onSave
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="e.g. 20000"
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                 autoFocus
                 required
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                 Date Received *
               </label>
               <input
                 type="date"
                 value={receivedDate}
                 onChange={(e) => setReceivedDate(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                 required
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                 Received From
               </label>
               <input
                 type="text"
                 value={receivedFrom}
                 onChange={(e) => setReceivedFrom(e.target.value)}
-                placeholder="e.g. MD Sir / Bank Withdrawal"
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                placeholder="e.g. MD / Bank"
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                 Payment Method
               </label>
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
               >
                 <option value="Cash">Cash in Hand</option>
                 <option value="Cheque">Cheque</option>
@@ -198,30 +300,30 @@ function ReceiveCashModal({ initialData, rows = [], year, month, onClose, onSave
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Reference / Cheque / Voucher #
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                Ref / Cheque #
               </label>
               <input
                 type="text"
                 value={referenceNo}
                 onChange={(e) => setReferenceNo(e.target.value)}
-                placeholder="e.g. CHQ-98124 or VR-01"
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                placeholder="e.g. CHQ-98124"
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Tag to Category (Optional)
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                Tag to Category
               </label>
               <select
                 value={budgetCategoryId}
                 onChange={(e) => setBudgetCategoryId(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
               >
-                <option value="">General Office Fund (All Categories)</option>
+                <option value="">General Fund (All Heads)</option>
                 {rows.map((cat) => (
                   <option key={cat.budgetCategoryId} value={cat.budgetCategoryId}>
                     {cat.name}
@@ -232,15 +334,15 @@ function ReceiveCashModal({ initialData, rows = [], year, month, onClose, onSave
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
               Note / Remarks
             </label>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={2}
-              placeholder="e.g. First tranche of office operating cash for this month..."
-              className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+              placeholder="Installment notes..."
+              className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
             />
           </div>
 
@@ -248,16 +350,16 @@ function ReceiveCashModal({ initialData, rows = [], year, month, onClose, onSave
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition"
+              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs disabled:opacity-50 transition"
+              className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs disabled:opacity-50 transition"
             >
-              {submitting ? 'Saving…' : isEdit ? 'Save Changes' : 'Record Cash Received'}
+              {submitting ? 'Saving…' : isEdit ? 'Save Changes' : 'Record Receipt'}
             </button>
           </div>
         </form>
@@ -275,7 +377,9 @@ function CashReceiptsListModal({ year, month, rows = [], onClose, onReceiptUpdat
 
   const categoryNameById = useMemo(() => {
     const map = {};
-    rows.forEach((r) => { map[r.budgetCategoryId] = r.name; });
+    rows.forEach((r) => {
+      map[r.budgetCategoryId] = r.name;
+    });
     return map;
   }, [rows]);
 
@@ -309,120 +413,120 @@ function CashReceiptsListModal({ year, month, rows = [], onClose, onReceiptUpdat
   const totalReceiptsAmount = receipts.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col p-6 relative border border-slate-100">
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-xl max-h-[85vh] flex flex-col p-4 sm:p-5 relative border border-slate-100">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition"
+          className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition"
         >
-          <X size={16} />
+          <X size={14} />
         </button>
 
-        <div className="flex items-center justify-between mb-4 pr-8">
+        <div className="flex items-center justify-between mb-3 pr-6">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                <Coins size={16} />
+            <div className="flex items-center gap-1.5">
+              <span className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <Coins size={14} />
               </span>
-              <h2 className="text-base font-bold text-slate-900">Cash Inflow Receipts History</h2>
+              <h2 className="text-sm font-bold text-slate-900">Cash Inflow Log</h2>
             </div>
-            <p className="text-xs text-slate-500 ml-10">
-              Installments disbursed to Accounts for {MONTH_NAMES[month - 1]} {year}
+            <p className="text-[11px] text-slate-500 ml-7.5">
+              Disbursed for {MONTH_NAMES[month - 1]} {year}
             </p>
           </div>
 
           <button
             type="button"
             onClick={() => setIsAddingNew(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition"
           >
-            <Plus size={13} />
+            <Plus size={12} />
             Receive Cash
           </button>
         </div>
 
-        {/* Summary Card */}
-        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 flex items-center justify-between mb-4">
+        {/* Compact Summary Card */}
+        <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-2.5 flex items-center justify-between mb-3">
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-              Total Cash Received in Tranches
+            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">
+              Total Cash Received
             </span>
-            <span className="text-xl font-extrabold text-emerald-600">
+            <span className="text-base font-extrabold text-emerald-600">
               ৳{money(totalReceiptsAmount)}
             </span>
           </div>
-          <span className="text-xs font-semibold text-slate-500">
+          <span className="text-[11px] font-medium text-slate-500">
             {receipts.length} installment{receipts.length !== 1 ? 's' : ''} logged
           </span>
         </div>
 
         {/* Receipts List */}
-        <div className="overflow-y-auto space-y-2.5 pr-1 flex-1">
+        <div className="overflow-y-auto space-y-2 pr-1 flex-1">
           {loading ? (
-            <div className="text-center py-12 text-slate-400 text-xs">Loading cash receipts…</div>
+            <div className="text-center py-8 text-slate-400 text-xs">Loading cash receipts…</div>
           ) : receipts.length === 0 ? (
-            <div className="text-center py-12 text-slate-400 text-xs">
-              No cash receipts recorded yet for this month. Click "+ Receive Cash" above to log one.
+            <div className="text-center py-8 text-slate-400 text-xs">
+              No cash receipts recorded yet. Click "+ Receive Cash" above.
             </div>
           ) : (
             receipts.map((rcpt) => (
               <div
                 key={rcpt.id}
-                className="border border-slate-200/80 hover:border-slate-300 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white transition"
+                className="border border-slate-200/70 hover:border-slate-300 rounded-lg p-2.5 flex items-center justify-between gap-2.5 bg-white transition"
               >
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-bold text-slate-900">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-bold text-slate-900">
                       ৳{money(rcpt.amount)}
                     </span>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                    <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/50">
                       {rcpt.paymentMethod}
                     </span>
                     <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                      className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-semibold border ${
                         rcpt.budgetCategoryId
-                          ? 'bg-blue-50 text-blue-700 border-blue-200/60'
-                          : 'bg-slate-100 text-slate-500 border-slate-200/60'
+                          ? 'bg-blue-50 text-blue-700 border-blue-200/50'
+                          : 'bg-slate-100 text-slate-600 border-slate-200/50'
                       }`}
                     >
                       {rcpt.budgetCategoryId
                         ? categoryNameById[rcpt.budgetCategoryId] || 'Category'
-                        : 'General Office Fund'}
+                        : 'General Fund'}
                     </span>
                     {rcpt.referenceNo && (
-                      <span className="text-[11px] font-mono text-slate-400">
+                      <span className="text-[10px] font-mono text-slate-400">
                         Ref: {rcpt.referenceNo}
                       </span>
                     )}
                   </div>
 
-                  <p className="text-xs text-slate-600 mt-1">
-                    From: <span className="font-semibold text-slate-800">{rcpt.receivedFrom || 'Management'}</span>
+                  <p className="text-[11px] text-slate-600 mt-0.5">
+                    From: <span className="font-semibold text-slate-700">{rcpt.receivedFrom || 'Management'}</span>
                     {' • '}
-                    Date: <span className="text-slate-500">{rcpt.receivedDate}</span>
+                    <span className="text-slate-400">{rcpt.receivedDate}</span>
                   </p>
 
                   {rcpt.note && (
-                    <p className="text-[11px] text-slate-500 italic mt-0.5">"{rcpt.note}"</p>
+                    <p className="text-[10px] text-slate-400 italic truncate mt-0.5">"{rcpt.note}"</p>
                   )}
                 </div>
 
-                <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                <div className="flex items-center gap-1 shrink-0">
                   <button
                     type="button"
                     onClick={() => setEditingReceipt(rcpt)}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
+                    className="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
                     title="Edit"
                   >
-                    <Pencil size={13} />
+                    <Pencil size={12} />
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDelete(rcpt.id, rcpt.amount)}
-                    className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition"
+                    className="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition"
                     title="Delete"
                   >
-                    <Trash2 size={13} />
+                    <Trash2 size={12} />
                   </button>
                 </div>
               </div>
@@ -431,7 +535,6 @@ function CashReceiptsListModal({ year, month, rows = [], onClose, onReceiptUpdat
         </div>
       </div>
 
-      {/* Edit Single Receipt Modal */}
       {editingReceipt && (
         <ReceiveCashModal
           initialData={editingReceipt}
@@ -446,7 +549,6 @@ function CashReceiptsListModal({ year, month, rows = [], onClose, onReceiptUpdat
         />
       )}
 
-      {/* Add Single Receipt from inside History Modal */}
       {isAddingNew && (
         <ReceiveCashModal
           rows={rows}
@@ -530,56 +632,56 @@ function EditBudgetModal({ row, rows = [], year, month, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative border border-slate-100">
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-4 sm:p-5 relative border border-slate-100">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors"
+          className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors"
         >
-          <X size={16} />
+          <X size={14} />
         </button>
-        <h2 className="text-lg font-bold text-slate-900 mb-0.5">
+        <h2 className="text-sm font-bold text-slate-900 mb-0.5">
           {isNew ? 'Set Budget Allocation' : 'Edit Budget Allocation'}
         </h2>
-        <p className="text-xs text-slate-500 mb-4">
+        <p className="text-[11px] text-slate-500 mb-3">
           For {MONTH_NAMES[month - 1]} {year}
         </p>
 
         {error && (
-          <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-xl p-3 mb-4 text-xs font-medium">
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-lg p-2.5 mb-3 text-xs font-medium">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
           {!row?.budgetCategoryId ? (
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                 Budget Category
               </label>
               <select
                 value={selectedCatId}
                 onChange={handleCategoryChange}
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
               >
                 {rows.map((cat) => (
                   <option key={cat.budgetCategoryId} value={cat.budgetCategoryId}>
-                    {cat.name} {cat.allocatedAmount ? `(Current: ৳${money(cat.allocatedAmount)})` : ''}
+                    {cat.name} {cat.allocatedAmount ? `(৳${money(cat.allocatedAmount)})` : ''}
                   </option>
                 ))}
               </select>
             </div>
           ) : (
-            <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+            <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-2.5">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
                 Category
               </span>
-              <span className="text-sm font-bold text-slate-900">{selectedCategory.name}</span>
+              <span className="text-xs font-bold text-slate-900">{selectedCategory.name}</span>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
               Monthly Budget Amount (৳)
             </label>
             <input
@@ -589,36 +691,36 @@ function EditBudgetModal({ row, rows = [], year, month, onClose, onSaved }) {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="e.g. 50000"
-              className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+              className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
               autoFocus
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
               Note <span className="text-slate-400 font-normal">(optional)</span>
             </label>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              rows={3}
-              placeholder="Reason for setting or adjusting this budget..."
-              className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition resize-none"
+              rows={2}
+              placeholder="Reason for adjustment..."
+              className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition resize-none"
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-end gap-2 pt-1">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-600 text-xs font-semibold transition"
+              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs disabled:opacity-50 transition"
+              className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-2xs disabled:opacity-50 transition"
             >
               {submitting ? 'Saving…' : isNew ? 'Set Budget' : 'Save Changes'}
             </button>
@@ -642,43 +744,43 @@ function BudgetLogModal({ row, year, month, onClose }) {
   }, [row.budgetCategoryId, year, month]);
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col p-6 relative border border-slate-100">
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[80vh] flex flex-col p-4 sm:p-5 relative border border-slate-100">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition"
+          className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition"
         >
-          <X size={16} />
+          <X size={14} />
         </button>
-        <div className="flex items-center gap-2 mb-1">
-          <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 text-blue-600">
-            <History size={16} />
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <span className="w-6 h-6 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center">
+            <History size={14} />
           </span>
-          <h2 className="text-base font-bold text-slate-900">Budget Change History</h2>
+          <h2 className="text-sm font-bold text-slate-900">Change History</h2>
         </div>
-        <p className="text-xs text-slate-500 mb-4 ml-10">
+        <p className="text-[11px] text-slate-500 mb-3 ml-7.5">
           {row.name} — {MONTH_NAMES[month - 1]} {year}
         </p>
 
         {error && (
-          <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-xl p-3 mb-4 text-xs font-medium">
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-lg p-2.5 mb-3 text-xs font-medium">
             {error}
           </div>
         )}
 
-        <div className="overflow-y-auto space-y-3 pr-1">
+        <div className="overflow-y-auto space-y-2 pr-1">
           {loading ? (
-            <div className="text-center py-10 text-slate-400 text-xs">Loading history…</div>
+            <div className="text-center py-8 text-slate-400 text-xs">Loading history…</div>
           ) : logs.length === 0 ? (
-            <div className="text-center py-10 text-slate-400 text-xs">
-              No changes recorded yet for this period.
+            <div className="text-center py-8 text-slate-400 text-xs">
+              No changes recorded for this period.
             </div>
           ) : (
             logs.map((log) => (
-              <div key={log.id} className="border border-slate-200/80 rounded-xl p-3.5 space-y-1">
+              <div key={log.id} className="border border-slate-200/70 rounded-lg p-2.5 space-y-0.5">
                 <div className="flex items-center justify-between">
                   <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                    className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider ${
                       log.action === 'Created'
                         ? 'bg-emerald-50 text-emerald-700'
                         : log.action === 'Deleted' || log.action === 'Rejected'
@@ -688,8 +790,8 @@ function BudgetLogModal({ row, year, month, onClose }) {
                   >
                     {log.action}
                   </span>
-                  <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
-                    <Clock size={11} />
+                  <span className="inline-flex items-center gap-1 text-[10px] text-slate-400">
+                    <Clock size={10} />
                     {new Date(log.createdAt).toLocaleString('en-GB', {
                       day: '2-digit',
                       month: 'short',
@@ -714,13 +816,13 @@ function BudgetLogModal({ row, year, month, onClose }) {
                     </>
                   ) : (
                     <>
-                      Changed allocation from <span className="font-semibold">৳{money(log.previousAmount)}</span> to{' '}
+                      Changed from <span className="font-semibold">৳{money(log.previousAmount)}</span> to{' '}
                       <strong className="font-semibold">৳{money(log.newAmount)}</strong>
                     </>
                   )}
                 </p>
-                {log.note && <p className="text-[11px] text-slate-500 italic">"{log.note}"</p>}
-                <p className="text-[10px] text-slate-400 text-right">By {log.performedBy || 'Admin'}</p>
+                {log.note && <p className="text-[10px] text-slate-500 italic">"{log.note}"</p>}
+                <p className="text-[9px] text-slate-400 text-right">By {log.performedBy || 'Admin'}</p>
               </div>
             ))
           )}
@@ -730,9 +832,7 @@ function BudgetLogModal({ row, year, month, onClose }) {
   );
 }
 
-// Review modal for a Pending (or previously Rejected) budget request — shows
-// the actual preview payslip breakdown when the category is Salary, lets the
-// admin adjust the approved figure, and offers Approve or Reject.
+// Review modal for a Pending budget request
 function BudgetRequestReviewModal({ row, year, month, onClose, onDone }) {
   const isSalary = (row.name || '').trim().toLowerCase() === 'salary';
   const requested = Number(row.requestedAmount) || 0;
@@ -740,7 +840,7 @@ function BudgetRequestReviewModal({ row, year, month, onClose, onDone }) {
   const [approvedAmount, setApprovedAmount] = useState(String(requested));
   const [note, setNote] = useState('');
   const [reason, setReason] = useState('');
-  const [mode, setMode] = useState(null); // null | 'approve' | 'reject'
+  const [mode, setMode] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -804,7 +904,7 @@ function BudgetRequestReviewModal({ row, year, month, onClose, onDone }) {
   async function handleReject(e) {
     e.preventDefault();
     if (!reason.trim()) {
-      setError('Please provide a reason for rejecting this request');
+      setError('Please provide a reason for rejection');
       return;
     }
     setSubmitting(true);
@@ -821,109 +921,99 @@ function BudgetRequestReviewModal({ row, year, month, onClose, onDone }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[88vh] flex flex-col p-6 relative border border-slate-100">
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-xl max-h-[85vh] flex flex-col p-4 sm:p-5 relative border border-slate-100">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition"
+          className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition"
         >
-          <X size={16} />
+          <X size={14} />
         </button>
 
-        <div className="flex items-center gap-2 mb-1 pr-8">
-          <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 text-amber-600">
-            <ClipboardCheck size={16} />
+        <div className="flex items-center gap-1.5 mb-0.5 pr-6">
+          <span className="w-6 h-6 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center">
+            <ClipboardCheck size={14} />
           </span>
-          <h2 className="text-base font-bold text-slate-900">Review Budget Request</h2>
+          <h2 className="text-sm font-bold text-slate-900">Review Budget Request</h2>
         </div>
-        <p className="text-xs text-slate-500 mb-4 ml-10">
+        <p className="text-[11px] text-slate-500 mb-3 ml-7.5">
           {row.name} — {MONTH_NAMES[month - 1]} {year}
         </p>
 
-        <div className="overflow-y-auto space-y-4 pr-1 flex-1">
-          {/* Request summary */}
-          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
+        <div className="overflow-y-auto space-y-3 pr-1 flex-1">
+          <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-2.5 flex items-center justify-between">
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">
                 Requested Amount
               </span>
-              <span className="text-xl font-extrabold text-slate-900">৳{money(requested)}</span>
+              <span className="text-lg font-extrabold text-slate-900">৳{money(requested)}</span>
             </div>
             <div className="text-right">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">
                 Requested By
               </span>
-              <span className="text-sm font-semibold text-slate-700">{row.requestedBy || 'Admin'}</span>
+              <span className="text-xs font-semibold text-slate-700">{row.requestedBy || 'Admin'}</span>
             </div>
           </div>
 
           {row.rejectionReason && (
-            <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-xl p-3 text-xs">
+            <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-lg p-2.5 text-xs">
               <strong className="font-semibold">Previously rejected</strong> by {row.rejectedBy || 'Admin'}: {row.rejectionReason}
             </div>
           )}
 
-          {/* Salary payslip preview breakdown */}
           {isSalary && (
             <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Users size={14} className="text-slate-400" />
-                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Payslip Preview — {MONTH_NAMES[month - 1]} {year}
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Users size={12} className="text-slate-400" />
+                <h3 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                  Payslip Preview Breakdown
                 </h3>
               </div>
 
               {loadingSlips ? (
-                <div className="text-center py-8 text-slate-400 text-xs border border-slate-200/80 rounded-xl">
-                  Loading payslip breakdown…
+                <div className="text-center py-6 text-slate-400 text-xs border border-slate-200/70 rounded-lg">
+                  Loading payslips…
                 </div>
               ) : payslips.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-xs border border-slate-200/80 rounded-xl">
-                  No preview payslips found for this month.
+                <div className="text-center py-6 text-slate-400 text-xs border border-slate-200/70 rounded-lg">
+                  No preview payslips found.
                 </div>
               ) : (
-                <div className="border border-slate-200/80 rounded-xl overflow-hidden">
+                <div className="border border-slate-200/70 rounded-lg overflow-hidden">
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
+                    <table className="w-full text-left text-[11px]">
                       <thead>
-                        <tr className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                          <th className="py-2.5 px-3">Employee</th>
-                          <th className="py-2.5 px-3">Gross</th>
-                          <th className="py-2.5 px-3">Advance Ded.</th>
-                          <th className="py-2.5 px-3">Other Ded.</th>
-                          <th className="py-2.5 px-3">Addition</th>
-                          <th className="py-2.5 px-3 text-right">Net Salary</th>
+                        <tr className="bg-slate-50 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                          <th className="py-2 px-2.5">Employee</th>
+                          <th className="py-2 px-2">Gross</th>
+                          <th className="py-2 px-2">Advance</th>
+                          <th className="py-2 px-2">Net Salary</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {payslips.map((s, idx) => (
                           <tr key={s.id || s.employeeId || s.code || idx}>
-                            <td className="py-2.5 px-3">
-                              <p className="font-semibold text-slate-800">{s.name || s.employee?.name}</p>
-                              <p className="text-[10px] text-slate-400">{s.code || s.employee?.code}</p>
+                            <td className="py-1.5 px-2.5">
+                              <p className="font-medium text-slate-800">{s.name || s.employee?.name}</p>
+                              <p className="text-[9px] text-slate-400">{s.code || s.employee?.code}</p>
                             </td>
-                            <td className="py-2.5 px-3 text-slate-600">৳{money(s.grossSalary)}</td>
-                            <td className="py-2.5 px-3 text-rose-500">
+                            <td className="py-1.5 px-2 text-slate-600">৳{money(s.grossSalary)}</td>
+                            <td className="py-1.5 px-2 text-rose-500">
                               {s.advanceDeduction > 0 ? `-৳${money(s.advanceDeduction)}` : '—'}
                             </td>
-                            <td className="py-2.5 px-3 text-rose-500">
-                              {s.otherDeduction > 0 ? `-৳${money(s.otherDeduction)}` : '—'}
-                            </td>
-                            <td className="py-2.5 px-3 text-emerald-600">
-                              {s.otherAddition > 0 ? `+৳${money(s.otherAddition)}` : '—'}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-bold text-slate-900">
+                            <td className="py-1.5 px-2 font-bold text-slate-900">
                               ৳{money(s.netSalary)}
                             </td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
-                        <tr className="bg-slate-50 font-bold border-t border-slate-200">
-                          <td className="py-2.5 px-3 text-slate-700" colSpan={5}>
-                            Total ({payslips.length} employee{payslips.length !== 1 ? 's' : ''})
+                        <tr className="bg-slate-50 font-bold border-t border-slate-200 text-xs">
+                          <td className="py-2 px-2.5 text-slate-700" colSpan={3}>
+                            Total ({payslips.length})
                           </td>
-                          <td className="py-2.5 px-3 text-right text-slate-900">
+                          <td className="py-2 px-2 text-slate-900">
                             ৳{money(slipTotals.net)}
                           </td>
                         </tr>
@@ -934,17 +1024,16 @@ function BudgetRequestReviewModal({ row, year, month, onClose, onDone }) {
               )}
 
               {mismatch && (
-                <div className="mt-2 flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl p-3 text-xs">
-                  <TriangleAlert size={14} className="shrink-0 mt-0.5" />
+                <div className="mt-1.5 flex items-start gap-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg p-2 text-xs">
+                  <TriangleAlert size={12} className="shrink-0 mt-0.5" />
                   <span>
-                    The current preview payslip total (৳{money(slipTotals.net)}) doesn't match the requested amount
-                    (৳{money(requested)}) — deductions or employees may have changed since the request was submitted.{' '}
+                    Current preview (৳{money(slipTotals.net)}) differs from requested (৳{money(requested)}).{' '}
                     <button
                       type="button"
                       onClick={() => setApprovedAmount(String(slipTotals.net))}
-                      className="font-semibold underline underline-offset-2"
+                      className="font-semibold underline"
                     >
-                      Use ৳{money(slipTotals.net)} instead
+                      Use ৳{money(slipTotals.net)}
                     </button>
                   </span>
                 </div>
@@ -953,16 +1042,15 @@ function BudgetRequestReviewModal({ row, year, month, onClose, onDone }) {
           )}
 
           {error && (
-            <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-xl p-3 text-xs font-medium">
+            <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-lg p-2.5 text-xs font-medium">
               {error}
             </div>
           )}
 
-          {/* Approve form */}
           {mode === 'approve' && (
-            <form onSubmit={handleApprove} className="space-y-3 border-t border-slate-100 pt-4">
+            <form onSubmit={handleApprove} className="space-y-2.5 border-t border-slate-100 pt-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                   Approved Amount (৳)
                 </label>
                 <input
@@ -971,57 +1059,53 @@ function BudgetRequestReviewModal({ row, year, month, onClose, onDone }) {
                   step="any"
                   value={approvedAmount}
                   onChange={(e) => setApprovedAmount(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                   autoFocus
                 />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Defaults to the requested amount — adjust if it doesn't match the payslip total above.
-                </p>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                   Note <span className="text-slate-400 font-normal">(optional)</span>
                 </label>
                 <textarea
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   rows={2}
-                  placeholder="Any remarks for this approval..."
-                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition resize-none"
+                  placeholder="Approval note..."
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
                 />
               </div>
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setMode(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition"
+                  className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold"
                 >
                   Back
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs disabled:opacity-50 transition"
+                  className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs"
                 >
-                  {submitting ? 'Approving…' : `Confirm Approve ৳${money(approvedAmount === '' ? requested : approvedAmount)}`}
+                  {submitting ? 'Approving…' : `Confirm ৳${money(approvedAmount === '' ? requested : approvedAmount)}`}
                 </button>
               </div>
             </form>
           )}
 
-          {/* Reject form */}
           {mode === 'reject' && (
-            <form onSubmit={handleReject} className="space-y-3 border-t border-slate-100 pt-4">
+            <form onSubmit={handleReject} className="space-y-2.5 border-t border-slate-100 pt-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                   Reason for Rejection *
                 </label>
                 <textarea
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  rows={3}
-                  placeholder="e.g. Deductions look incomplete, please re-generate payslips first..."
-                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:rose-500/20 focus:border-rose-500 transition resize-none"
+                  rows={2}
+                  placeholder="Reason..."
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:rose-500/20 focus:border-rose-500 resize-none"
                   autoFocus
                   required
                 />
@@ -1030,14 +1114,14 @@ function BudgetRequestReviewModal({ row, year, month, onClose, onDone }) {
                 <button
                   type="button"
                   onClick={() => setMode(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition"
+                  className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold"
                 >
                   Back
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs disabled:opacity-50 transition"
+                  className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-2xs"
                 >
                   {submitting ? 'Rejecting…' : 'Confirm Reject'}
                 </button>
@@ -1047,21 +1131,21 @@ function BudgetRequestReviewModal({ row, year, month, onClose, onDone }) {
         </div>
 
         {mode === null && (
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 mt-4">
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 mt-2">
             <button
               type="button"
               onClick={() => setMode('reject')}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold border border-rose-200/60 transition"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold border border-rose-200/50"
             >
-              <XCircle size={14} />
+              <XCircle size={13} />
               Reject
             </button>
             <button
               type="button"
               onClick={() => setMode('approve')}
-              className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition"
+              className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs"
             >
-              <CheckCircle2 size={14} />
+              <CheckCircle2 size={13} />
               Approve
             </button>
           </div>
@@ -1211,7 +1295,7 @@ export default function OfficeBudgetPage() {
     <div className="min-h-screen w-full bg-[#f8fafc] text-slate-800 flex flex-col font-sans">
       <Topbar />
 
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-5 space-y-3.5">
         <Breadcrumb
           items={[
             { label: 'Home', to: '/dashboard' },
@@ -1220,74 +1304,84 @@ export default function OfficeBudgetPage() {
           ]}
         />
 
-        {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* Compact Page Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
               Office Budget
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1 font-normal">
-              Track allocated limits, cash received in installments, and actual expenses
+            <p className="text-xs text-slate-500 mt-0.5">
+              Monthly limits, cash flow tranches, and actual expenses
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => exportBudgetReport({ year, month, rows, summaryTotals })}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200/90 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition"
+              title="Download CSV report of current view"
+            >
+              <Download size={13} className="text-blue-600" />
+              Download Report
+            </button>
+
             <button
               type="button"
               onClick={() => setIsViewingReceipts(true)}
-              className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-white border border-slate-200/90 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200/90 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition"
             >
-              <Coins size={15} className="text-emerald-600" />
+              <Coins size={13} className="text-emerald-600" />
               Cash Inflow Log
             </button>
 
             <button
               type="button"
               onClick={() => navigate('/accounts-module/office-expense-list')}
-              className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-white border border-slate-200/90 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200/90 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition"
             >
-              <FileText size={15} className="text-slate-400" />
+              <FileText size={13} className="text-slate-400" />
               Expense Ledger
             </button>
 
             <button
               type="button"
               onClick={() => navigate('/accounts-module/budget-categories')}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs sm:text-sm font-semibold shadow-xs transition"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition"
             >
-              <Settings size={15} />
-              Manage Categories
+              <Settings size={13} />
+              Categories
             </button>
           </div>
         </div>
 
-        {/* Budget Month Selector Bar with Receive Cash CTA */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:px-6 sm:py-3.5 shadow-2xs flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <Calendar size={18} />
+        {/* Compact Budget Month Selector Bar */}
+        <div className="bg-white rounded-xl border border-slate-200/80 p-2.5 sm:px-4 sm:py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <Calendar size={15} />
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
                 Budget Month
               </p>
-              <p className="text-sm font-bold text-slate-900">
+              <p className="text-xs sm:text-sm font-bold text-slate-900 leading-tight">
                 {MONTH_NAMES[month - 1]} {year}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <button
               type="button"
               onClick={handlePrevMonth}
               title="Previous Month"
-              className="w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-600 transition"
+              className="w-7 h-7 rounded-md border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-600 transition"
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={14} />
             </button>
 
-            <div className="relative inline-flex items-center border border-slate-200 rounded-lg px-3 py-1.5 bg-white shadow-2xs">
+            <div className="relative inline-flex items-center border border-slate-200 rounded-md px-2.5 py-1 bg-white shadow-2xs">
               <select
                 value={`${month}-${year}`}
                 onChange={(e) => {
@@ -1295,7 +1389,7 @@ export default function OfficeBudgetPage() {
                   setMonth(Number(m));
                   setYear(Number(y));
                 }}
-                className="appearance-none bg-transparent text-xs font-bold text-slate-800 pr-5 focus:outline-none cursor-pointer"
+                className="appearance-none bg-transparent text-xs font-semibold text-slate-800 pr-4 focus:outline-none cursor-pointer"
               >
                 {[-1, 0, 1].map((yearOffset) => {
                   const targetYear = now.getFullYear() + yearOffset;
@@ -1306,67 +1400,66 @@ export default function OfficeBudgetPage() {
                   ));
                 })}
               </select>
-              <ChevronDown size={13} className="text-slate-400 absolute right-2 pointer-events-none" />
+              <ChevronDown size={11} className="text-slate-400 absolute right-1.5 pointer-events-none" />
             </div>
 
             <button
               type="button"
               onClick={handleNextMonth}
               title="Next Month"
-              className="w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-600 transition"
+              className="w-7 h-7 rounded-md border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-600 transition"
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={14} />
             </button>
 
-            {/* Quick Receive Cash Action */}
             <button
               type="button"
               onClick={() => setIsReceivingCash(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition ml-1 cursor-pointer"
+              className="inline-flex items-center gap-1 px-3 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition ml-1"
             >
-              <ArrowDownLeft size={14} />
+              <ArrowDownLeft size={13} />
               Receive Cash
             </button>
 
             <button
               type="button"
               onClick={() => setEditingRow({})}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
+              className="inline-flex items-center gap-1 px-3 py-1 rounded-md bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
             >
-              <Plus size={14} />
+              <Plus size={13} />
               Set Budget
             </button>
           </div>
         </div>
 
-        {/* 4 Metric Cards for Real-World Cash Flow & Budget Control */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Compact KPI Metric Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Card 1: TOTAL ALLOCATED BUDGET */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs flex flex-col justify-between min-h-[125px]">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
-                <Wallet size={15} />
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-slate-100 text-slate-600 flex items-center justify-center">
+                <Wallet size={13} />
               </div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Total Budget
               </span>
             </div>
-            <div className="flex items-baseline justify-between mt-3">
-              <span className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+            <div className="flex items-baseline justify-between mt-2">
+              <span className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
                 ৳{money(summaryTotals.allocatedAmount)}
               </span>
-              <span className="text-[11px] text-slate-400 font-medium">
+              <span className="text-[10px] text-slate-400 font-medium">
                 Approved limit
               </span>
             </div>
           </div>
 
           {/* Card 2: CASH RECEIVED (TRANCHES) */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs flex flex-col justify-between min-h-[125px]">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs flex flex-col justify-between">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                  <Coins size={15} />
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <Coins size={13} />
                 </div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Cash Received
@@ -1375,60 +1468,55 @@ export default function OfficeBudgetPage() {
               <button
                 type="button"
                 onClick={() => setIsReceivingCash(true)}
-                className="text-[10px] font-bold text-emerald-600 hover:underline"
+                className="text-[10px] font-semibold text-emerald-600 hover:underline"
               >
                 + Add
               </button>
             </div>
-            <div className="flex items-baseline justify-between mt-3">
-              <span className="text-xl sm:text-2xl font-extrabold text-emerald-600 tracking-tight">
+            <div className="flex items-baseline justify-between mt-2">
+              <span className="text-lg sm:text-xl font-bold text-emerald-600 tracking-tight">
                 ৳{money(summaryTotals.cashReceivedAmount)}
               </span>
-              <span className="text-[11px] text-slate-400 font-medium">
+              <span className="text-[10px] text-slate-400 font-medium">
                 {summaryTotals.pendingCash > 0
                   ? `৳${money(summaryTotals.pendingCash)} pending`
                   : 'Fully disbursed'}
               </span>
             </div>
-            {summaryTotals.generalCashReceived > 0 && (
-              <p className="text-[10px] text-slate-400 mt-1.5">
-                ৳{money(summaryTotals.generalCashReceived)} untagged (General Office Fund)
-              </p>
-            )}
           </div>
 
           {/* Card 3: TOTAL SPENT */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs flex flex-col justify-between min-h-[125px]">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                <CreditCard size={15} />
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center">
+                <CreditCard size={13} />
               </div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Total Spent
               </span>
             </div>
-            <div className="flex items-baseline justify-between mt-3">
-              <span className="text-xl sm:text-2xl font-extrabold text-blue-600 tracking-tight">
+            <div className="flex items-baseline justify-between mt-2">
+              <span className="text-lg sm:text-xl font-bold text-blue-600 tracking-tight">
                 ৳{money(summaryTotals.spentAmount)}
               </span>
-              <span className="text-[11px] text-slate-400 font-medium">
+              <span className="text-[10px] text-slate-400 font-medium">
                 {totalBurnRate.toFixed(0)}% of budget
               </span>
             </div>
           </div>
 
-          {/* Card 4: CASH IN HAND (RECEIVED - SPENT) */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs flex flex-col justify-between min-h-[125px]">
+          {/* Card 4: CASH IN HAND */}
+          <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs flex flex-col justify-between">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2">
                 <div
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                  className={`w-6 h-6 rounded-md flex items-center justify-center ${
                     summaryTotals.cashInHand < 0
                       ? 'bg-rose-50 text-rose-600'
                       : 'bg-emerald-50 text-emerald-600'
                   }`}
                 >
-                  <BadgeDollarSign size={15} />
+                  <BadgeDollarSign size={13} />
                 </div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Cash in Hand
@@ -1436,90 +1524,80 @@ export default function OfficeBudgetPage() {
               </div>
 
               {summaryTotals.cashInHand < 0 ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-rose-50 text-rose-600 ring-1 ring-rose-500/20">
+                <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-rose-50 text-rose-600 ring-1 ring-rose-500/20">
                   Deficit
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-600 ring-1 ring-emerald-500/20">
+                <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-600 ring-1 ring-emerald-500/20">
                   Available
                 </span>
               )}
             </div>
 
-            <div className="flex items-baseline justify-between mt-3">
+            <div className="flex items-baseline justify-between mt-2">
               <span
-                className={`text-xl sm:text-2xl font-extrabold tracking-tight ${
+                className={`text-lg sm:text-xl font-bold tracking-tight ${
                   summaryTotals.cashInHand < 0 ? 'text-rose-600' : 'text-emerald-600'
                 }`}
               >
                 ৳{money(summaryTotals.cashInHand)}
               </span>
-              <span className="text-[11px] text-slate-400 font-medium">
+              <span className="text-[10px] text-slate-400 font-medium">
                 Received − Spent
               </span>
             </div>
           </div>
         </div>
 
-        {/* Category Allocations Table Card */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
-          <div className="p-4 sm:px-6 sm:py-4.5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {/* Compact Table Card */}
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
+          <div className="p-3 sm:px-4 sm:py-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div>
-              <h2 className="text-base font-bold text-slate-900">Category Allocations</h2>
-              <p className="text-xs text-slate-400 font-normal">
+              <h2 className="text-sm font-bold text-slate-900">Category Allocations</h2>
+              <p className="text-[11px] text-slate-400">
                 {rows.length} budget heads defined for this period
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search
-                  size={14}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search categories..."
-                  className="w-48 sm:w-64 h-9 pl-8 pr-3 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
-                />
-              </div>
-
-              <button
-                type="button"
-                className="w-9 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-500 transition"
-                title="Filters"
-              >
-                <SlidersHorizontal size={14} />
-              </button>
+            <div className="relative">
+              <Search
+                size={13}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search categories..."
+                className="w-full sm:w-56 h-8 pl-7.5 pr-2.5 rounded-lg border border-slate-200 bg-white text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+              />
             </div>
           </div>
 
           <div className="w-full overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/50 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  <th className="py-3.5 px-6 min-w-[220px]">Category</th>
-                  <th className="py-3.5 px-4 min-w-[110px]">Budget</th>
-                  <th className="py-3.5 px-4 min-w-[120px]">Cash Received</th>
-                  <th className="py-3.5 px-4 min-w-[110px]">Spent</th>
-                  <th className="py-3.5 px-4 min-w-[120px]">Cash Remaining</th>
-                  <th className="py-3.5 px-4 min-w-[120px]">Budget Remaining</th>
-                  <th className="py-3.5 px-4 min-w-[150px]">Utilization</th>
-                  <th className="py-3.5 pr-6 pl-2 min-w-[220px] text-right">Actions</th>
+                <tr className="border-b border-slate-100 bg-slate-50/70 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <th className="py-2.5 px-4 min-w-[200px]">Category</th>
+                  <th className="py-2.5 px-3 min-w-[100px]">Budget</th>
+                  <th className="py-2.5 px-3 min-w-[100px]">Cash Received</th>
+                  <th className="py-2.5 px-3 min-w-[95px]">Spent</th>
+                  <th className="py-2.5 px-3 min-w-[105px]">Cash Rem.</th>
+                  <th className="py-2.5 px-3 min-w-[105px]">Budget Rem.</th>
+                  <th className="py-2.5 px-3 min-w-[120px]">Utilization</th>
+                  <th className="py-2.5 pr-4 pl-2 min-w-[170px] text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-16 text-slate-400 text-xs">
+                    <td colSpan={8} className="text-center py-12 text-slate-400 text-xs">
                       Loading budget entries...
                     </td>
                   </tr>
                 ) : filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-16 text-slate-400 text-xs">
+                    <td colSpan={8} className="text-center py-12 text-slate-400 text-xs">
                       No categories found matching your search.
                     </td>
                   </tr>
@@ -1544,7 +1622,7 @@ export default function OfficeBudgetPage() {
                     let barColor = 'bg-emerald-500';
 
                     if (allocated === 0 && spent === 0) {
-                      statusLabel = 'Not allocated';
+                      statusLabel = 'Unallocated';
                       statusColor = 'text-slate-400';
                       barColor = 'bg-slate-200';
                     } else if (spent === 0) {
@@ -1563,61 +1641,61 @@ export default function OfficeBudgetPage() {
 
                     return (
                       <Fragment key={row.budgetCategoryId}>
-                        <tr className="hover:bg-slate-50/70 transition">
-                          <td className="py-4 px-6">
-                            <div className="flex items-center gap-3">
+                        <tr className="hover:bg-slate-50/60 transition">
+                          <td className="py-2.5 px-4">
+                            <div className="flex items-center gap-2">
                               {hasSubs ? (
                                 <button
                                   type="button"
                                   onClick={() => toggleExpanded(row.budgetCategoryId)}
-                                  className="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-slate-700 transition shrink-0"
+                                  className="w-4 h-4 flex items-center justify-center rounded text-slate-400 hover:text-slate-700 transition shrink-0"
                                 >
-                                  {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                  {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                                 </button>
                               ) : (
-                                <span className="w-5 shrink-0" />
+                                <span className="w-4 shrink-0" />
                               )}
 
-                              <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                                <Folder size={15} />
+                              <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                                <Folder size={13} />
                               </div>
 
                               <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <p className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className="text-xs font-semibold text-slate-900 truncate">
                                     {row.name}
                                   </p>
                                   {row.status === 'Pending' && (
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-600 border border-amber-200">
-                                      Pending Approval
+                                    <span className="inline-flex items-center px-1 py-0.2 rounded text-[9px] font-semibold bg-amber-50 text-amber-600 border border-amber-200">
+                                      Pending
                                     </span>
                                   )}
                                   {row.status === 'Rejected' && (
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-600 border border-rose-200">
+                                    <span className="inline-flex items-center px-1 py-0.2 rounded text-[9px] font-semibold bg-rose-50 text-rose-600 border border-rose-200">
                                       Rejected
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-[11px] text-slate-400 font-normal truncate mt-0.5">
+                                <p className="text-[10px] text-slate-400 truncate">
                                   {row.description || 'General office operations'}
                                 </p>
                               </div>
                             </div>
                           </td>
 
-                          <td className="py-4 px-4 font-bold text-slate-900 text-xs sm:text-sm whitespace-nowrap">
+                          <td className="py-2.5 px-3 font-semibold text-slate-900 whitespace-nowrap">
                             ৳{money(allocated)}
                           </td>
 
-                          <td className="py-4 px-4 font-semibold text-emerald-600 text-xs sm:text-sm whitespace-nowrap">
+                          <td className="py-2.5 px-3 font-medium text-emerald-600 whitespace-nowrap">
                             {cashReceived > 0 ? `৳${money(cashReceived)}` : <span className="text-slate-300 font-normal">—</span>}
                           </td>
 
-                          <td className="py-4 px-4 font-semibold text-slate-600 text-xs sm:text-sm whitespace-nowrap">
+                          <td className="py-2.5 px-3 font-medium text-slate-600 whitespace-nowrap">
                             ৳{money(spent)}
                           </td>
 
-                          <td className="py-4 px-4 font-bold text-xs sm:text-sm whitespace-nowrap">
+                          <td className="py-2.5 px-3 font-semibold whitespace-nowrap">
                             {cashReceived > 0 || spent > 0 ? (
                               <span className={cashRemaining < 0 ? 'text-rose-600' : 'text-emerald-600'}>
                                 ৳{money(cashRemaining)}
@@ -1627,21 +1705,21 @@ export default function OfficeBudgetPage() {
                             )}
                           </td>
 
-                          <td className="py-4 px-4 font-bold text-xs sm:text-sm whitespace-nowrap">
+                          <td className="py-2.5 px-3 font-semibold whitespace-nowrap">
                             <span className={budgetRemaining < 0 ? 'text-rose-600' : 'text-emerald-600'}>
                               ৳{money(budgetRemaining)}
                             </span>
                           </td>
 
-                          <td className="py-4 px-4">
-                            <div className="w-full max-w-[130px]">
-                              <div className="flex items-center justify-between text-xs mb-1.5 font-medium">
+                          <td className="py-2.5 px-3">
+                            <div className="w-full max-w-[110px]">
+                              <div className="flex items-center justify-between text-[10px] mb-1 font-medium">
                                 <span className={statusColor}>{statusLabel}</span>
                                 <span className="font-bold text-slate-700">
                                   {pct.toFixed(pct % 1 === 0 ? 0 : 1)}%
                                 </span>
                               </div>
-                              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
                                 <div
                                   className={`h-full rounded-full transition-all duration-300 ${barColor}`}
                                   style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
@@ -1650,41 +1728,41 @@ export default function OfficeBudgetPage() {
                             </div>
                           </td>
 
-                          <td className="py-4 pr-6 pl-2 text-right">
-                            <div className="inline-flex items-center justify-end gap-1.5 shrink-0">
+                          <td className="py-2.5 pr-4 pl-2 text-right">
+                            <div className="inline-flex items-center justify-end gap-1 shrink-0">
                               {(row.status === 'Pending' || row.status === 'Rejected') && (
                                 <button
                                   type="button"
                                   onClick={() => setReviewingRow(row)}
-                                  className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap cursor-pointer shadow-2xs ${
+                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition whitespace-nowrap shadow-2xs ${
                                     row.status === 'Pending'
                                       ? 'bg-amber-500 text-white hover:bg-amber-600'
                                       : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
                                   }`}
                                   title={`Requested: ৳${money(row.requestedAmount)}`}
                                 >
-                                  <ClipboardCheck size={12} />
-                                  {row.status === 'Pending' ? `Review ৳${money(row.requestedAmount)}` : 'Reconsider'}
+                                  <ClipboardCheck size={11} />
+                                  {row.status === 'Pending' ? `Review` : 'Reconsider'}
                                 </button>
                               )}
 
                               <button
                                 type="button"
                                 onClick={() => setViewingLogsRow(row)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100 transition whitespace-nowrap"
+                                className="inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 transition whitespace-nowrap"
                                 title="View change history"
                               >
-                                <Eye size={13} />
-                                View
+                                <Eye size={11} />
+                                Log
                               </button>
 
                               <button
                                 type="button"
                                 onClick={() => setEditingRow(row)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition whitespace-nowrap"
+                                className="inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition whitespace-nowrap"
                               >
-                                <Pencil size={12} />
-                                {row.monthlyBudgetId ? 'Edit' : 'Set Budget'}
+                                <Pencil size={11} />
+                                {row.monthlyBudgetId ? 'Edit' : 'Set'}
                               </button>
 
                               {row.monthlyBudgetId ? (
@@ -1692,23 +1770,13 @@ export default function OfficeBudgetPage() {
                                   type="button"
                                   onClick={() => handleDelete(row)}
                                   disabled={deletingId === row.monthlyBudgetId}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200/60 shadow-2xs transition whitespace-nowrap cursor-pointer"
-                                  title="Remove budget allocation"
+                                  className="inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-medium bg-rose-50 text-rose-600 hover:bg-rose-100 transition whitespace-nowrap"
+                                  title="Remove allocation"
                                 >
-                                  <Trash2 size={12} />
-                                  {deletingId === row.monthlyBudgetId ? 'Deleting…' : 'Delete'}
+                                  <Trash2 size={11} />
+                                  {deletingId === row.monthlyBudgetId ? '…' : 'Del'}
                                 </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  disabled
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-100/80 text-slate-400 border border-slate-200/60 cursor-not-allowed transition whitespace-nowrap"
-                                  title="No budget allocated to delete for this month"
-                                >
-                                  <Trash2 size={12} />
-                                  Delete
-                                </button>
-                              )}
+                              ) : null}
                             </div>
                           </td>
                         </tr>
@@ -1722,19 +1790,19 @@ export default function OfficeBudgetPage() {
 
                             return (
                               <tr key={sub.budgetCategoryId} className="bg-slate-50/50">
-                                <td className="py-2.5 px-6 pl-14 text-xs text-slate-600 flex items-center gap-2">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                                <td className="py-1.5 px-4 pl-12 text-[11px] text-slate-600 flex items-center gap-1.5">
+                                  <span className="w-1 h-1 rounded-full bg-slate-300" />
                                   {sub.name}
                                 </td>
-                                <td className="py-2.5 px-4 text-xs text-slate-600 font-medium whitespace-nowrap">
+                                <td className="py-1.5 px-3 text-[11px] text-slate-600 font-medium whitespace-nowrap">
                                   {subAlloc > 0 ? `৳${money(subAlloc)}` : '—'}
                                 </td>
-                                <td className="py-2.5 px-4 text-xs text-slate-400 font-mono">—</td>
-                                <td className="py-2.5 px-4 text-xs font-semibold text-slate-600 whitespace-nowrap">
+                                <td className="py-1.5 px-3 text-[11px] text-slate-300 font-mono">—</td>
+                                <td className="py-1.5 px-3 text-[11px] font-medium text-slate-600 whitespace-nowrap">
                                   ৳{money(subSp)}
                                 </td>
-                                <td className="py-2.5 px-4 text-xs text-slate-400 font-mono">—</td>
-                                <td className="py-2.5 px-4 text-xs font-medium whitespace-nowrap">
+                                <td className="py-1.5 px-3 text-[11px] text-slate-300 font-mono">—</td>
+                                <td className="py-1.5 px-3 text-[11px] font-medium whitespace-nowrap">
                                   {subRem !== null ? (
                                     <span className={subRem < 0 ? 'text-rose-600' : 'text-emerald-600'}>
                                       ৳{money(subRem)}
@@ -1743,12 +1811,12 @@ export default function OfficeBudgetPage() {
                                     '—'
                                   )}
                                 </td>
-                                <td className="py-2.5 px-4 text-xs text-slate-400 font-mono">—</td>
-                                <td className="py-2.5 pr-6 pl-2 text-right">
+                                <td className="py-1.5 px-3 text-[11px] text-slate-300 font-mono">—</td>
+                                <td className="py-1.5 pr-4 pl-2 text-right">
                                   <button
                                     type="button"
                                     onClick={() => setEditingRow(sub)}
-                                    className="text-[11px] font-semibold text-blue-600 hover:underline px-2 py-1"
+                                    className="text-[10px] font-semibold text-blue-600 hover:underline px-1.5 py-0.5"
                                   >
                                     {sub.monthlyBudgetId ? 'Edit' : 'Set'}
                                   </button>
@@ -1764,16 +1832,16 @@ export default function OfficeBudgetPage() {
             </table>
           </div>
 
-          <div className="px-6 py-3.5 bg-white border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
-            <div className="flex items-center gap-2 text-slate-600">
+          <div className="px-4 py-2.5 bg-white border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 gap-2">
+            <div className="flex items-center gap-1.5 text-slate-600">
               <CheckCircle2
-                size={15}
+                size={13}
                 className={allWithinBudget ? 'text-emerald-500' : 'text-amber-500'}
               />
               <span>
                 {allWithinBudget
-                  ? 'All category budgets are currently within allocated limits.'
-                  : 'One or more category budgets have exceeded their allocated limits.'}
+                  ? 'All categories are currently within allocated limits.'
+                  : 'One or more categories have exceeded their allocated limits.'}
               </span>
             </div>
             <span className="text-slate-400">
@@ -1827,7 +1895,7 @@ export default function OfficeBudgetPage() {
         />
       )}
 
-      {/* Review (Approve / Reject) Modal */}
+      {/* Review Modal */}
       {reviewingRow && (
         <BudgetRequestReviewModal
           row={reviewingRow}
