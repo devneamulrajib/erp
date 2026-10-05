@@ -32,6 +32,20 @@ router.get('/summary', auth, async (req, res) => {
       return Number(spent) || 0;
     }
 
+    // Cash receipts for the month, split into per-category tagged amounts
+    // and an untagged "General Office Fund" bucket (budgetCategoryId: null).
+    const cashReceipts = await MonthlyBudgetCashReceipt.findAll({ where: { year, month } });
+    const cashByCategory = {};
+    let generalCashReceived = 0;
+    cashReceipts.forEach((r) => {
+      const amt = Number(r.amount) || 0;
+      if (r.budgetCategoryId) {
+        cashByCategory[r.budgetCategoryId] = (cashByCategory[r.budgetCategoryId] || 0) + amt;
+      } else {
+        generalCashReceived += amt;
+      }
+    });
+
     const rows = await Promise.all(
       topCategories.map(async (cat) => {
         const subs = subsByParent[cat.id] || [];
@@ -48,6 +62,7 @@ router.get('/summary', auth, async (req, res) => {
 
         const budget = budgetByCategory[cat.id];
         const allocated = budget ? Number(budget.allocatedAmount) : 0;
+        const cashReceivedAmount = cashByCategory[cat.id] || 0;
 
         return {
           budgetCategoryId: cat.id,
@@ -56,18 +71,21 @@ router.get('/summary', auth, async (req, res) => {
           monthlyBudgetId: budget ? budget.id : null,
           allocatedAmount: allocated,
           note: budget ? budget.note : '',
+          status: budget ? budget.status : 'Approved',
+          requestedAmount: budget ? budget.requestedAmount : null,
+          requestedBy: budget ? budget.requestedBy : null,
+          rejectedBy: budget ? budget.rejectedBy : null,
+          rejectedAt: budget ? budget.rejectedAt : null,
+          rejectionReason: budget ? budget.rejectionReason : null,
           spentAmount,
+          cashReceivedAmount,
           remainingAmount: allocated - spentAmount,
           subcategories: subSpent,
         };
       })
     );
 
-    // Fetch total cash disbursed/received for this month
-    const totalCashReceived =
-      (await MonthlyBudgetCashReceipt.sum('amount', {
-        where: { year, month },
-      })) || 0;
+    const totalCashReceived = cashReceipts.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
     const totals = rows.reduce(
       (acc, r) => ({
@@ -79,6 +97,7 @@ router.get('/summary', auth, async (req, res) => {
     );
 
     totals.cashReceivedAmount = Number(totalCashReceived) || 0;
+    totals.generalCashReceived = Number(generalCashReceived) || 0;
     totals.cashInHand = totals.cashReceivedAmount - totals.spentAmount;
     totals.pendingCash = Math.max(0, totals.allocatedAmount - totals.cashReceivedAmount);
 
@@ -129,6 +148,9 @@ router.post('/', auth, async (req, res) => {
       previousAmount = Number(budget.allocatedAmount);
       budget.allocatedAmount = nextAmount;
       if (note !== undefined) budget.note = note;
+      // A direct manual save always settles any outstanding Pending/Rejected
+      // request state — the admin has explicitly set the figure themselves.
+      budget.status = 'Approved';
       await budget.save();
       action = 'Updated';
     } else {
@@ -139,6 +161,7 @@ router.post('/', auth, async (req, res) => {
         allocatedAmount: nextAmount,
         note: note || '',
         addedBy: performedBy,
+        status: 'Approved',
       });
       action = 'Created';
     }
@@ -166,6 +189,165 @@ router.post('/', auth, async (req, res) => {
     });
 
     res.status(201).json(budget);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Pay Slip page calls this: auto-request salary budget = total net salary of Draft slips.
+router.post('/request', auth, async (req, res) => {
+  try {
+    const { budgetCategoryId, year, month, requestedAmount, note } = req.body;
+    if (!budgetCategoryId || !year || !month || !requestedAmount) {
+      return res.status(400).json({ message: 'Category, year, month and requestedAmount are required' });
+    }
+    const performedBy = req.user?.name || 'Admin';
+
+    let budget = await MonthlyBudget.findOne({ where: { budgetCategoryId, year, month } });
+    if (budget) {
+      budget.requestedAmount = Number(requestedAmount);
+      budget.status = 'Pending';
+      budget.requestedBy = performedBy;
+      budget.note = note || budget.note;
+      // A fresh request clears any stale rejection from a previous round.
+      budget.rejectedBy = null;
+      budget.rejectedAt = null;
+      budget.rejectionReason = null;
+      await budget.save();
+    } else {
+      budget = await MonthlyBudget.create({
+        budgetCategoryId,
+        year,
+        month,
+        allocatedAmount: 0,
+        requestedAmount: Number(requestedAmount),
+        status: 'Pending',
+        requestedBy: performedBy,
+        note: note || '',
+        addedBy: performedBy,
+      });
+    }
+
+    await logActivity({
+      module: 'Budget',
+      action: 'Requested',
+      message: `Requested ৳${Number(requestedAmount).toLocaleString()} budget for ${month}/${year}`,
+      amount: requestedAmount,
+      budgetCategoryId,
+      relatedType: 'MonthlyBudget',
+      relatedId: budget.id,
+      performedBy,
+    });
+
+    res.status(201).json(budget);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Admin approves a pending request. Accepts an optional approvedAmount to
+// override the originally requested figure (e.g. after reviewing the actual
+// payslip breakdown and adjusting for a correction), and an optional note.
+router.post('/:id/approve', auth, async (req, res) => {
+  try {
+    const budget = await MonthlyBudget.findByPk(req.params.id);
+    if (!budget) return res.status(404).json({ message: 'Not found' });
+    if (budget.status !== 'Pending') {
+      return res.status(400).json({ message: 'This request is not pending' });
+    }
+    const performedBy = req.user?.name || 'Admin';
+    const requested = Number(budget.requestedAmount) || 0;
+    const { approvedAmount, note } = req.body;
+    const amount = approvedAmount !== undefined && approvedAmount !== null && approvedAmount !== ''
+      ? Number(approvedAmount)
+      : requested;
+
+    budget.allocatedAmount = amount;
+    budget.status = 'Approved';
+    budget.approvedBy = performedBy;
+    budget.approvedAt = new Date();
+    if (note) budget.note = note;
+    await budget.save();
+
+    const adjustedNote = amount !== requested
+      ? `Approved from payroll request (adjusted from ৳${requested.toLocaleString()} to ৳${amount.toLocaleString()})`
+      : 'Approved from payroll request';
+
+    await MonthlyBudgetAuditLog.create({
+      monthlyBudgetId: budget.id,
+      budgetCategoryId: budget.budgetCategoryId,
+      year: budget.year,
+      month: budget.month,
+      action: 'Approved',
+      previousAmount: 0,
+      newAmount: amount,
+      note: note || adjustedNote,
+      performedBy,
+    });
+
+    await logActivity({
+      module: 'Budget',
+      action: 'Approved',
+      message: `Approved budget request of ৳${amount.toLocaleString()} for ${budget.month}/${budget.year}${amount !== requested ? ` (requested ৳${requested.toLocaleString()})` : ''}`,
+      amount,
+      budgetCategoryId: budget.budgetCategoryId,
+      relatedType: 'MonthlyBudget',
+      relatedId: budget.id,
+      performedBy,
+    });
+
+    res.json(budget);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Admin rejects a pending request — allocatedAmount stays untouched (0 unless
+// something was already set), status flips to Rejected with a required reason.
+router.post('/:id/reject', auth, async (req, res) => {
+  try {
+    const budget = await MonthlyBudget.findByPk(req.params.id);
+    if (!budget) return res.status(404).json({ message: 'Not found' });
+    if (budget.status !== 'Pending') {
+      return res.status(400).json({ message: 'This request is not pending' });
+    }
+    const { reason } = req.body;
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ message: 'A rejection reason is required' });
+    }
+    const performedBy = req.user?.name || 'Admin';
+    const requested = Number(budget.requestedAmount) || 0;
+
+    budget.status = 'Rejected';
+    budget.rejectedBy = performedBy;
+    budget.rejectedAt = new Date();
+    budget.rejectionReason = reason.trim();
+    await budget.save();
+
+    await MonthlyBudgetAuditLog.create({
+      monthlyBudgetId: budget.id,
+      budgetCategoryId: budget.budgetCategoryId,
+      year: budget.year,
+      month: budget.month,
+      action: 'Rejected',
+      previousAmount: requested,
+      newAmount: null,
+      note: reason.trim(),
+      performedBy,
+    });
+
+    await logActivity({
+      module: 'Budget',
+      action: 'Rejected',
+      message: `Rejected budget request of ৳${requested.toLocaleString()} for ${budget.month}/${budget.year}: ${reason.trim()}`,
+      amount: requested,
+      budgetCategoryId: budget.budgetCategoryId,
+      relatedType: 'MonthlyBudget',
+      relatedId: budget.id,
+      performedBy,
+    });
+
+    res.json(budget);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

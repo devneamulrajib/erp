@@ -9,10 +9,14 @@ import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
 import {
   getEmployees, getNextEmployeeCode, createEmployee, updateEmployee, deleteEmployee,
+  bulkDeleteEmployees, wipeAllEmployees,
   getEmployeeAdvances, requestEmployeeAdvance, disburseEmployeeAdvance,
   rejectEmployeeAdvance, getEmployeeAdvanceSummary,
+  bulkDeleteAdvances, wipeAllAdvances,
   setEmployeePortalAccess, getAttendanceForDate, markAttendance,
+  bulkDeleteAttendance, wipeAttendanceByDate,
   getLeaveRequests, approveLeaveRequest, rejectLeaveRequest,
+  bulkDeleteLeaveRequests, wipeAllLeaveRequests,
 } from '../api/employee';
 import api from '../api/axios';
 
@@ -59,6 +63,14 @@ const ATTENDANCE_OPTIONS = ['Present', 'Absent', 'Leave', 'Holiday'];
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
+// Section labels used in the "type DELETE to confirm" wipe prompt.
+const WIPE_LABELS = {
+  employees: 'employees',
+  advances: 'advance/loan requests',
+  leave: 'leave requests',
+  attendance: 'attendance records for the selected date',
+};
+
 export default function EmployeeListPage() {
   const [activeTab, setActiveTab] = useState('employees'); // employees | advances | summary | leave | attendance
   const [employees, setEmployees] = useState([]);
@@ -67,6 +79,10 @@ export default function EmployeeListPage() {
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+
+  // Row selection for bulk delete / wipe — keyed per tab, reset on tab change.
+  const [selected, setSelected] = useState(new Set());
+  useEffect(() => { setSelected(new Set()); }, [activeTab]);
 
   // Modals
   const [empModalOpen, setEmpModalOpen] = useState(false);
@@ -372,6 +388,76 @@ export default function EmployeeListPage() {
     }
   }
 
+  // ---------- Bulk selection / delete / wipe ----------
+  function toggleSelect(id) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll(ids) {
+    setSelected((prev) => (prev.size === ids.length && ids.length > 0 ? new Set() : new Set(ids)));
+  }
+
+  function confirmWipe(label) {
+    const typed = window.prompt(`This will permanently delete ALL ${label}. Type DELETE to confirm.`);
+    return typed === 'DELETE';
+  }
+
+  async function refreshAttendanceMap() {
+    try {
+      const res = await getAttendanceForDate(attendanceDate);
+      const map = {};
+      (res.data || []).forEach((r) => { map[r.employeeId] = r.status; });
+      setAttendanceMap(map);
+    } catch {
+      setAttendanceMap({});
+    }
+  }
+
+  async function handleDeleteSelected() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (!window.confirm(`Delete ${ids.length} selected record(s)? This cannot be undone.`)) return;
+
+    try {
+      if (activeTab === 'employees') await bulkDeleteEmployees(ids);
+      else if (activeTab === 'advances') await bulkDeleteAdvances(ids);
+      else if (activeTab === 'leave') await bulkDeleteLeaveRequests(ids);
+      else if (activeTab === 'attendance') await bulkDeleteAttendance(attendanceDate, ids);
+
+      setSelected(new Set());
+      await loadData();
+      if (activeTab === 'attendance') await refreshAttendanceMap();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to delete selected records');
+    }
+  }
+
+  async function handleWipeSection() {
+    const label = activeTab === 'attendance'
+      ? `attendance records for ${attendanceDate}`
+      : WIPE_LABELS[activeTab];
+    if (!label || !confirmWipe(label)) return;
+
+    try {
+      if (activeTab === 'employees') await wipeAllEmployees();
+      else if (activeTab === 'advances') await wipeAllAdvances();
+      else if (activeTab === 'leave') await wipeAllLeaveRequests();
+      else if (activeTab === 'attendance') {
+        await wipeAttendanceByDate(attendanceDate);
+        setAttendanceMap({});
+      }
+
+      setSelected(new Set());
+      await loadData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to wipe section');
+    }
+  }
+
   // ---------- Filters & stats ----------
   const q = search.toLowerCase();
 
@@ -415,6 +501,10 @@ export default function EmployeeListPage() {
     status === 'Approved' ? 'bg-emerald-50 text-emerald-600'
       : status === 'Rejected' ? 'bg-red-50 text-red-600'
         : 'bg-amber-50 text-amber-600';
+
+  // Whether the current tab supports bulk delete / wipe (Summary is a
+  // computed rollup of Advances, so it has nothing of its own to delete).
+  const showBulkControls = activeTab !== 'summary';
 
   return (
     <div className="min-h-screen w-full bg-slate-50 text-left">
@@ -510,30 +600,54 @@ export default function EmployeeListPage() {
               />
             </div>
 
-            {activeTab === 'attendance' && (
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="date"
-                  value={attendanceDate}
-                  onChange={(e) => setAttendanceDate(e.target.value)}
-                  className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
-                />
-                <button
-                  onClick={markAllPresent}
-                  className="px-3 py-2 text-sm bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg"
-                >
-                  Mark all Present
-                </button>
-                <button
-                  onClick={handleSaveAttendance}
-                  disabled={submitting}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-50"
-                >
-                  <Save size={14} />
-                  {submitting ? 'Saving...' : 'Save Attendance'}
-                </button>
-              </div>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {activeTab === 'attendance' && (
+                <>
+                  <input
+                    type="date"
+                    value={attendanceDate}
+                    onChange={(e) => setAttendanceDate(e.target.value)}
+                    className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                  />
+                  <button
+                    onClick={markAllPresent}
+                    className="px-3 py-2 text-sm bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg"
+                  >
+                    Mark all Present
+                  </button>
+                  <button
+                    onClick={handleSaveAttendance}
+                    disabled={submitting}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-50"
+                  >
+                    <Save size={14} />
+                    {submitting ? 'Saving...' : 'Save Attendance'}
+                  </button>
+                </>
+              )}
+
+              {/* Bulk delete / wipe controls */}
+              {showBulkControls && (
+                <>
+                  {selected.size > 0 && (
+                    <button
+                      onClick={handleDeleteSelected}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                    >
+                      <Trash2 size={14} />
+                      Delete Selected ({selected.size})
+                    </button>
+                  )}
+                  <button
+                    onClick={handleWipeSection}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-red-200 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    <Trash2 size={14} />
+                    Clear Section
+                  </button>
+                </>
+              )}
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -541,6 +655,13 @@ export default function EmployeeListPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider text-left">
+                    <th className="px-5 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={filteredEmployees.length > 0 && selected.size === filteredEmployees.length}
+                        onChange={() => toggleSelectAll(filteredEmployees.map((e) => e.id))}
+                      />
+                    </th>
                     <th className="px-5 py-3 font-medium">Code</th>
                     <th className="px-5 py-3 font-medium">Employee</th>
                     <th className="px-5 py-3 font-medium">Department & Role</th>
@@ -553,12 +674,15 @@ export default function EmployeeListPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loading ? (
-                    <tr><td colSpan={8} className="text-center py-12 text-slate-400">Loading employees...</td></tr>
+                    <tr><td colSpan={9} className="text-center py-12 text-slate-400">Loading employees...</td></tr>
                   ) : filteredEmployees.length === 0 ? (
-                    <tr><td colSpan={8} className="text-center py-12 text-slate-400">No employees found.</td></tr>
+                    <tr><td colSpan={9} className="text-center py-12 text-slate-400">No employees found.</td></tr>
                   ) : (
                     filteredEmployees.map((emp) => (
-                      <tr key={emp.id} className="hover:bg-slate-50/70 transition">
+                      <tr key={emp.id} className={`hover:bg-slate-50/70 transition ${selected.has(emp.id) ? 'bg-rose-50/40' : ''}`}>
+                        <td className="px-5 py-3.5">
+                          <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelect(emp.id)} />
+                        </td>
                         <td className="px-5 py-3.5 font-mono text-xs text-slate-500">{emp.code}</td>
                         <td className="px-5 py-3.5 font-medium text-slate-800">{emp.name}</td>
                         <td className="px-5 py-3.5 text-slate-600">
@@ -619,6 +743,13 @@ export default function EmployeeListPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider text-left">
+                    <th className="px-5 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={filteredAdvances.length > 0 && selected.size === filteredAdvances.length}
+                        onChange={() => toggleSelectAll(filteredAdvances.map((a) => a.id))}
+                      />
+                    </th>
                     <th className="px-5 py-3 font-medium">Employee</th>
                     <th className="px-5 py-3 font-medium">Type</th>
                     <th className="px-5 py-3 font-medium">Amount</th>
@@ -631,12 +762,15 @@ export default function EmployeeListPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loading ? (
-                    <tr><td colSpan={8} className="text-center py-12 text-slate-400">Loading requests...</td></tr>
+                    <tr><td colSpan={9} className="text-center py-12 text-slate-400">Loading requests...</td></tr>
                   ) : filteredAdvances.length === 0 ? (
-                    <tr><td colSpan={8} className="text-center py-12 text-slate-400">No requests found.</td></tr>
+                    <tr><td colSpan={9} className="text-center py-12 text-slate-400">No requests found.</td></tr>
                   ) : (
                     filteredAdvances.map((adv) => (
-                      <tr key={adv.id} className="hover:bg-slate-50/70 transition">
+                      <tr key={adv.id} className={`hover:bg-slate-50/70 transition ${selected.has(adv.id) ? 'bg-rose-50/40' : ''}`}>
+                        <td className="px-5 py-3.5">
+                          <input type="checkbox" checked={selected.has(adv.id)} onChange={() => toggleSelect(adv.id)} />
+                        </td>
                         <td className="px-5 py-3.5">
                           <div className="font-medium text-slate-800">{adv.employee?.name}</div>
                           <div className="text-xs text-slate-400 font-mono">{adv.employee?.code}</div>
@@ -745,6 +879,13 @@ export default function EmployeeListPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider text-left">
+                    <th className="px-5 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={filteredLeaves.length > 0 && selected.size === filteredLeaves.length}
+                        onChange={() => toggleSelectAll(filteredLeaves.map((r) => r.id))}
+                      />
+                    </th>
                     <th className="px-5 py-3 font-medium">Employee</th>
                     <th className="px-5 py-3 font-medium">Dates</th>
                     <th className="px-5 py-3 font-medium">Days</th>
@@ -755,12 +896,15 @@ export default function EmployeeListPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loading ? (
-                    <tr><td colSpan={6} className="text-center py-12 text-slate-400">Loading requests...</td></tr>
+                    <tr><td colSpan={7} className="text-center py-12 text-slate-400">Loading requests...</td></tr>
                   ) : filteredLeaves.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center py-12 text-slate-400">No leave requests yet.</td></tr>
+                    <tr><td colSpan={7} className="text-center py-12 text-slate-400">No leave requests yet.</td></tr>
                   ) : (
                     filteredLeaves.map((r) => (
-                      <tr key={r.id} className="hover:bg-slate-50/70 transition">
+                      <tr key={r.id} className={`hover:bg-slate-50/70 transition ${selected.has(r.id) ? 'bg-rose-50/40' : ''}`}>
+                        <td className="px-5 py-3.5">
+                          <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} />
+                        </td>
                         <td className="px-5 py-3.5">
                           <div className="font-medium text-slate-800">{r.employee?.name}</div>
                           <div className="text-xs text-slate-400 font-mono">{r.employee?.code}</div>
@@ -804,6 +948,13 @@ export default function EmployeeListPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider text-left">
+                    <th className="px-5 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={filteredAttendanceEmployees.length > 0 && selected.size === filteredAttendanceEmployees.length}
+                        onChange={() => toggleSelectAll(filteredAttendanceEmployees.map((e) => e.id))}
+                      />
+                    </th>
                     <th className="px-5 py-3 font-medium">Code</th>
                     <th className="px-5 py-3 font-medium">Employee</th>
                     <th className="px-5 py-3 font-medium">Department</th>
@@ -812,12 +963,15 @@ export default function EmployeeListPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loading ? (
-                    <tr><td colSpan={4} className="text-center py-12 text-slate-400">Loading employees...</td></tr>
+                    <tr><td colSpan={5} className="text-center py-12 text-slate-400">Loading employees...</td></tr>
                   ) : filteredAttendanceEmployees.length === 0 ? (
-                    <tr><td colSpan={4} className="text-center py-12 text-slate-400">No active employees found.</td></tr>
+                    <tr><td colSpan={5} className="text-center py-12 text-slate-400">No active employees found.</td></tr>
                   ) : (
                     filteredAttendanceEmployees.map((emp) => (
-                      <tr key={emp.id} className="hover:bg-slate-50/70 transition">
+                      <tr key={emp.id} className={`hover:bg-slate-50/70 transition ${selected.has(emp.id) ? 'bg-rose-50/40' : ''}`}>
+                        <td className="px-5 py-3.5">
+                          <input type="checkbox" checked={selected.has(emp.id)} onChange={() => toggleSelect(emp.id)} />
+                        </td>
                         <td className="px-5 py-3.5 font-mono text-xs text-slate-500">{emp.code}</td>
                         <td className="px-5 py-3.5 font-medium text-slate-800">{emp.name}</td>
                         <td className="px-5 py-3.5 text-slate-600">{emp.department || '—'}</td>

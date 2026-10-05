@@ -42,6 +42,25 @@ export async function deleteSalaryDeduction(id) {
   return res.data;
 }
 
+// Standing (recurring) deductions — e.g. a ৳1000 Food Allowance applied
+// to every employee, every month, until deactivated.
+export async function getStandingDeductions() {
+  const res = await api.get('/payslip/standing-deductions');
+  return res.data;
+}
+export async function createStandingDeduction(data) {
+  const res = await api.post('/payslip/standing-deductions', data);
+  return res.data;
+}
+export async function toggleStandingDeduction(id) {
+  const res = await api.patch(`/payslip/standing-deductions/${id}/toggle`);
+  return res.data;
+}
+export async function deleteStandingDeduction(id) {
+  const res = await api.delete(`/payslip/standing-deductions/${id}`);
+  return res.data;
+}
+
 function triggerDownload(blob, filename) {
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement('a');

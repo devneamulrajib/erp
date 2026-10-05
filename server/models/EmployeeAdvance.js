@@ -44,6 +44,14 @@ const EmployeeAdvance = sequelize.define('EmployeeAdvance', {
     type: DataTypes.ENUM('Pending', 'Approved', 'Disbursed', 'Rejected', 'Completed'),
     defaultValue: 'Pending',
   },
+
+  // Which payroll month/year this advance's deduction should start applying
+  // from — set by the employee when requesting it (defaults to the month
+  // after the request if left blank). Nullable so older rows created
+  // before this feature keep working as "applies immediately".
+  targetMonth: { type: DataTypes.INTEGER, allowNull: true },
+  targetYear: { type: DataTypes.INTEGER, allowNull: true },
+
   disbursementDate: {
     type: DataTypes.DATEONLY,
   },

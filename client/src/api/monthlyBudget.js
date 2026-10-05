@@ -40,3 +40,21 @@ export async function deleteCashReceipt(id) {
   const res = await api.delete(`/monthly-budgets/cash-receipts/${id}`);
   return res.data;
 }
+
+export async function requestMonthlyBudget(payload) {
+  const res = await api.post('/monthly-budgets/request', payload);
+  return res.data;
+}
+
+// payload: { approvedAmount?, note? } — approvedAmount lets the admin
+// adjust the figure away from what was originally requested.
+export async function approveMonthlyBudget(id, payload = {}) {
+  const res = await api.post(`/monthly-budgets/${id}/approve`, payload);
+  return res.data;
+}
+
+// payload: { reason } — reason is required by the backend.
+export async function rejectMonthlyBudget(id, payload) {
+  const res = await api.post(`/monthly-budgets/${id}/reject`, payload);
+  return res.data;
+}

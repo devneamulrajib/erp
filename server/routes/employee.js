@@ -27,6 +27,16 @@ function parseValidDate(dateVal) {
   return dateVal;
 }
 
+// Next calendar month after "now", as { year, month } — the sensible
+// default target period for a newly requested advance when none is given.
+function nextMonth() {
+  const d = new Date();
+  const m = d.getMonth() + 2; // +1 for 1-indexed month, +1 again for "next"
+  const year = d.getFullYear() + Math.floor((m - 1) / 12);
+  const month = ((m - 1) % 12) + 1;
+  return { year, month };
+}
+
 async function generateOfficeExpRef() {
   const count = await OfficeExpense.count();
   return `OEXP${String(count + 1).padStart(5, '0')}`;
@@ -48,16 +58,13 @@ async function resolveAccountId(name) {
   return acc ? acc.id : null;
 }
 
-// Marks every day in an approved leave range as "Leave" in attendance (max 62 days).
-// A day already recorded as "Present" (a real check-in / admin mark) is left
-// alone — leave approval must never silently erase an actual attendance record.
 async function markLeaveDays(employeeId, fromDate, toDate, markedBy) {
   const start = new Date(`${fromDate}T00:00:00Z`).getTime();
   const end = new Date(`${toDate}T00:00:00Z`).getTime();
   for (let t = start, n = 0; t <= end && n < 62; t += 86400000, n += 1) {
     const date = new Date(t).toISOString().slice(0, 10);
     const existing = await Attendance.findOne({ where: { employeeId, date } });
-    if (existing?.status === 'Present') continue; // don't overwrite a real check-in
+    if (existing?.status === 'Present') continue;
     await Attendance.upsert({ employeeId, date, status: 'Leave', markedBy });
   }
 }
@@ -66,6 +73,31 @@ async function markLeaveDays(employeeId, fromDate, toDate, markedBy) {
 
 router.get('/next-code', auth, async (req, res) => {
   res.json({ code: generateCode() });
+});
+
+// ---- Bulk delete / wipe (must come before the "/:id" routes below,
+// otherwise Express matches "/bulk" and "/all" as an :id param) ----
+
+router.delete('/bulk', auth, async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'ids[] is required' });
+    }
+    const count = await Employee.destroy({ where: { id: ids } });
+    res.json({ deleted: count });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.delete('/all', auth, async (req, res) => {
+  try {
+    const count = await Employee.destroy({ where: {} });
+    res.json({ deleted: count });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 router.get('/', auth, async (req, res) => {
@@ -232,13 +264,21 @@ router.get('/advances/all', auth, async (req, res) => {
 
 router.post('/advances/request', auth, async (req, res) => {
   try {
-    const { employeeId, type, amount, repaymentMonths, reason } = req.body;
+    const { employeeId, type, amount, repaymentMonths, reason, targetMonth, targetYear } = req.body;
     if (!employeeId || !amount) {
       return res.status(400).json({ message: 'Employee and Amount are required' });
     }
 
     const months = Number(repaymentMonths) || 1;
     const deduction = Number(amount) / months;
+
+    let tMonth = targetMonth ? Number(targetMonth) : null;
+    let tYear = targetYear ? Number(targetYear) : null;
+    if (!tMonth || !tYear) {
+      const def = nextMonth();
+      tMonth = def.month;
+      tYear = def.year;
+    }
 
     const advance = await EmployeeAdvance.create({
       employeeId,
@@ -248,6 +288,8 @@ router.post('/advances/request', auth, async (req, res) => {
       repaymentMonths: months,
       monthlyDeduction: deduction,
       reason: reason || '',
+      targetMonth: tMonth,
+      targetYear: tYear,
       status: 'Pending',
     });
 
@@ -316,11 +358,6 @@ router.post('/advances/:id/disburse', auth, async (req, res) => {
     });
 
     // 2. Post to Accounting Voucher
-    // NOTE: Voucher.type is a fixed ENUM ('Journal', 'Payment', 'Receipt',
-    // 'Contra', 'Expense', 'Purchase', 'Sales') — 'Office Expense' is NOT
-    // a valid value there and caused a "Data truncated" error. Use the
-    // existing 'Expense' type instead (same one the standalone Expense
-    // bridge uses), and keep the human-readable distinction in narration/reference.
     const drAccountId = await resolveAccountId(drAccount);
     const crAccountId = await resolveAccountId(crAccount);
 
@@ -349,12 +386,16 @@ router.post('/advances/:id/disburse', auth, async (req, res) => {
     advance.approvedBy = req.user?.name || 'Admin';
     await advance.save();
 
-    // 4. Keep this month's Draft payslip in sync if one already exists —
-    // so a newly disbursed advance shows up immediately instead of only
-    // appearing the next time payroll is generated.
+    // 4. Keep the TARGET month's Draft payslip in sync if one already
+    // exists — this is the fix: previously this always synced "now",
+    // so an advance targeted at a different payroll month than the
+    // current calendar month never showed up on Payroll Processing for
+    // that month until the admin manually regenerated it. Fall back to
+    // the current month only if no target period was set (legacy rows).
     try {
-      const now = new Date();
-      await syncDraftPaySlip(advance.employeeId, now.getFullYear(), now.getMonth() + 1, req.user?.name);
+      const year = advance.targetYear || new Date().getFullYear();
+      const month = advance.targetMonth || (new Date().getMonth() + 1);
+      await syncDraftPaySlip(advance.employeeId, year, month, req.user?.name);
     } catch { /* non-critical, payroll sync failure must not block disbursement */ }
 
     await notifyEmployee(
@@ -364,6 +405,30 @@ router.post('/advances/:id/disburse', auth, async (req, res) => {
     );
 
     res.json({ message: 'Disbursed and recorded in Office Budget & Accounts successfully', advance, officeExpense });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ---- Bulk delete / wipe for Advances ----
+
+router.delete('/advances/bulk', auth, async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'ids[] is required' });
+    }
+    const count = await EmployeeAdvance.destroy({ where: { id: ids } });
+    res.json({ deleted: count });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.delete('/advances/all', auth, async (req, res) => {
+  try {
+    const count = await EmployeeAdvance.destroy({ where: {} });
+    res.json({ deleted: count });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -384,7 +449,7 @@ router.get('/attendance', auth, async (req, res) => {
 
 router.post('/attendance/mark', auth, async (req, res) => {
   try {
-    const { date, records } = req.body; // records: [{ employeeId, status }]
+    const { date, records } = req.body;
     if (!date || !Array.isArray(records)) {
       return res.status(400).json({ message: 'date and records[] are required' });
     }
@@ -394,6 +459,32 @@ router.post('/attendance/mark', auth, async (req, res) => {
       await Attendance.upsert({ employeeId: r.employeeId, date, status: r.status, markedBy });
     }
     res.json({ message: 'Attendance saved' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ---- Bulk delete / wipe for Attendance (scoped to a single date) ----
+
+router.delete('/attendance/bulk', auth, async (req, res) => {
+  try {
+    const { date, employeeIds } = req.body;
+    if (!date || !Array.isArray(employeeIds) || employeeIds.length === 0) {
+      return res.status(400).json({ message: 'date and employeeIds[] are required' });
+    }
+    const count = await Attendance.destroy({ where: { date, employeeId: employeeIds } });
+    res.json({ deleted: count });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.delete('/attendance/by-date', auth, async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ message: 'date is required' });
+    const count = await Attendance.destroy({ where: { date } });
+    res.json({ deleted: count });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -482,6 +573,30 @@ router.post('/leave-requests/:id/reject', auth, async (req, res) => {
     );
 
     res.json(request);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ---- Bulk delete / wipe for Leave Requests ----
+
+router.delete('/leave-requests/bulk', auth, async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'ids[] is required' });
+    }
+    const count = await LeaveRequest.destroy({ where: { id: ids } });
+    res.json({ deleted: count });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.delete('/leave-requests/all', auth, async (req, res) => {
+  try {
+    const count = await LeaveRequest.destroy({ where: {} });
+    res.json({ deleted: count });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

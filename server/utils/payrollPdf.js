@@ -50,7 +50,6 @@ function buildPaySlipPdf(slip, stream) {
   );
   doc.moveDown(1.5);
 
-  // Employee info block
   const infoY = doc.y;
   doc.fontSize(10).fillColor('#374151');
   doc.text(`Employee: ${slip.employee?.name || '-'}`, 50, infoY);
@@ -65,13 +64,7 @@ function buildPaySlipPdf(slip, stream) {
   doc.y = infoY + (slip.status === 'Paid' ? 68 : 52);
   doc.moveDown(1);
 
-  // Earnings table
   const cols = { label: 50, amount: 460 };
-  function sectionHeader(title) {
-    doc.rect(50, doc.y, 495, 20).fill('#312e81');
-    doc.fillColor('#ffffff').fontSize(10).text(title, cols.label + 4, doc.y + 5 - 20 + 20, { continued: false });
-    // The rect advances nothing; manually set text at correct baseline:
-  }
 
   function rowLine(label, value, opts = {}) {
     const y = doc.y;
@@ -108,17 +101,31 @@ function buildPaySlipPdf(slip, stream) {
   } else if (Number(slip.advanceDeduction) > 0) {
     rowLine('Advance / Loan Deduction', slip.advanceDeduction, { color: '#b45309' });
   }
+
+  const standing = Array.isArray(slip.standingBreakdown)
+    ? slip.standingBreakdown
+    : (slip.standingBreakdown ? JSON.parse(slip.standingBreakdown) : []);
+  standing
+    .filter((s) => s.type !== 'Addition')
+    .forEach((s) => rowLine(s.title, s.amount, { color: '#b45309' }));
+
   (slip.deductions || []).forEach((d) => rowLine(d.title, d.amount, { color: '#b45309' }));
-  if (!breakdown.length && !(slip.deductions || []).length && Number(slip.otherDeduction) === 0 && Number(slip.advanceDeduction) === 0) {
+
+  const hasAnyDeduction = breakdown.length || standing.some((s) => s.type !== 'Addition')
+    || (slip.deductions || []).length || Number(slip.advanceDeduction) > 0;
+  if (!hasAnyDeduction) {
     doc.fontSize(9).fillColor('#9ca3af').text('No deductions for this period', cols.label, doc.y);
     doc.moveDown(0.6);
   }
+
+  const standingAdditions = standing.filter((s) => s.type === 'Addition');
+  standingAdditions.forEach((s) => rowLine(s.title, s.amount, { color: '#059669' }));
+
   doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor('#e5e7eb').stroke();
   doc.moveDown(0.3);
   rowLine('Total Deduction', slip.totalDeduction, { bold: true, color: '#b45309' });
   doc.moveDown(1);
 
-  // Net salary highlight box
   const boxY = doc.y;
   doc.rect(50, boxY, 495, 34).fill('#ecfdf5');
   doc.fontSize(12).fillColor('#047857').text('NET SALARY', 60, boxY + 10);
@@ -126,14 +133,12 @@ function buildPaySlipPdf(slip, stream) {
   doc.y = boxY + 34;
   doc.moveDown(1.5);
 
-  // Payment info
   if (slip.status === 'Paid') {
     doc.fontSize(9).fillColor('#6b7280');
     doc.text(`Paid via voucher on ${fmtDate(slip.paidDate)}.`, 50, doc.y);
     doc.moveDown(1.5);
   }
 
-  // Signature area
   const sigY = doc.y + 30;
   if (sigY < 720) {
     doc.moveTo(70, sigY).lineTo(230, sigY).strokeColor('#9ca3af').stroke();

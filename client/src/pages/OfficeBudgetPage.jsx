@@ -22,10 +22,14 @@ import {
   Search,
   SlidersHorizontal,
   CheckCircle2,
+  XCircle,
+  ClipboardCheck,
   Folder,
   ArrowDownLeft,
   Coins,
   BadgeDollarSign,
+  Users,
+  TriangleAlert,
 } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
@@ -37,7 +41,10 @@ import {
   getCashReceipts,
   saveCashReceipt,
   deleteCashReceipt,
+  approveMonthlyBudget,
+  rejectMonthlyBudget,
 } from '../api/monthlyBudget';
+import { previewPaySlips } from '../api/paySlip';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -266,6 +273,12 @@ function CashReceiptsListModal({ year, month, rows = [], onClose, onReceiptUpdat
   const [editingReceipt, setEditingReceipt] = useState(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
 
+  const categoryNameById = useMemo(() => {
+    const map = {};
+    rows.forEach((r) => { map[r.budgetCategoryId] = r.name; });
+    return map;
+  }, [rows]);
+
   const fetchReceipts = useCallback(async () => {
     setLoading(true);
     try {
@@ -358,12 +371,23 @@ function CashReceiptsListModal({ year, month, rows = [], onClose, onReceiptUpdat
                 className="border border-slate-200/80 hover:border-slate-300 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white transition"
               >
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-bold text-slate-900">
                       ৳{money(rcpt.amount)}
                     </span>
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
                       {rcpt.paymentMethod}
+                    </span>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                        rcpt.budgetCategoryId
+                          ? 'bg-blue-50 text-blue-700 border-blue-200/60'
+                          : 'bg-slate-100 text-slate-500 border-slate-200/60'
+                      }`}
+                    >
+                      {rcpt.budgetCategoryId
+                        ? categoryNameById[rcpt.budgetCategoryId] || 'Category'
+                        : 'General Office Fund'}
                     </span>
                     {rcpt.referenceNo && (
                       <span className="text-[11px] font-mono text-slate-400">
@@ -657,7 +681,7 @@ function BudgetLogModal({ row, year, month, onClose }) {
                     className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                       log.action === 'Created'
                         ? 'bg-emerald-50 text-emerald-700'
-                        : log.action === 'Deleted'
+                        : log.action === 'Deleted' || log.action === 'Rejected'
                         ? 'bg-rose-50 text-rose-700'
                         : 'bg-blue-50 text-blue-700'
                     }`}
@@ -679,6 +703,10 @@ function BudgetLogModal({ row, year, month, onClose }) {
                   {log.action === 'Deleted' ? (
                     <>
                       Removed allocation of <strong className="font-semibold">৳{money(log.previousAmount)}</strong>
+                    </>
+                  ) : log.action === 'Rejected' ? (
+                    <>
+                      Rejected a request of <strong className="font-semibold">৳{money(log.previousAmount)}</strong>
                     </>
                   ) : log.action === 'Created' ? (
                     <>
@@ -702,6 +730,348 @@ function BudgetLogModal({ row, year, month, onClose }) {
   );
 }
 
+// Review modal for a Pending (or previously Rejected) budget request — shows
+// the actual preview payslip breakdown when the category is Salary, lets the
+// admin adjust the approved figure, and offers Approve or Reject.
+function BudgetRequestReviewModal({ row, year, month, onClose, onDone }) {
+  const isSalary = (row.name || '').trim().toLowerCase() === 'salary';
+  const requested = Number(row.requestedAmount) || 0;
+
+  const [approvedAmount, setApprovedAmount] = useState(String(requested));
+  const [note, setNote] = useState('');
+  const [reason, setReason] = useState('');
+  const [mode, setMode] = useState(null); // null | 'approve' | 'reject'
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const [payslips, setPaySlips] = useState([]);
+  const [loadingSlips, setLoadingSlips] = useState(isSalary);
+
+  useEffect(() => {
+    if (!isSalary) return;
+    let cancelled = false;
+    setLoadingSlips(true);
+    previewPaySlips(year, month)
+      .then((data) => {
+        if (!cancelled) setPaySlips(data || []);
+      })
+      .catch(() => {
+        if (!cancelled) setPaySlips([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSlips(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSalary, year, month]);
+
+  const slipTotals = useMemo(() => {
+    return payslips.reduce(
+      (acc, s) => ({
+        gross: acc.gross + (Number(s.grossSalary) || 0),
+        advanceDeduction: acc.advanceDeduction + (Number(s.advanceDeduction) || 0),
+        otherDeduction: acc.otherDeduction + (Number(s.otherDeduction) || 0),
+        otherAddition: acc.otherAddition + (Number(s.otherAddition) || 0),
+        net: acc.net + (Number(s.netSalary) || 0),
+      }),
+      { gross: 0, advanceDeduction: 0, otherDeduction: 0, otherAddition: 0, net: 0 }
+    );
+  }, [payslips]);
+
+  const mismatch = isSalary && !loadingSlips && Math.abs(slipTotals.net - requested) > 0.5;
+
+  async function handleApprove(e) {
+    e.preventDefault();
+    const amt = approvedAmount === '' ? requested : Number(approvedAmount);
+    if (amt < 0) {
+      setError('Approved amount cannot be negative');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    try {
+      await approveMonthlyBudget(row.monthlyBudgetId, { approvedAmount: amt, note });
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to approve');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleReject(e) {
+    e.preventDefault();
+    if (!reason.trim()) {
+      setError('Please provide a reason for rejecting this request');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    try {
+      await rejectMonthlyBudget(row.monthlyBudgetId, { reason: reason.trim() });
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to reject');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[88vh] flex flex-col p-6 relative border border-slate-100">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition"
+        >
+          <X size={16} />
+        </button>
+
+        <div className="flex items-center gap-2 mb-1 pr-8">
+          <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 text-amber-600">
+            <ClipboardCheck size={16} />
+          </span>
+          <h2 className="text-base font-bold text-slate-900">Review Budget Request</h2>
+        </div>
+        <p className="text-xs text-slate-500 mb-4 ml-10">
+          {row.name} — {MONTH_NAMES[month - 1]} {year}
+        </p>
+
+        <div className="overflow-y-auto space-y-4 pr-1 flex-1">
+          {/* Request summary */}
+          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                Requested Amount
+              </span>
+              <span className="text-xl font-extrabold text-slate-900">৳{money(requested)}</span>
+            </div>
+            <div className="text-right">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                Requested By
+              </span>
+              <span className="text-sm font-semibold text-slate-700">{row.requestedBy || 'Admin'}</span>
+            </div>
+          </div>
+
+          {row.rejectionReason && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-xl p-3 text-xs">
+              <strong className="font-semibold">Previously rejected</strong> by {row.rejectedBy || 'Admin'}: {row.rejectionReason}
+            </div>
+          )}
+
+          {/* Salary payslip preview breakdown */}
+          {isSalary && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Users size={14} className="text-slate-400" />
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Payslip Preview — {MONTH_NAMES[month - 1]} {year}
+                </h3>
+              </div>
+
+              {loadingSlips ? (
+                <div className="text-center py-8 text-slate-400 text-xs border border-slate-200/80 rounded-xl">
+                  Loading payslip breakdown…
+                </div>
+              ) : payslips.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs border border-slate-200/80 rounded-xl">
+                  No preview payslips found for this month.
+                </div>
+              ) : (
+                <div className="border border-slate-200/80 rounded-xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          <th className="py-2.5 px-3">Employee</th>
+                          <th className="py-2.5 px-3">Gross</th>
+                          <th className="py-2.5 px-3">Advance Ded.</th>
+                          <th className="py-2.5 px-3">Other Ded.</th>
+                          <th className="py-2.5 px-3">Addition</th>
+                          <th className="py-2.5 px-3 text-right">Net Salary</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {payslips.map((s, idx) => (
+                          <tr key={s.id || s.employeeId || s.code || idx}>
+                            <td className="py-2.5 px-3">
+                              <p className="font-semibold text-slate-800">{s.name || s.employee?.name}</p>
+                              <p className="text-[10px] text-slate-400">{s.code || s.employee?.code}</p>
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-600">৳{money(s.grossSalary)}</td>
+                            <td className="py-2.5 px-3 text-rose-500">
+                              {s.advanceDeduction > 0 ? `-৳${money(s.advanceDeduction)}` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-rose-500">
+                              {s.otherDeduction > 0 ? `-৳${money(s.otherDeduction)}` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-emerald-600">
+                              {s.otherAddition > 0 ? `+৳${money(s.otherAddition)}` : '—'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-bold text-slate-900">
+                              ৳{money(s.netSalary)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-50 font-bold border-t border-slate-200">
+                          <td className="py-2.5 px-3 text-slate-700" colSpan={5}>
+                            Total ({payslips.length} employee{payslips.length !== 1 ? 's' : ''})
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-slate-900">
+                            ৳{money(slipTotals.net)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {mismatch && (
+                <div className="mt-2 flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl p-3 text-xs">
+                  <TriangleAlert size={14} className="shrink-0 mt-0.5" />
+                  <span>
+                    The current preview payslip total (৳{money(slipTotals.net)}) doesn't match the requested amount
+                    (৳{money(requested)}) — deductions or employees may have changed since the request was submitted.
+                    {' '}
+                    <button
+                      type="button"
+                      onClick={() => setApprovedAmount(String(slipTotals.net))}
+                      className="font-semibold underline underline-offset-2"
+                    >
+                      Use ৳{money(slipTotals.net)} instead
+                    </button>
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-xl p-3 text-xs font-medium">
+              {error}
+            </div>
+          )}
+
+          {/* Approve form */}
+          {mode === 'approve' && (
+            <form onSubmit={handleApprove} className="space-y-3 border-t border-slate-100 pt-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Approved Amount (৳)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={approvedAmount}
+                  onChange={(e) => setApprovedAmount(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
+                  autoFocus
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Defaults to the requested amount — adjust if it doesn't match the payslip total above.
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Note <span className="text-slate-400 font-normal">(optional)</span>
+                </label>
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  rows={2}
+                  placeholder="Any remarks for this approval..."
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition resize-none"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMode(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition"
+                >
+                  Back
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs disabled:opacity-50 transition"
+                >
+                  {submitting ? 'Approving…' : `Confirm Approve ৳${money(approvedAmount === '' ? requested : approvedAmount)}`}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Reject form */}
+          {mode === 'reject' && (
+            <form onSubmit={handleReject} className="space-y-3 border-t border-slate-100 pt-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Reason for Rejection *
+                </label>
+                <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. Deductions look incomplete, please re-generate payslips first..."
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition resize-none"
+                  autoFocus
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMode(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition"
+                >
+                  Back
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs disabled:opacity-50 transition"
+                >
+                  {submitting ? 'Rejecting…' : 'Confirm Reject'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        {mode === null && (
+          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 mt-4">
+            <button
+              type="button"
+              onClick={() => setMode('reject')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold border border-rose-200/60 transition"
+            >
+              <XCircle size={14} />
+              Reject
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('approve')}
+              className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition"
+            >
+              <CheckCircle2 size={14} />
+              Approve
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function OfficeBudgetPage() {
   const navigate = useNavigate();
   const now = new Date();
@@ -713,6 +1083,7 @@ export default function OfficeBudgetPage() {
     spentAmount: 0,
     remainingAmount: 0,
     cashReceivedAmount: 0,
+    generalCashReceived: 0,
     cashInHand: 0,
     pendingCash: 0,
   });
@@ -720,6 +1091,7 @@ export default function OfficeBudgetPage() {
   const [expanded, setExpanded] = useState({});
   const [editingRow, setEditingRow] = useState(null);
   const [viewingLogsRow, setViewingLogsRow] = useState(null);
+  const [reviewingRow, setReviewingRow] = useState(null);
   const [isReceivingCash, setIsReceivingCash] = useState(false);
   const [isViewingReceipts, setIsViewingReceipts] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
@@ -736,6 +1108,7 @@ export default function OfficeBudgetPage() {
           spentAmount: 0,
           remainingAmount: 0,
           cashReceivedAmount: 0,
+          generalCashReceived: 0,
           cashInHand: 0,
           pendingCash: 0,
         }
@@ -818,6 +1191,7 @@ export default function OfficeBudgetPage() {
       spentAmount: finalSpent,
       remainingAmount: finalAllocated - finalSpent,
       cashReceivedAmount: finalCashReceived,
+      generalCashReceived: Number(totals.generalCashReceived) || 0,
       cashInHand: finalCashInHand,
       pendingCash: Math.max(0, finalAllocated - finalCashReceived),
     };
@@ -1017,6 +1391,11 @@ export default function OfficeBudgetPage() {
                   : 'Fully disbursed'}
               </span>
             </div>
+            {summaryTotals.generalCashReceived > 0 && (
+              <p className="text-[10px] text-slate-400 mt-1.5">
+                ৳{money(summaryTotals.generalCashReceived)} untagged (General Office Fund)
+              </p>
+            )}
           </div>
 
           {/* Card 3: TOTAL SPENT */}
@@ -1124,6 +1503,7 @@ export default function OfficeBudgetPage() {
                 <tr className="border-b border-slate-100 bg-slate-50/50 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   <th className="py-3.5 px-6 min-w-[220px]">Category</th>
                   <th className="py-3.5 px-4 min-w-[110px]">Budget</th>
+                  <th className="py-3.5 px-4 min-w-[120px]">Cash Received</th>
                   <th className="py-3.5 px-4 min-w-[110px]">Spent</th>
                   <th className="py-3.5 px-4 min-w-[110px]">Remaining</th>
                   <th className="py-3.5 px-4 min-w-[150px]">Utilization</th>
@@ -1133,13 +1513,13 @@ export default function OfficeBudgetPage() {
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-16 text-slate-400 text-xs">
+                    <td colSpan={7} className="text-center py-16 text-slate-400 text-xs">
                       Loading budget entries...
                     </td>
                   </tr>
                 ) : filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-16 text-slate-400 text-xs">
+                    <td colSpan={7} className="text-center py-16 text-slate-400 text-xs">
                       No categories found matching your search.
                     </td>
                   </tr>
@@ -1151,6 +1531,7 @@ export default function OfficeBudgetPage() {
                     );
                     const allocated = Number(row.allocatedAmount) || 0;
                     const spent = Number(row.spentAmount) || subSpentTotal || 0;
+                    const cashReceived = Number(row.cashReceivedAmount) || 0;
                     const remaining = allocated - spent;
                     const pct = allocated > 0 ? (spent / allocated) * 100 : 0;
                     const overBudget = remaining < 0;
@@ -1201,9 +1582,21 @@ export default function OfficeBudgetPage() {
                               </div>
 
                               <div className="min-w-0">
-                                <p className="text-xs sm:text-sm font-bold text-slate-900 truncate">
-                                  {row.name}
-                                </p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                                    {row.name}
+                                  </p>
+                                  {row.status === 'Pending' && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-600 border border-amber-200">
+                                      Pending Approval
+                                    </span>
+                                  )}
+                                  {row.status === 'Rejected' && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-600 border border-rose-200">
+                                      Rejected
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-[11px] text-slate-400 font-normal truncate mt-0.5">
                                   {row.description || 'General office operations'}
                                 </p>
@@ -1213,6 +1606,10 @@ export default function OfficeBudgetPage() {
 
                           <td className="py-4 px-4 font-bold text-slate-900 text-xs sm:text-sm whitespace-nowrap">
                             ৳{money(allocated)}
+                          </td>
+
+                          <td className="py-4 px-4 font-semibold text-emerald-600 text-xs sm:text-sm whitespace-nowrap">
+                            {cashReceived > 0 ? `৳${money(cashReceived)}` : <span className="text-slate-300 font-normal">—</span>}
                           </td>
 
                           <td className="py-4 px-4 font-semibold text-slate-600 text-xs sm:text-sm whitespace-nowrap">
@@ -1244,6 +1641,22 @@ export default function OfficeBudgetPage() {
 
                           <td className="py-4 pr-6 pl-2 text-right">
                             <div className="inline-flex items-center justify-end gap-1.5 shrink-0">
+                              {(row.status === 'Pending' || row.status === 'Rejected') && (
+                                <button
+                                  type="button"
+                                  onClick={() => setReviewingRow(row)}
+                                  className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap cursor-pointer shadow-2xs ${
+                                    row.status === 'Pending'
+                                      ? 'bg-amber-500 text-white hover:bg-amber-600'
+                                      : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
+                                  }`}
+                                  title={`Requested: ৳${money(row.requestedAmount)}`}
+                                >
+                                  <ClipboardCheck size={12} />
+                                  {row.status === 'Pending' ? `Review ৳${money(row.requestedAmount)}` : 'Reconsider'}
+                                </button>
+                              )}
+
                               <button
                                 type="button"
                                 onClick={() => setViewingLogsRow(row)}
@@ -1305,6 +1718,7 @@ export default function OfficeBudgetPage() {
                                 <td className="py-2.5 px-4 text-xs text-slate-600 font-medium whitespace-nowrap">
                                   {subAlloc > 0 ? `৳${money(subAlloc)}` : '—'}
                                 </td>
+                                <td className="py-2.5 px-4 text-xs text-slate-400 font-mono">—</td>
                                 <td className="py-2.5 px-4 text-xs font-semibold text-slate-600 whitespace-nowrap">
                                   ৳{money(subSp)}
                                 </td>
@@ -1398,6 +1812,17 @@ export default function OfficeBudgetPage() {
           year={year}
           month={month}
           onClose={() => setViewingLogsRow(null)}
+        />
+      )}
+
+      {/* Review (Approve / Reject) Modal */}
+      {reviewingRow && (
+        <BudgetRequestReviewModal
+          row={reviewingRow}
+          year={year}
+          month={month}
+          onClose={() => setReviewingRow(null)}
+          onDone={load}
         />
       )}
     </div>

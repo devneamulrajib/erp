@@ -7,7 +7,6 @@ const PaySlip = sequelize.define('PaySlip', {
   month: { type: DataTypes.INTEGER, allowNull: false },
   year: { type: DataTypes.INTEGER, allowNull: false },
 
-  // Snapshot of the salary structure at the time this slip was generated
   basicSalary: { type: DataTypes.FLOAT, defaultValue: 0 },
   houseRent: { type: DataTypes.FLOAT, defaultValue: 0 },
   medicalAllowance: { type: DataTypes.FLOAT, defaultValue: 0 },
@@ -15,20 +14,20 @@ const PaySlip = sequelize.define('PaySlip', {
   grossSalary: { type: DataTypes.FLOAT, defaultValue: 0 },
 
   advanceDeduction: { type: DataTypes.FLOAT, defaultValue: 0 },
-  otherDeduction: { type: DataTypes.FLOAT, defaultValue: 0 },
-  otherAddition: { type: DataTypes.FLOAT, defaultValue: 0 }, // bonus / extra
-  totalDeduction: { type: DataTypes.FLOAT, defaultValue: 0 }, // advanceDeduction + otherDeduction
-  netSalary: { type: DataTypes.FLOAT, defaultValue: 0 }, // grossSalary - totalDeduction + otherAddition
+  otherDeduction: { type: DataTypes.FLOAT, defaultValue: 0 }, // includes one-off + standing deductions
+  otherAddition: { type: DataTypes.FLOAT, defaultValue: 0 },
+  totalDeduction: { type: DataTypes.FLOAT, defaultValue: 0 },
+  netSalary: { type: DataTypes.FLOAT, defaultValue: 0 },
 
-  // JSON string: [{ advanceId, type, deduct }] — which advances fed advanceDeduction
   advanceBreakdown: { type: DataTypes.TEXT, allowNull: true },
+  // JSON string: [{ standingDeductionId, title, amount, type }] — snapshot
+  // of which recurring items (e.g. Food Allowance) were applied this period.
+  standingBreakdown: { type: DataTypes.TEXT, allowNull: true },
 
   status: { type: DataTypes.ENUM('Draft', 'Paid'), defaultValue: 'Draft' },
   paidDate: { type: DataTypes.DATEONLY, allowNull: true },
   voucherId: { type: DataTypes.INTEGER, allowNull: true },
 
-  // NEW: links this paid slip to the OfficeExpense row that deducted it
-  // from the office budget, and which budget category it was deducted from.
   officeExpenseId: { type: DataTypes.INTEGER, allowNull: true },
   budgetCategoryId: { type: DataTypes.INTEGER, allowNull: true },
 
