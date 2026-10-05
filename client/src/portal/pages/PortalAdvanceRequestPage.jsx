@@ -3,6 +3,18 @@ import { Banknote, Send } from 'lucide-react';
 import { getEmployeeAdvances, requestEmployeeAdvance } from '../api/portalEmployee';
 import PortalLayout from '../components/PortalLayout';
 
+const MONTHS = Array.from({ length: 12 }, (_, i) =>
+  new Date(2000, i, 1).toLocaleString(undefined, { month: 'long' })
+);
+
+function nextMonthDefault() {
+  const d = new Date();
+  const m = d.getMonth() + 2;
+  const year = d.getFullYear() + Math.floor((m - 1) / 12);
+  const month = ((m - 1) % 12) + 1;
+  return { year, month };
+}
+
 function StatusBadge({ status }) {
   const map = {
     Disbursed: 'bg-emerald-50 text-emerald-600 ring-emerald-600/10',
@@ -20,14 +32,19 @@ function StatusBadge({ status }) {
 }
 
 export default function PortalAdvanceRequestPage() {
+  const def = nextMonthDefault();
   const [advances, setAdvances] = useState([]);
   const [loading, setLoading] = useState(true);
   const [type, setType] = useState('Advance Salary');
   const [amount, setAmount] = useState('');
   const [repaymentMonths, setRepaymentMonths] = useState(1);
   const [reason, setReason] = useState('');
+  const [targetMonth, setTargetMonth] = useState(def.month);
+  const [targetYear, setTargetYear] = useState(def.year);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const years = [def.year, def.year + 1];
 
   function load() {
     getEmployeeAdvances().then(setAdvances).catch(() => setAdvances([])).finally(() => setLoading(false));
@@ -40,10 +57,13 @@ export default function PortalAdvanceRequestPage() {
     setSubmitting(true);
     setError('');
     try {
-      await requestEmployeeAdvance({ type, amount, repaymentMonths, reason });
+      await requestEmployeeAdvance({ type, amount, repaymentMonths, reason, targetMonth, targetYear });
       setAmount('');
       setReason('');
       setRepaymentMonths(1);
+      const d = nextMonthDefault();
+      setTargetMonth(d.month);
+      setTargetYear(d.year);
       load();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to submit request');
@@ -78,6 +98,25 @@ export default function PortalAdvanceRequestPage() {
             <input type="number" min="1" value={repaymentMonths} onChange={(e) => setRepaymentMonths(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400 transition" />
           </div>
         </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Which month should this apply to?</label>
+            <select value={targetMonth} onChange={(e) => setTargetMonth(Number(e.target.value))} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400 transition">
+              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Year</label>
+            <select value={targetYear} onChange={(e) => setTargetYear(Number(e.target.value))} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400 transition">
+              {years.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        </div>
+        <p className="text-xs text-slate-400 mb-5">
+          Your deduction will start from this month's payroll onward — it will not affect any payroll before it.
+        </p>
+
         <div className="mb-5">
           <label className="block text-xs font-medium text-slate-500 mb-1.5">Reason</label>
           <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400 transition" placeholder="e.g. Medical expense" />
@@ -99,19 +138,23 @@ export default function PortalAdvanceRequestPage() {
               <th className="px-4 py-3 text-left font-medium">Type</th>
               <th className="px-4 py-3 text-left font-medium">Amount</th>
               <th className="px-4 py-3 text-left font-medium">Monthly Deduction</th>
+              <th className="px-4 py-3 text-left font-medium">Applies From</th>
               <th className="px-4 py-3 text-left font-medium">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
-              <tr><td colSpan={4} className="text-center py-10 text-slate-400 text-sm">Loading…</td></tr>
+              <tr><td colSpan={5} className="text-center py-10 text-slate-400 text-sm">Loading…</td></tr>
             ) : advances.length === 0 ? (
-              <tr><td colSpan={4} className="text-center py-10 text-slate-400 text-sm">No requests yet</td></tr>
+              <tr><td colSpan={5} className="text-center py-10 text-slate-400 text-sm">No requests yet</td></tr>
             ) : advances.map((a) => (
               <tr key={a.id} className="hover:bg-slate-50/70 transition-colors">
                 <td className="px-4 py-3 text-slate-700">{a.type}</td>
                 <td className="px-4 py-3 text-slate-700">৳{Number(a.amount || 0).toLocaleString()}</td>
                 <td className="px-4 py-3 text-slate-700">৳{Number(a.monthlyDeduction || 0).toLocaleString()}</td>
+                <td className="px-4 py-3 text-slate-700">
+                  {a.targetMonth && a.targetYear ? `${MONTHS[a.targetMonth - 1]} ${a.targetYear}` : '—'}
+                </td>
                 <td className="px-4 py-3"><StatusBadge status={a.status} /></td>
               </tr>
             ))}

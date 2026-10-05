@@ -16,6 +16,18 @@ import {
 } from '../api/employee';
 import api from '../api/axios';
 
+const MONTHS = Array.from({ length: 12 }, (_, i) =>
+  new Date(2000, i, 1).toLocaleString(undefined, { month: 'long' })
+);
+
+function nextMonthDefault() {
+  const d = new Date();
+  const m = d.getMonth() + 2;
+  const year = d.getFullYear() + Math.floor((m - 1) / 12);
+  const month = ((m - 1) % 12) + 1;
+  return { year, month };
+}
+
 const EMPTY_EMPLOYEE = {
   name: '',
   code: '',
@@ -39,6 +51,8 @@ const EMPTY_ADVANCE = {
   amount: '',
   repaymentMonths: 1,
   reason: '',
+  targetMonth: nextMonthDefault().month,
+  targetYear: nextMonthDefault().year,
 };
 
 const ATTENDANCE_OPTIONS = ['Present', 'Absent', 'Leave', 'Holiday'];
@@ -106,7 +120,7 @@ export default function EmployeeListPage() {
 
   useEffect(() => {
     loadData();
-    // Load budget categories (supports /budget-categories or /budget-category)
+    // Load budget categories
     api.get('/budget-categories')
       .catch(() => api.get('/budget-category'))
       .then((res) => { if (res?.data) setCategories(res.data); })
@@ -610,15 +624,16 @@ export default function EmployeeListPage() {
                     <th className="px-5 py-3 font-medium">Amount</th>
                     <th className="px-5 py-3 font-medium">Repayment</th>
                     <th className="px-5 py-3 font-medium">Reason</th>
+                    <th className="px-5 py-3 font-medium">Applies From</th>
                     <th className="px-5 py-3 font-medium">Status</th>
                     <th className="px-5 py-3 text-right font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loading ? (
-                    <tr><td colSpan={7} className="text-center py-12 text-slate-400">Loading requests...</td></tr>
+                    <tr><td colSpan={8} className="text-center py-12 text-slate-400">Loading requests...</td></tr>
                   ) : filteredAdvances.length === 0 ? (
-                    <tr><td colSpan={7} className="text-center py-12 text-slate-400">No requests found.</td></tr>
+                    <tr><td colSpan={8} className="text-center py-12 text-slate-400">No requests found.</td></tr>
                   ) : (
                     filteredAdvances.map((adv) => (
                       <tr key={adv.id} className="hover:bg-slate-50/70 transition">
@@ -632,6 +647,9 @@ export default function EmployeeListPage() {
                           {adv.repaymentMonths} mo. (৳{(adv.monthlyDeduction || 0).toLocaleString()}/mo)
                         </td>
                         <td className="px-5 py-3.5 text-slate-500 max-w-xs truncate">{adv.reason || '—'}</td>
+                        <td className="px-5 py-3.5 text-slate-600 font-medium">
+                          {adv.targetMonth && adv.targetYear ? `${MONTHS[adv.targetMonth - 1]} ${adv.targetYear}` : '—'}
+                        </td>
                         <td className="px-5 py-3.5">
                           <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             adv.status === 'Disbursed'
@@ -1155,6 +1173,31 @@ export default function EmployeeListPage() {
             </p>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Applies From (Month)</label>
+              <select
+                value={advForm.targetMonth}
+                onChange={(e) => setAdvForm({ ...advForm, targetMonth: Number(e.target.value) })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+              >
+                {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Year</label>
+              <select
+                value={advForm.targetYear}
+                onChange={(e) => setAdvForm({ ...advForm, targetYear: Number(e.target.value) })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+              >
+                {[nextMonthDefault().year, nextMonthDefault().year + 1].map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Reason / Notes</label>
             <textarea
@@ -1184,7 +1227,7 @@ export default function EmployeeListPage() {
         </form>
       </Modal>
 
-      {/* Disburse Modal (Office Budget & Accounting Voucher integration) */}
+      {/* Disburse Modal */}
       <Modal open={disburseModalOpen} title="Approve & Disburse (Post to Office Budget & Accounts)" onClose={() => setDisburseModalOpen(false)}>
         <form onSubmit={handleDisburse} className="space-y-4">
           <div className="p-3 bg-indigo-50 text-indigo-700 rounded-lg text-xs flex gap-2">
