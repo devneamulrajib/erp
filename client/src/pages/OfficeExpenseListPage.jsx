@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Search, Plus, Calendar, Eye, Pencil, Trash2, Clock, CheckCircle2,
   XCircle, FileText, ArrowUpRight, X, TrendingUp, TrendingDown,
-  Download, Layers, RefreshCw, Check
+  Download, Layers, RefreshCw, Check, Lock
 } from 'lucide-react';
 
 import Topbar from '../components/Topbar';
@@ -77,6 +77,12 @@ const formatDate = (value) => {
 export default function OfficeExpenseListPage() {
   const navigate = useNavigate();
 
+  // Current logged in user & role
+  const storedUser = localStorage.getItem('user');
+  const currentUser = storedUser ? JSON.parse(storedUser) : null;
+  const isAdmin = currentUser && ['superadmin', 'admin'].includes(currentUser.role);
+  const isAccountant = currentUser?.role === 'accountant';
+
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -145,7 +151,6 @@ export default function OfficeExpenseListPage() {
   const pendingCount = rows.filter((item) => textValue(item.status).toLowerCase() === 'pending').length;
   const rejectedCount = rows.filter((item) => textValue(item.status).toLowerCase() === 'rejected').length;
 
-  // Monthly trend calculation
   const monthlyTrend = useMemo(() => {
     const map = {};
     rows.forEach((item) => {
@@ -171,15 +176,19 @@ export default function OfficeExpenseListPage() {
     return ((curr - prev) / prev) * 100;
   }, [monthlyTrend]);
 
-  // Handle Approve / Reject
+  // Handle Approve / Reject (Admin only)
   const handleStatusChange = async (item, newStatus) => {
+    if (!isAdmin) {
+      alert('Only administrators can approve or reject records.');
+      return;
+    }
     const verb = newStatus === 'approved' ? 'approve' : 'reject';
     if (!window.confirm(`Are you sure you want to ${verb} "${item.title || item.reference}" for ৳${money(item.amount)}?`)) {
       return;
     }
     setUpdatingId(item.id);
     try {
-      const updated = await updateOfficeExpenseStatus(item.id, newStatus);
+      await updateOfficeExpenseStatus(item.id, newStatus);
       setRows((prev) => prev.map((r) => (r.id === item.id ? { ...r, status: newStatus } : r)));
       if (viewing && viewing.id === item.id) {
         setViewing((prev) => ({ ...prev, status: newStatus }));
@@ -191,10 +200,15 @@ export default function OfficeExpenseListPage() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this expense record?')) return;
+  const handleDelete = async (item) => {
+    const isItemApproved = textValue(item.status).toLowerCase() === 'approved';
+    if (isAccountant && isItemApproved) {
+      alert('Approved records cannot be deleted by an Accountant.');
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to delete "${item.title || item.reference}"?`)) return;
     try {
-      await deleteOfficeExpense(id);
+      await deleteOfficeExpense(item.id);
       await load();
     } catch (error) {
       alert(error?.response?.data?.message || error?.message || 'Failed to delete expense.');
@@ -229,6 +243,10 @@ export default function OfficeExpenseListPage() {
     URL.revokeObjectURL(url);
   }
 
+  // Drawer permission checks
+  const isViewingApproved = viewing && textValue(viewing.status).toLowerCase() === 'approved';
+  const canEditViewing = isAdmin || (!isViewingApproved && isAccountant);
+
   return (
     <div className="min-h-screen w-full bg-[#f8fafc] text-slate-800">
       <Topbar />
@@ -250,7 +268,7 @@ export default function OfficeExpenseListPage() {
               Office Expenses
             </h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              Review disbursements, approve pending vouchers, and manage records.
+              Review disbursements, track approval status, and manage financial records.
             </p>
           </div>
 
@@ -449,10 +467,12 @@ export default function OfficeExpenseListPage() {
                     <ExpenseRow
                       key={item.id}
                       item={item}
+                      isAdmin={isAdmin}
+                      isAccountant={isAccountant}
                       updating={updatingId === item.id}
                       onView={() => setViewing(item)}
                       onEdit={() => navigate(`/accounts-module/office-expense/${item.id}`)}
-                      onDelete={() => handleDelete(item.id)}
+                      onDelete={() => handleDelete(item)}
                       onStatusChange={handleStatusChange}
                     />
                   ))
@@ -605,39 +625,51 @@ export default function OfficeExpenseListPage() {
               )}
             </div>
 
-            {/* Drawer Footer Actions with Approve/Reject */}
+            {/* Drawer Footer Actions */}
             <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2.5">
               <div className="flex items-center gap-2">
-                {textValue(viewing.status).toLowerCase() === 'pending' ? (
-                  <>
+                {isAdmin ? (
+                  textValue(viewing.status).toLowerCase() === 'pending' ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={updatingId === viewing.id}
+                        onClick={() => handleStatusChange(viewing, 'approved')}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 transition shadow-2xs"
+                      >
+                        <Check size={14} strokeWidth={2.5} />
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={updatingId === viewing.id}
+                        onClick={() => handleStatusChange(viewing, 'rejected')}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 disabled:opacity-50 transition"
+                      >
+                        <X size={14} strokeWidth={2.5} />
+                        Reject
+                      </button>
+                    </>
+                  ) : (
                     <button
                       type="button"
                       disabled={updatingId === viewing.id}
-                      onClick={() => handleStatusChange(viewing, 'approved')}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 transition shadow-2xs"
+                      onClick={() => handleStatusChange(viewing, 'pending')}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 disabled:opacity-50 transition"
                     >
-                      <Check size={14} strokeWidth={2.5} />
-                      Approve
+                      Reset to Pending
                     </button>
-                    <button
-                      type="button"
-                      disabled={updatingId === viewing.id}
-                      onClick={() => handleStatusChange(viewing, 'rejected')}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 disabled:opacity-50 transition"
-                    >
-                      <X size={14} strokeWidth={2.5} />
-                      Reject
-                    </button>
-                  </>
+                  )
                 ) : (
-                  <button
-                    type="button"
-                    disabled={updatingId === viewing.id}
-                    onClick={() => handleStatusChange(viewing, 'pending')}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 disabled:opacity-50 transition"
-                  >
-                    Reset to Pending
-                  </button>
+                  <span className="text-xs text-slate-500 italic">
+                    {textValue(viewing.status).toLowerCase() === 'approved' ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                        <Lock size={12} /> Approved & Finalized
+                      </span>
+                    ) : (
+                      'Awaiting Admin Review'
+                    )}
+                  </span>
                 )}
               </div>
 
@@ -649,18 +681,21 @@ export default function OfficeExpenseListPage() {
                 >
                   Close
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const id = viewing.id;
-                    setViewing(null);
-                    navigate(`/accounts-module/office-expense/${id}`);
-                  }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 transition"
-                >
-                  <Pencil size={13} />
-                  Edit Record
-                </button>
+
+                {canEditViewing && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const id = viewing.id;
+                      setViewing(null);
+                      navigate(`/accounts-module/office-expense/${id}`);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 transition"
+                  >
+                    <Pencil size={13} />
+                    Edit Record
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -749,12 +784,17 @@ function DateFilter({ value, onChange, placeholder }) {
   );
 }
 
-/* ---- Table Row with Quick Approve / Reject ---- */
+/* ---- Table Row with Approval Restrictions ---- */
 
-function ExpenseRow({ item, updating, onView, onEdit, onDelete, onStatusChange }) {
+function ExpenseRow({ item, isAdmin, isAccountant, updating, onView, onEdit, onDelete, onStatusChange }) {
   const status = textValue(item.status).toLowerCase();
   const category = textValue(item.budgetCategory);
   const isPending = status === 'pending';
+  const isApproved = status === 'approved';
+
+  // Rule: An approved record CANNOT be edited or deleted by an Accountant.
+  const canEdit = isAdmin || (!isApproved && isAccountant);
+  const canDelete = isAdmin || (!isApproved && isAccountant);
 
   return (
     <tr className="hover:bg-slate-50/70 transition group">
@@ -816,10 +856,11 @@ function ExpenseRow({ item, updating, onView, onEdit, onDelete, onStatusChange }
         )}
       </td>
 
-      {/* Action Column with Quick Approve/Reject buttons */}
+      {/* Action Column */}
       <td className="py-3.5 px-4 text-right whitespace-nowrap">
         <div className="flex items-center justify-end gap-1">
-          {isPending && (
+          {/* Quick Approve / Reject buttons strictly for Admin on pending items */}
+          {isAdmin && isPending && (
             <>
               <button
                 type="button"
@@ -842,6 +883,7 @@ function ExpenseRow({ item, updating, onView, onEdit, onDelete, onStatusChange }
             </>
           )}
 
+          {/* View Details — Available to everyone */}
           <button
             type="button"
             onClick={onView}
@@ -850,22 +892,37 @@ function ExpenseRow({ item, updating, onView, onEdit, onDelete, onStatusChange }
           >
             <Eye size={14} />
           </button>
-          <button
-            type="button"
-            onClick={onEdit}
-            title="Edit Record"
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition"
-          >
-            <Pencil size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={onDelete}
-            title="Delete Record"
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition"
-          >
-            <Trash2 size={14} />
-          </button>
+
+          {/* Edit Record — Hidden for Accountant on Approved records */}
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={onEdit}
+              title="Edit Record"
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition"
+            >
+              <Pencil size={14} />
+            </button>
+          ) : (
+            <span
+              title="Finalized — Approved records cannot be edited"
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-300 cursor-not-allowed"
+            >
+              <Lock size={13} />
+            </span>
+          )}
+
+          {/* Delete Record — Hidden for Accountant on Approved records */}
+          {canDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              title="Delete Record"
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       </td>
     </tr>
@@ -915,7 +972,7 @@ function EmptyState({ hasFilters, onClear }) {
           <button
             type="button"
             onClick={onClear}
-            className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 transition"
+            className="mt-3.5 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 transition"
           >
             <RefreshCw size={12} />
             Reset Filters

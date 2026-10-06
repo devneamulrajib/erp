@@ -1,16 +1,30 @@
+// server/routes/paySlip.js
 const router = require('express').Router();
 const { Op } = require('sequelize');
+
 const auth = require('../middleware/auth');
+const { requireAdmin } = require('../middleware/permissions');
 const sequelize = require('../config/db');
 const { notifyEmployee } = require('../utils/notify');
 const { buildPaySlipPdf, buildPayrollReportPdf } = require('../utils/payrollPdf');
 const logActivity = require('../utils/activityLog');
 const {
-  grossOf, computeAdvanceDeduction, computeAdjustments, buildSlipData, syncDraftPaySlip,
+  grossOf,
+  computeAdvanceDeduction,
+  computeAdjustments,
+  buildSlipData,
+  syncDraftPaySlip,
 } = require('../utils/payroll');
 const {
-  Employee, EmployeeAdvance, PaySlip, SalaryDeduction,
-  Voucher, VoucherEntry, ChartOfAccount, OfficeExpense, BudgetCategory,
+  Employee,
+  EmployeeAdvance,
+  PaySlip,
+  SalaryDeduction,
+  Voucher,
+  VoucherEntry,
+  ChartOfAccount,
+  OfficeExpense,
+  BudgetCategory,
 } = require('../models/associations');
 const StandingDeduction = require('../models/StandingDeduction');
 
@@ -204,8 +218,14 @@ router.post('/deductions', auth, async (req, res) => {
     }
 
     const row = await SalaryDeduction.create({
-      employeeId, title, amount: Number(amount), month: Number(month), year: Number(year),
-      note: note || '', type: kind, addedBy: req.user?.name || 'Admin',
+      employeeId,
+      title,
+      amount: Number(amount),
+      month: Number(month),
+      year: Number(year),
+      note: note || '',
+      type: kind,
+      addedBy: req.user?.name || 'Admin',
     });
 
     await syncDraftPaySlip(employeeId, Number(year), Number(month), req.user?.name);
@@ -314,7 +334,9 @@ router.get('/:id', auth, async (req, res) => {
 
     const adjustments = await SalaryDeduction.findAll({
       where: {
-        employeeId: slip.employeeId, year: slip.year, month: slip.month,
+        employeeId: slip.employeeId,
+        year: slip.year,
+        month: slip.month,
         [Op.or]: [{ status: 'Pending' }, { paySlipId: slip.id }],
       },
       order: [['createdAt', 'ASC']],
@@ -341,7 +363,9 @@ router.get('/:id/pdf', auth, async (req, res) => {
 
     const adjustments = await SalaryDeduction.findAll({
       where: {
-        employeeId: slip.employeeId, year: slip.year, month: slip.month,
+        employeeId: slip.employeeId,
+        year: slip.year,
+        month: slip.month,
         [Op.or]: [{ status: 'Pending' }, { paySlipId: slip.id }],
       },
       order: [['createdAt', 'ASC']],
@@ -362,7 +386,8 @@ router.get('/:id/pdf', auth, async (req, res) => {
   }
 });
 
-router.post('/:id/pay', auth, async (req, res) => {
+// Disburse Salary (Admin / Superadmin only)
+router.post('/:id/pay', auth, requireAdmin, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { drAccount, crAccount, budgetCategory } = req.body;
@@ -463,17 +488,22 @@ router.post('/:id/pay', auth, async (req, res) => {
     await t.commit();
 
     await logActivity({
-      module: 'Salary', action: 'Paid',
+      module: 'Salary',
+      action: 'Paid',
       message: `Paid salary to ${slip.employee?.name} (${slip.employee?.code}) for ${slip.month}/${slip.year}`,
-      amount: netSalary, budgetCategoryId: resolvedCategoryId,
-      relatedType: 'PaySlip', relatedId: slip.id,
+      amount: netSalary,
+      budgetCategoryId: resolvedCategoryId,
+      relatedType: 'PaySlip',
+      relatedId: slip.id,
       performedBy: req.user?.name || 'Admin',
     });
 
     await notifyEmployee(
-      slip.employeeId, 'SalaryPaid',
+      slip.employeeId,
+      'SalaryPaid',
       `Your salary for ${slip.month}/${slip.year} has been paid: ৳${netSalary.toLocaleString()}`,
-      'PaySlip', slip.id,
+      'PaySlip',
+      slip.id,
     );
 
     res.json({ ...slip.toJSON(), budgetWarning });
@@ -483,7 +513,8 @@ router.post('/:id/pay', auth, async (req, res) => {
   }
 });
 
-router.post('/:id/unpay', auth, async (req, res) => {
+// Undo Salary Payment (Admin / Superadmin only)
+router.post('/:id/unpay', auth, requireAdmin, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const slip = await PaySlip.findByPk(req.params.id, { include: [{ model: Employee, as: 'employee' }], transaction: t });
@@ -531,10 +562,13 @@ router.post('/:id/unpay', auth, async (req, res) => {
     await t.commit();
 
     await logActivity({
-      module: 'Salary', action: 'Unpaid',
+      module: 'Salary',
+      action: 'Unpaid',
       message: `Undid salary payment to ${slip.employee?.name} (${slip.employee?.code}) for ${slip.month}/${slip.year} — ৳${previousAmount.toLocaleString()} restored to budget`,
-      amount: previousAmount, budgetCategoryId: previousCategoryId,
-      relatedType: 'PaySlip', relatedId: slip.id,
+      amount: previousAmount,
+      budgetCategoryId: previousCategoryId,
+      relatedType: 'PaySlip',
+      relatedId: slip.id,
       performedBy: req.user?.name || 'Admin',
     });
 
@@ -547,6 +581,7 @@ router.post('/:id/unpay', auth, async (req, res) => {
   }
 });
 
+// Delete Draft Payslip
 router.delete('/:id', auth, async (req, res) => {
   try {
     const slip = await PaySlip.findByPk(req.params.id);

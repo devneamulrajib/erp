@@ -1,3 +1,4 @@
+// client/src/components/Topbar.jsx
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -32,6 +33,16 @@ const RELATED_ROUTES = {
   PaymentRecorded: (id) => `/procurement-module/purchase-order-list?viewId=${id}`,
   EmployeeLeaveRequest: () => '/hrm-module/employee?tab=leave',
   EmployeeAdvanceRequest: () => '/hrm-module/employee?tab=advance',
+  // Accountant <-> Admin notification routing:
+  OfficeExpenseRequest: () => '/accounts-module/approval-center',
+  OfficeExpenseApproved: () => '/accounts-module/office-expense-list',
+  OfficeExpenseRejected: () => '/dashboard/accountant',
+  PaymentVoucherRequest: () => '/accounts-module/approval-center',
+  PaymentVoucherApproved: () => '/accounts-module/payment-list',
+  PaymentVoucherRejected: () => '/dashboard/accountant',
+  BudgetRequest: () => '/accounts-module/approval-center',
+  BudgetApproved: () => '/accounts-module/office-budget',
+  BudgetRejected: () => '/dashboard/accountant',
 };
 
 const NOTIFICATION_MODULE_MAP = {
@@ -44,6 +55,16 @@ const NOTIFICATION_MODULE_MAP = {
   PaymentRecorded: 'inventory',
   EmployeeLeaveRequest: 'hrm',
   EmployeeAdvanceRequest: 'hrm',
+  // Financial module notification mapping:
+  OfficeExpenseRequest: 'accounts',
+  OfficeExpenseApproved: 'accounts',
+  OfficeExpenseRejected: 'accounts',
+  PaymentVoucherRequest: 'accounts',
+  PaymentVoucherApproved: 'accounts',
+  PaymentVoucherRejected: 'accounts',
+  BudgetRequest: 'accounts',
+  BudgetApproved: 'accounts',
+  BudgetRejected: 'accounts',
 };
 
 export default function Topbar() {
@@ -55,6 +76,14 @@ export default function Topbar() {
   const [moduleCounts, setModuleCounts] = useState({});
   const profileRef = useRef(null);
   const notifRef = useRef(null);
+
+  // Read current user from localStorage
+  const storedUser = localStorage.getItem('user');
+  const currentUser = storedUser ? JSON.parse(storedUser) : null;
+  const userName = currentUser?.name || 'ERP User';
+  const userRole = currentUser?.role || 'User';
+  const userEmail = currentUser?.email || 'user@trikon.erp';
+  const initial = (userName.charAt(0) || 'U').toUpperCase();
 
   useEffect(() => {
     function refreshCount() {
@@ -71,7 +100,7 @@ export default function Topbar() {
         .catch(() => {});
     }
     refreshCount();
-    const interval = setInterval(refreshCount, 30000);
+    const interval = setInterval(refreshCount, 15000); // Polling every 15s
     return () => clearInterval(interval);
   }, []);
 
@@ -90,6 +119,7 @@ export default function Topbar() {
 
   function handleLogout() {
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
     sessionStorage.removeItem('token');
     setProfileOpen(false);
     navigate('/login', { replace: true });
@@ -113,7 +143,7 @@ export default function Topbar() {
     }
     setNotifOpen(false);
     const route = RELATED_ROUTES[n.type];
-    if (route && (n.relatedId || route.length === 0)) {
+    if (route) {
       navigate(route(n.relatedId));
     }
   }
@@ -129,51 +159,30 @@ export default function Topbar() {
 
   return (
     <header className="sticky top-0 z-[9999] w-full">
-      {/* =====================================================
-          TOP HEADER
-      ====================================================== */}
       <div className="relative z-20 h-16 w-full border-b border-slate-200/80 bg-white/95 backdrop-blur-md">
         <div className="mx-auto flex h-full w-full max-w-[1500px] items-center justify-between px-4 sm:px-6 lg:px-8">
           
-          {/* =================================================
-              BRAND / LOGO
-          ================================================== */}
+          {/* BRAND */}
           <div 
             onClick={() => navigate('/')} 
             className="flex min-w-fit cursor-pointer items-center gap-3 transition-opacity hover:opacity-90"
           >
             <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-slate-200/90 bg-white p-1 shadow-xs">
-              <img
-                src={companyLogo}
-                alt="Trikon Logo"
-                className="h-full w-full object-contain"
-              />
+              <img src={companyLogo} alt="Trikon Logo" className="h-full w-full object-contain" />
             </div>
-
             <div className="hidden sm:block">
               <div className="flex items-center gap-1.5">
-                <span className="text-[17px] font-black tracking-tight text-slate-900">
-                  TRIKON
-                </span>
-                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-slate-600">
-                  ERP
-                </span>
+                <span className="text-[17px] font-black tracking-tight text-slate-900">TRIKON</span>
+                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-slate-600">ERP</span>
               </div>
-              <p className="-mt-0.5 text-[10px] font-medium tracking-wide text-slate-400">
-                Business Management
-              </p>
+              <p className="-mt-0.5 text-[10px] font-medium tracking-wide text-slate-400">Business Management</p>
             </div>
           </div>
 
-          {/* =================================================
-              SEARCH
-          ================================================== */}
+          {/* SEARCH */}
           <div className="mx-6 hidden max-w-md flex-1 md:block lg:mx-10">
             <div className="relative">
-              <Search
-                size={16}
-                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
-              />
+              <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 placeholder="Quick search modules, orders, records..."
@@ -185,11 +194,8 @@ export default function Topbar() {
             </div>
           </div>
 
-          {/* =================================================
-              ACTIONS
-          ================================================== */}
+          {/* ACTIONS */}
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Mobile Search Button */}
             <button
               type="button"
               title="Search"
@@ -198,7 +204,6 @@ export default function Topbar() {
               <Search size={16} />
             </button>
 
-            {/* Applications */}
             <button
               type="button"
               title="Applications"
@@ -207,7 +212,6 @@ export default function Topbar() {
               <Grid2X2 size={16} />
             </button>
 
-            {/* Theme Toggle */}
             <button
               type="button"
               title="Theme"
@@ -216,7 +220,7 @@ export default function Topbar() {
               <Sun size={16} />
             </button>
 
-            {/* Notifications */}
+            {/* NOTIFICATIONS POPOVER */}
             <div className="relative" ref={notifRef}>
               <button
                 type="button"
@@ -236,7 +240,6 @@ export default function Topbar() {
                 )}
               </button>
 
-              {/* Notification Popover */}
               {notifOpen && (
                 <div className="absolute right-0 top-[calc(100%+10px)] z-50 flex max-h-[460px] w-[350px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/10 sm:w-[380px]">
                   <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-4 py-3">
@@ -301,7 +304,6 @@ export default function Topbar() {
               )}
             </div>
 
-            {/* Settings */}
             <button
               type="button"
               title="Settings"
@@ -312,7 +314,7 @@ export default function Topbar() {
 
             <div className="mx-1 hidden h-5 w-px bg-slate-200 sm:block" />
 
-            {/* Profile Dropdown */}
+            {/* DYNAMIC USER PROFILE */}
             <div className="relative" ref={profileRef}>
               <button
                 type="button"
@@ -320,12 +322,12 @@ export default function Topbar() {
                 className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 bg-white p-1 pr-2.5 transition-colors hover:border-slate-300"
               >
                 <div className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-xs font-bold text-white shadow-xs">
-                  A
+                  {initial}
                   <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" />
                 </div>
                 <div className="hidden text-left lg:block">
-                  <p className="text-xs font-semibold leading-tight text-slate-800">Admin User</p>
-                  <p className="text-[10px] font-medium text-slate-400">Administrator</p>
+                  <p className="text-xs font-semibold leading-tight text-slate-800">{userName}</p>
+                  <p className="text-[10px] font-medium text-slate-400 capitalize">{userRole}</p>
                 </div>
                 <ChevronDown
                   size={14}
@@ -338,8 +340,8 @@ export default function Topbar() {
               {profileOpen && (
                 <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-52 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl shadow-slate-900/10">
                   <div className="border-b border-slate-100 px-3 py-2">
-                    <p className="text-xs font-semibold text-slate-900">Admin User</p>
-                    <p className="text-[10px] text-slate-400">admin@trikon.erp</p>
+                    <p className="text-xs font-semibold text-slate-900">{userName}</p>
+                    <p className="text-[10px] text-slate-400">{userEmail}</p>
                   </div>
                   <div className="py-1">
                     <button
@@ -358,9 +360,6 @@ export default function Topbar() {
         </div>
       </div>
 
-      {/* =====================================================
-          FLOATING MENU ISLAND
-      ====================================================== */}
       <div className="relative z-10 -mt-[1px] flex justify-center px-4">
         <ModuleNav badgeCounts={moduleCounts} />
       </div>

@@ -1,3 +1,4 @@
+// server/models/User.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/db');
 
@@ -17,6 +18,24 @@ const User = sequelize.define('User', {
       'user'
     ),
     defaultValue: 'user',
+  },
+  roles: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    defaultValue: '[]',
+    get() {
+      const raw = this.getDataValue('roles');
+      if (!raw) return [];
+      if (Array.isArray(raw)) return raw;
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return [];
+      }
+    },
+    set(val) {
+      this.setDataValue('roles', typeof val === 'string' ? val : JSON.stringify(val || []));
+    },
   },
   isActive: {
     type: DataTypes.BOOLEAN,

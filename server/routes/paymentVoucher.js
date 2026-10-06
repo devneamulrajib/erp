@@ -23,6 +23,7 @@ async function generateVoucherNo() {
   return `P${String(900000 + count + 1)}`;
 }
 
+// GET /next-code
 router.get('/next-code', auth, async (req, res) => {
   try {
     res.json({ code: await generateVoucherNo() });
@@ -31,6 +32,7 @@ router.get('/next-code', auth, async (req, res) => {
   }
 });
 
+// GET /
 router.get('/', auth, async (req, res) => {
   try {
     const { project, debitAccount, creditAccount, titleOfWork, site, task, from, to } = req.query;
@@ -58,6 +60,7 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// GET /:id
 router.get('/:id', auth, async (req, res) => {
   try {
     const voucher = await PaymentVoucher.findByPk(req.params.id, {
@@ -70,6 +73,7 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
+// POST /
 router.post('/', auth, upload.single('attachment'), async (req, res) => {
   try {
     const {
@@ -110,24 +114,39 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
   }
 });
 
+// PUT /:id
 router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
   try {
     const voucher = await PaymentVoucher.findByPk(req.params.id);
     if (!voucher) return res.status(404).json({ message: 'Not found' });
 
+    // RESTRICTION: Non-admin cannot edit approved vouchers
+    const isNonAdmin = !['superadmin', 'admin'].includes(req.user?.role);
+    if (isNonAdmin && String(voucher.status).toLowerCase() === 'approved') {
+      return res.status(403).json({ message: 'Approved payment vouchers cannot be edited by an Accountant. Contact Admin.' });
+    }
+
     const fields = [
       'projectType', 'project', 'titleOfWork', 'task', 'site', 'date', 'voucherNo',
       'debitAccount', 'creditAccount', 'chequeReceiptNo', 'amount', 'comment',
-      'invoiceBill', 'item', 'status', 'bankAccount', 'chequeDate',
+      'invoiceBill', 'item', 'bankAccount', 'chequeDate',
     ];
+    if (!isNonAdmin) fields.push('status'); // Only Admin can change status directly
+
     fields.forEach((key) => {
       if (req.body[key] !== undefined) voucher[key] = req.body[key];
     });
+
     if (req.body.ifCheque !== undefined) {
       voucher.ifCheque = req.body.ifCheque === 'true' || req.body.ifCheque === true;
     }
     if (req.file) voucher.attachment = `/uploads/payment-vouchers/${req.file.filename}`;
     voucher.editedBy = req.user?.name || voucher.editedBy;
+
+    // If an Accountant edits a rejected voucher, place it back to 'pending'
+    if (isNonAdmin && String(voucher.status).toLowerCase() === 'rejected') {
+      voucher.status = 'pending';
+    }
 
     await voucher.save();
     res.json(voucher);
@@ -136,16 +155,26 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
   }
 });
 
+// DELETE /:id
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await PaymentVoucher.destroy({ where: { id: req.params.id } });
-    if (!deleted) return res.status(404).json({ message: 'Not found' });
+    const voucher = await PaymentVoucher.findByPk(req.params.id);
+    if (!voucher) return res.status(404).json({ message: 'Not found' });
+
+    // RESTRICTION: Non-admin cannot delete approved vouchers
+    const isNonAdmin = !['superadmin', 'admin'].includes(req.user?.role);
+    if (isNonAdmin && String(voucher.status).toLowerCase() === 'approved') {
+      return res.status(403).json({ message: 'Approved payment vouchers cannot be deleted by an Accountant. Contact Admin.' });
+    }
+
+    await voucher.destroy();
     res.json({ deleted: true });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
+// POST /:id/duplicate
 router.post('/:id/duplicate', auth, async (req, res) => {
   try {
     const original = await PaymentVoucher.findByPk(req.params.id);
