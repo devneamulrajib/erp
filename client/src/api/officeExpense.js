@@ -16,6 +16,13 @@ export async function getNextOfficeExpenseCode() {
   return res.data.code;
 }
 
+// params: { budgetCategory, date, excludeId? }
+// Returns { hasBudget, categoryName, year, month, allocated, spent, remaining, budgetStatus }
+export async function getOfficeExpenseBudgetStatus(params = {}) {
+  const res = await api.get('/office-expenses/budget-status', { params });
+  return res.data;
+}
+
 export async function createOfficeExpense({ attachmentFile, ...fields }) {
   const fd = new FormData();
   Object.entries(fields).forEach(([k, v]) => fd.append(k, v ?? ''));

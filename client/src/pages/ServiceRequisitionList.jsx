@@ -1,9 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from '../api/axios';
 import { getServiceRequisitions, getServiceRequisition, deleteServiceRequisition } from '../api/serviceRequisition';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import { Eye, Pencil, Trash2, PlusCircle, Search, ClipboardList, X } from 'lucide-react';
+
+// ASSUMPTION: same endpoint the form uses for the Budget Category dropdown.
+// If it fails, the view popup just shows "-" for the category.
+const BUDGET_CATEGORY_ENDPOINT = '/budget-categories';
 
 function num(v) { return Number(v) || 0; }
 
@@ -13,12 +18,31 @@ function asArray(res) {
   return body?.rows || body?.data || [];
 }
 
+function PriorityBadge({ priority }) {
+  const urgent = priority === 'urgent';
+  return (
+    <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${urgent ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500'}`}>
+      {urgent ? 'Urgent' : 'Normal'}
+    </span>
+  );
+}
+
+function StatusBadge({ status }) {
+  const draft = status === 'draft';
+  return (
+    <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${draft ? 'bg-amber-50 text-amber-700' : 'bg-indigo-50 text-indigo-600'}`}>
+      {draft ? 'Draft' : 'Submitted'}
+    </span>
+  );
+}
+
 export default function ServiceRequisitionList() {
   const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState(null);
+  const [budgetCategories, setBudgetCategories] = useState([]);
 
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
@@ -44,6 +68,10 @@ export default function ServiceRequisitionList() {
 
   useEffect(() => { loadRows(); }, [loadRows]);
   useEffect(() => { setPage(1); }, [search, pageSize]);
+
+  useEffect(() => {
+    api.get(BUDGET_CATEGORY_ENDPOINT).then((res) => setBudgetCategories(asArray(res))).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!viewId) return;
@@ -80,6 +108,8 @@ export default function ServiceRequisitionList() {
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-');
+
+  const columns = ['ID', 'Project', 'Code', 'Title of Work', 'Date', 'Required By', 'Priority', 'Grand Total', 'Added By', 'Status', 'Approval Layer', 'Action'];
 
   return (
     <div className="min-h-screen w-full bg-slate-50 text-left">
@@ -156,17 +186,17 @@ export default function ServiceRequisitionList() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
-                  {['ID', 'Project Type', 'Project', 'Code', 'Date', 'Grand Total', 'Added By', 'Approval Layer', 'Action'].map((h) => (
+                  {columns.map((h) => (
                     <th key={h} className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={9} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
+                  <tr><td colSpan={columns.length} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
                 ) : paged.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="text-center py-16">
+                    <td colSpan={columns.length} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <ClipboardList size={28} strokeWidth={1.5} />
                         <p className="text-sm">No entries found. Try adjusting your search, or add a new requisition.</p>
@@ -177,21 +207,33 @@ export default function ServiceRequisitionList() {
                   paged.map((row, i) => (
                     <tr key={row.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap align-top">
                       <td className="px-4 py-3.5 text-slate-400 font-mono text-xs">{(page - 1) * pageSize + i + 1}</td>
-                      <td className="px-4 py-3.5 text-slate-600">{row.projectType || '-'}</td>
-                      <td className="px-4 py-3.5 text-slate-600">{row.project?.name || '-'}</td>
+                      <td className="px-4 py-3.5 text-slate-600">
+                        <div>{row.project?.name || '-'}</div>
+                        {row.projectType && <div className="text-xs text-slate-400">{row.projectType}</div>}
+                      </td>
                       <td className="px-4 py-3.5 text-slate-600 font-mono text-xs">{row.code}</td>
+                      <td className="px-4 py-3.5 text-slate-600">{row.titleOfWork || '-'}</td>
                       <td className="px-4 py-3.5 text-slate-600">{fmtDate(row.date)}</td>
+                      <td className="px-4 py-3.5 text-slate-600">{fmtDate(row.requiredByDate)}</td>
+                      <td className="px-4 py-3.5"><PriorityBadge priority={row.priority} /></td>
                       <td className="px-4 py-3.5 font-medium text-slate-800">{num(row.grandTotal).toLocaleString()}</td>
                       <td className="px-4 py-3.5 text-slate-600">{row.addedBy || '-'}</td>
+                      <td className="px-4 py-3.5"><StatusBadge status={row.status} /></td>
                       <td className="px-4 py-3.5">
-                        {(row.approvals || []).length > 0 && (row.approvals || []).every((a) => a.approved) && (
-                          <div className="text-emerald-600 text-xs font-medium">✓ All Approvals Completed</div>
+                        {row.status === 'draft' ? (
+                          <div className="text-xs text-slate-400">Not submitted</div>
+                        ) : (
+                          <>
+                            {(row.approvals || []).length > 0 && (row.approvals || []).every((a) => a.approved) && (
+                              <div className="text-emerald-600 text-xs font-medium">✓ All Approvals Completed</div>
+                            )}
+                            {(row.approvals || []).map((a, idx) => (
+                              <div key={idx} className={`text-xs ${a.approved ? 'text-emerald-600' : 'text-red-500'}`}>
+                                {a.approved ? '✓' : '✗'} {a.name}
+                              </div>
+                            ))}
+                          </>
                         )}
-                        {(row.approvals || []).map((a, idx) => (
-                          <div key={idx} className={`text-xs ${a.approved ? 'text-emerald-600' : 'text-red-500'}`}>
-                            {a.approved ? '✓' : '✗'} {a.name}
-                          </div>
-                        ))}
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1.5">
@@ -205,7 +247,7 @@ export default function ServiceRequisitionList() {
                           <button
                             onClick={() => navigate(`/requisition-module/service-work-requisition-add/${row.id}`)}
                             className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors"
-                            title="Edit"
+                            title={row.status === 'draft' ? 'Continue editing draft' : 'Edit'}
                           >
                             <Pencil size={14} />
                           </button>
@@ -271,15 +313,21 @@ export default function ServiceRequisitionList() {
           error={viewError}
           data={viewData}
           fmtDate={fmtDate}
+          budgetCategories={budgetCategories}
         />
       )}
     </div>
   );
 }
 
-function ViewModal({ onClose, loading, error, data, fmtDate }) {
+function ViewModal({ onClose, loading, error, data, fmtDate, budgetCategories }) {
   const items = data?.items || [];
-  const subtotal = items.reduce((sum, it) => sum + num(it.rate) * num(it.qtyDays), 0);
+  const subtotal = num(data?.subtotal) || items.reduce((sum, it) => sum + num(it.rate) * num(it.qtyDays), 0);
+  const discount = num(data?.discount);
+  const vatPercent = num(data?.vatPercent);
+  const vatAmount = ((subtotal - discount) * vatPercent) / 100;
+  const category = budgetCategories.find((b) => String(b.id) === String(data?.budgetCategoryId));
+  const attachments = Array.isArray(data?.attachment) ? data.attachment : [];
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -303,11 +351,16 @@ function ViewModal({ onClose, loading, error, data, fmtDate }) {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
                 <InfoField label="Code" value={data.code} />
                 <InfoField label="Date" value={fmtDate(data.date)} />
-                <InfoField label="Project Type" value={data.projectType} />
+                <InfoField label="Required By" value={fmtDate(data.requiredByDate)} />
                 <InfoField label="Project" value={data.project?.name} />
+                <InfoField label="Project Type" value={data.projectType} />
+                <InfoField label="Site" value={data.site?.name} />
                 <InfoField label="Title/Name of Work" value={data.titleOfWork} />
                 <InfoField label="Task" value={data.task} />
-                <InfoField label="Site" value={data.site?.name} />
+                <InfoField label="Budget Category" value={category?.name} />
+                <InfoField label="Priority" value={data.priority === 'urgent' ? 'Urgent' : 'Normal'} />
+                <InfoField label="Preferred Contractor" value={data.supplier?.name} />
+                <InfoField label="Status" value={data.status === 'draft' ? 'Draft' : 'Submitted'} />
                 <InfoField label="Added By" value={data.addedBy} />
               </div>
 
@@ -338,12 +391,41 @@ function ViewModal({ onClose, loading, error, data, fmtDate }) {
                 </table>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex flex-wrap justify-between gap-6">
+                <div className="flex-1 min-w-[200px] space-y-3">
+                  {data.remarks && (
+                    <div>
+                      <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Remarks</div>
+                      <div className="text-sm text-slate-800 whitespace-pre-wrap">{data.remarks}</div>
+                    </div>
+                  )}
+                  {attachments.length > 0 && (
+                    <div>
+                      <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Attachments</div>
+                      <ul className="text-sm text-slate-700 space-y-0.5">
+                        {attachments.map((name) => <li key={name}>{name}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
                 <div className="w-full max-w-xs space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500">Subtotal</span>
                     <span className="font-medium text-slate-800">{subtotal.toLocaleString()}</span>
                   </div>
+                  {discount > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-500">Discount</span>
+                      <span className="font-medium text-slate-800">- {discount.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {vatPercent > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-500">VAT ({vatPercent}%)</span>
+                      <span className="font-medium text-slate-800">{vatAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm pt-2 border-t border-slate-100">
                     <span className="text-slate-700 font-medium">Grand Total</span>
                     <span className="font-semibold text-slate-900">{num(data.grandTotal ?? subtotal).toLocaleString()}</span>

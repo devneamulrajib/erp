@@ -30,6 +30,10 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+const PAYMENT_METHODS = ['Cash', 'Bank', 'Cheque'];
+const cleanMethod = (v) => (PAYMENT_METHODS.includes(v) ? v : '');
+const cleanText = (v) => String(v ?? '').trim();
+
 async function generateReference() {
   const count = await OfficeExpense.count();
   return `OEXP${String(count + 1).padStart(5, '0')}`;
@@ -112,11 +116,73 @@ async function checkBudgetWarning(officeExpense) {
   return null;
 }
 
+// Read-only snapshot used by the form's budget meter. Mirrors the maths in
+// checkBudgetWarning (top-level category + its subcategories, calendar month
+// of the expense date) but optionally leaves one expense out, so editing an
+// existing record doesn't count it twice.
+async function getBudgetStatus(budgetCategoryId, dateValue, excludeId) {
+  const category = await BudgetCategory.findByPk(budgetCategoryId);
+  if (!category) return { hasBudget: false };
+  const topCategory = category.parentId ? await BudgetCategory.findByPk(category.parentId) : category;
+  if (!topCategory) return { hasBudget: false };
+
+  // Read year/month straight from a YYYY-MM-DD string so the server's
+  // timezone can't push the date into the neighbouring month.
+  let year;
+  let month;
+  const match = /^(\d{4})-(\d{2})-\d{2}/.exec(String(dateValue || ''));
+  if (match) {
+    year = Number(match[1]);
+    month = Number(match[2]);
+  } else {
+    const d = dateValue ? new Date(dateValue) : new Date();
+    if (Number.isNaN(d.getTime())) return { hasBudget: false };
+    year = d.getFullYear();
+    month = d.getMonth() + 1;
+  }
+
+  const base = { categoryName: topCategory.name, year, month };
+  const budget = await MonthlyBudget.findOne({ where: { budgetCategoryId: topCategory.id, year, month } });
+  if (!budget) return { ...base, hasBudget: false };
+
+  const subs = await BudgetCategory.findAll({ where: { parentId: topCategory.id } });
+  const categoryIds = [topCategory.id, ...subs.map((s) => s.id)];
+
+  const where = {
+    budgetCategoryId: { [Op.in]: categoryIds },
+    date: { [Op.gte]: new Date(year, month - 1, 1), [Op.lt]: new Date(year, month, 1) },
+  };
+  if (excludeId) where.id = { [Op.ne]: excludeId };
+
+  const spent = Number(await OfficeExpense.sum('amount', { where })) || 0;
+  const allocated = Number(budget.allocatedAmount) || 0;
+
+  return {
+    ...base,
+    hasBudget: true,
+    budgetStatus: budget.status,
+    allocated,
+    spent,
+    remaining: allocated - spent,
+  };
+}
+
 const listInclude = [{ model: BudgetCategory, as: 'budgetCategory' }];
 
 router.get('/next-code', auth, async (req, res) => {
   try {
     res.json({ code: await generateReference() });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Must stay above '/:id' so "budget-status" isn't treated as an id.
+router.get('/budget-status', auth, async (req, res) => {
+  try {
+    const { budgetCategory, date, excludeId } = req.query;
+    if (!budgetCategory) return res.json({ hasBudget: false });
+    res.json(await getBudgetStatus(budgetCategory, date, excludeId));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -255,13 +321,22 @@ router.get('/:id', auth, async (req, res) => {
 // Create new expense request
 router.post('/', auth, upload.single('attachment'), async (req, res) => {
   try {
-    const { title, budgetCategory, drAccount, crAccount, amount, reference, date } = req.body;
+    const {
+      title, budgetCategory, drAccount, crAccount, amount, reference, date,
+      paidTo, billNo, paymentMethod, paymentRef,
+    } = req.body;
 
     if (!budgetCategory) {
       return res.status(400).json({ message: 'Office Budget Category is required' });
     }
     if (!drAccount || !crAccount || !amount) {
       return res.status(400).json({ message: 'Debit account, Credit account and Amount are required' });
+    }
+    if (!(Number(amount) > 0)) {
+      return res.status(400).json({ message: 'Amount must be greater than 0' });
+    }
+    if (drAccount === crAccount) {
+      return res.status(400).json({ message: 'Debit and Credit accounts must be different' });
     }
 
     const isAccountant = req.user?.role === 'accountant';
@@ -278,6 +353,10 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
       status: initialStatus,
       addedBy: req.user?.name || (isAccountant ? 'Accountant' : 'Admin'),
       attachment: req.file ? `/uploads/office-expenses/${req.file.filename}` : '',
+      paidTo: cleanText(paidTo),
+      billNo: cleanText(billNo),
+      paymentMethod: cleanMethod(paymentMethod),
+      paymentRef: cleanText(paymentRef),
     });
 
     let budgetWarning = null;
@@ -373,7 +452,10 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
     }
 
     const previousAmount = Number(officeExpense.amount);
-    const fields = ['title', 'drAccount', 'crAccount', 'amount', 'reference', 'date'];
+    const fields = [
+      'title', 'drAccount', 'crAccount', 'amount', 'reference', 'date',
+      'paidTo', 'billNo', 'paymentRef',
+    ];
 
     // Only Admin can manually update status through PUT
     if (!isNonAdmin && req.body.status !== undefined) {
@@ -384,11 +466,22 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
       if (req.body[key] !== undefined) officeExpense[key] = req.body[key];
     });
 
+    if (req.body.paymentMethod !== undefined) {
+      officeExpense.paymentMethod = cleanMethod(req.body.paymentMethod);
+    }
+
     if (req.body.budgetCategory !== undefined) {
       if (!req.body.budgetCategory) {
         return res.status(400).json({ message: 'Office Budget Category is required' });
       }
       officeExpense.budgetCategoryId = req.body.budgetCategory;
+    }
+
+    if (!(Number(officeExpense.amount) > 0)) {
+      return res.status(400).json({ message: 'Amount must be greater than 0' });
+    }
+    if (officeExpense.drAccount && officeExpense.drAccount === officeExpense.crAccount) {
+      return res.status(400).json({ message: 'Debit and Credit accounts must be different' });
     }
 
     if (req.file) officeExpense.attachment = `/uploads/office-expenses/${req.file.filename}`;
