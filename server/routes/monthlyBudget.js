@@ -1,11 +1,17 @@
 // server/routes/monthlyBudget.js
 const router = require('express').Router();
 const { Op } = require('sequelize');
+
 const auth = require('../middleware/auth');
+const { requireAdmin } = require('../middleware/permissions');
 const { BudgetCategory, MonthlyBudget, OfficeExpense } = require('../models/associations');
 const MonthlyBudgetAuditLog = require('../models/MonthlyBudgetAuditLog');
 const MonthlyBudgetCashReceipt = require('../models/MonthlyBudgetCashReceipt');
 const logActivity = require('../utils/activityLog');
+
+// -------------------------------------------------------------
+// Summary & Audit Logs
+// -------------------------------------------------------------
 
 router.get('/summary', auth, async (req, res) => {
   try {
@@ -124,7 +130,12 @@ router.get('/logs', auth, async (req, res) => {
   }
 });
 
-router.post('/', auth, async (req, res) => {
+// -------------------------------------------------------------
+// Budget Allocation & Requests
+// -------------------------------------------------------------
+
+// 1. Direct allocation (Admin / Superadmin only)
+router.post('/', auth, requireAdmin, async (req, res) => {
   try {
     const { budgetCategoryId, year, month, allocatedAmount, note } = req.body;
     if (!budgetCategoryId || !year || !month) {
@@ -148,8 +159,7 @@ router.post('/', auth, async (req, res) => {
       previousAmount = Number(budget.allocatedAmount);
       budget.allocatedAmount = nextAmount;
       if (note !== undefined) budget.note = note;
-      // A direct manual save always settles any outstanding Pending/Rejected
-      // request state — the admin has explicitly set the figure themselves.
+      // Direct allocation always approves and settles any outstanding pending/rejected requests
       budget.status = 'Approved';
       await budget.save();
       action = 'Updated';
@@ -179,12 +189,15 @@ router.post('/', auth, async (req, res) => {
     });
 
     await logActivity({
-      module: 'Budget', action,
+      module: 'Budget',
+      action,
       message: action === 'Created'
         ? `Set ${category.name} budget for ${month}/${year} to ৳${nextAmount.toLocaleString()}`
         : `Changed ${category.name} budget for ${month}/${year} from ৳${(previousAmount || 0).toLocaleString()} to ৳${nextAmount.toLocaleString()}`,
-      amount: nextAmount, budgetCategoryId,
-      relatedType: 'MonthlyBudget', relatedId: budget.id,
+      amount: nextAmount,
+      budgetCategoryId,
+      relatedType: 'MonthlyBudget',
+      relatedId: budget.id,
       performedBy,
     });
 
@@ -194,7 +207,7 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-// Pay Slip page calls this: auto-request salary budget = total net salary of Draft slips.
+// 2. Submit budget request (Accountant & Admin allowed)
 router.post('/request', auth, async (req, res) => {
   try {
     const { budgetCategoryId, year, month, requestedAmount, note } = req.body;
@@ -209,7 +222,7 @@ router.post('/request', auth, async (req, res) => {
       budget.status = 'Pending';
       budget.requestedBy = performedBy;
       budget.note = note || budget.note;
-      // A fresh request clears any stale rejection from a previous round.
+      // Clear any previous rejection information
       budget.rejectedBy = null;
       budget.rejectedAt = null;
       budget.rejectionReason = null;
@@ -245,10 +258,8 @@ router.post('/request', auth, async (req, res) => {
   }
 });
 
-// Admin approves a pending request. Accepts an optional approvedAmount to
-// override the originally requested figure (e.g. after reviewing the actual
-// payslip breakdown and adjusting for a correction), and an optional note.
-router.post('/:id/approve', auth, async (req, res) => {
+// 3. Approve request (Admin / Superadmin only)
+router.post('/:id/approve', auth, requireAdmin, async (req, res) => {
   try {
     const budget = await MonthlyBudget.findByPk(req.params.id);
     if (!budget) return res.status(404).json({ message: 'Not found' });
@@ -302,9 +313,8 @@ router.post('/:id/approve', auth, async (req, res) => {
   }
 });
 
-// Admin rejects a pending request — allocatedAmount stays untouched (0 unless
-// something was already set), status flips to Rejected with a required reason.
-router.post('/:id/reject', auth, async (req, res) => {
+// 4. Reject request (Admin / Superadmin only)
+router.post('/:id/reject', auth, requireAdmin, async (req, res) => {
   try {
     const budget = await MonthlyBudget.findByPk(req.params.id);
     if (!budget) return res.status(404).json({ message: 'Not found' });
@@ -353,7 +363,8 @@ router.post('/:id/reject', auth, async (req, res) => {
   }
 });
 
-router.delete('/:id', auth, async (req, res) => {
+// 5. Delete allocation (Admin / Superadmin only)
+router.delete('/:id', auth, requireAdmin, async (req, res) => {
   try {
     const budget = await MonthlyBudget.findByPk(req.params.id);
     if (!budget) return res.status(404).json({ message: 'Not found' });
@@ -372,10 +383,13 @@ router.delete('/:id', auth, async (req, res) => {
 
     const category = await BudgetCategory.findByPk(budget.budgetCategoryId);
     await logActivity({
-      module: 'Budget', action: 'Deleted',
+      module: 'Budget',
+      action: 'Deleted',
       message: `Removed ${category?.name || 'budget'} allocation of ৳${Number(budget.allocatedAmount).toLocaleString()} for ${budget.month}/${budget.year}`,
-      amount: budget.allocatedAmount, budgetCategoryId: budget.budgetCategoryId,
-      relatedType: 'MonthlyBudget', relatedId: budget.id,
+      amount: budget.allocatedAmount,
+      budgetCategoryId: budget.budgetCategoryId,
+      relatedType: 'MonthlyBudget',
+      relatedId: budget.id,
       performedBy: req.user?.name || 'Admin',
     });
 
@@ -386,9 +400,9 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
-// ==========================================
-// CASH INFLOW / FUND RECEIPT ENDPOINTS
-// ==========================================
+// -------------------------------------------------------------
+// Cash Receipts / Fund Receipts
+// -------------------------------------------------------------
 
 // Get all cash receipts for a month
 router.get('/cash-receipts', auth, async (req, res) => {
@@ -439,10 +453,13 @@ router.post('/cash-receipts', auth, async (req, res) => {
     });
 
     await logActivity({
-      module: 'Budget', action: 'CashReceived',
+      module: 'Budget',
+      action: 'CashReceived',
       message: `Recorded cash receipt of ৳${Number(receipt.amount).toLocaleString()} from ${receipt.receivedFrom} for ${month}/${year}`,
-      amount: receipt.amount, budgetCategoryId: receipt.budgetCategoryId,
-      relatedType: 'MonthlyBudgetCashReceipt', relatedId: receipt.id,
+      amount: receipt.amount,
+      budgetCategoryId: receipt.budgetCategoryId,
+      relatedType: 'MonthlyBudgetCashReceipt',
+      relatedId: receipt.id,
       performedBy: req.user?.name || 'Accounts Manager',
     });
 
@@ -481,10 +498,13 @@ router.put('/cash-receipts/:id', auth, async (req, res) => {
     await receipt.save();
 
     await logActivity({
-      module: 'Budget', action: 'CashReceiptUpdated',
+      module: 'Budget',
+      action: 'CashReceiptUpdated',
       message: `Updated cash receipt #${receipt.id} (৳${Number(receipt.amount).toLocaleString()}) for ${receipt.month}/${receipt.year}`,
-      amount: receipt.amount, budgetCategoryId: receipt.budgetCategoryId,
-      relatedType: 'MonthlyBudgetCashReceipt', relatedId: receipt.id,
+      amount: receipt.amount,
+      budgetCategoryId: receipt.budgetCategoryId,
+      relatedType: 'MonthlyBudgetCashReceipt',
+      relatedId: receipt.id,
       performedBy: req.user?.name || 'Admin',
     });
 
@@ -501,10 +521,13 @@ router.delete('/cash-receipts/:id', auth, async (req, res) => {
     if (!receipt) return res.status(404).json({ message: 'Cash receipt not found' });
 
     await logActivity({
-      module: 'Budget', action: 'CashReceiptDeleted',
+      module: 'Budget',
+      action: 'CashReceiptDeleted',
       message: `Deleted cash receipt #${receipt.id} (৳${Number(receipt.amount).toLocaleString()}) for ${receipt.month}/${receipt.year}`,
-      amount: receipt.amount, budgetCategoryId: receipt.budgetCategoryId,
-      relatedType: 'MonthlyBudgetCashReceipt', relatedId: receipt.id,
+      amount: receipt.amount,
+      budgetCategoryId: receipt.budgetCategoryId,
+      relatedType: 'MonthlyBudgetCashReceipt',
+      relatedId: receipt.id,
       performedBy: req.user?.name || 'Admin',
     });
 

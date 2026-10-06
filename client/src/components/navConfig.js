@@ -1,9 +1,24 @@
 // client/src/components/navConfig.jsx
 // Floating-island navigation configuration for TRIKON ERP.
+
 import {
-  LayoutGrid, Building2, ShoppingBag, ClipboardList, Calculator,
-  UserRound, FileText, Grid3x3, Waypoints, Settings, UserPlus,
-  MapPin, FileBarChart2, Users, Wallet, HandCoins, UserCheck
+  LayoutGrid,
+  Building2,
+  ShoppingBag,
+  ClipboardList,
+  Calculator,
+  UserRound,
+  FileText,
+  Grid3x3,
+  Waypoints,
+  Settings,
+  UserPlus,
+  MapPin,
+  FileBarChart2,
+  Users,
+  Wallet,
+  HandCoins,
+  ShieldCheck,
 } from 'lucide-react';
 import { canAccessModule } from '../config/permissions';
 
@@ -100,7 +115,9 @@ const PROJECT_SUBPAGES = [
   { key: 'party-list', label: 'Party List', route: '/accounts-module/party_list' },
   { key: 'site', label: 'Site', route: '/project-module/site' },
   {
-    key: 'flat-land', label: 'Flat/Land', route: null,
+    key: 'flat-land',
+    label: 'Flat/Land',
+    route: null,
     children: [
       { key: 'flat-land-item', label: 'Flat/Land', route: '/inventory-module/flat' },
       { key: 'flat-land-sale', label: 'Flat/Land Sale', route: '/inventory-module/flat-sale' },
@@ -108,7 +125,9 @@ const PROJECT_SUBPAGES = [
     ],
   },
   {
-    key: 'share-project', label: 'Share Project', route: null,
+    key: 'share-project',
+    label: 'Share Project',
+    route: null,
     children: [
       { key: 'assign-share', label: 'Assign Share', route: '/project-module/share-project/assign-share' },
       { key: 'share-report', label: 'Share Report', route: '/project-module/share-project/share-report' },
@@ -117,7 +136,10 @@ const PROJECT_SUBPAGES = [
     ],
   },
   {
-    key: 'reports', label: 'Reports', icon: FileBarChart2, route: null,
+    key: 'reports',
+    label: 'Reports',
+    icon: FileBarChart2,
+    route: null,
     children: [
       { key: 'project-summary-report', label: 'Project Summary Report', route: '/project-module/reports/project-summary' },
       { key: 'project-progress-report', label: 'Project Progress Report', route: '/project-module/reports/project-progress' },
@@ -130,7 +152,9 @@ const PROJECT_SUBPAGES = [
 
 const INVENTORY_SUBPAGES = [
   {
-    key: 'products', label: 'Products', route: null,
+    key: 'products',
+    label: 'Products',
+    route: null,
     children: [
       { key: 'category', label: 'Category', route: '/inventory-module/products/category' },
       { key: 'brand', label: 'Brand', route: '/inventory-module/products/brand' },
@@ -142,7 +166,9 @@ const INVENTORY_SUBPAGES = [
   { key: 'purchase-list', label: 'Purchase List', route: '/inventory-module/purchase-list' },
   { key: 'purchase-order-list', label: 'Purchase Order List', route: '/procurement-module/purchase-order-list' },
   {
-    key: 'adjustment', label: 'Adjustment', route: null,
+    key: 'adjustment',
+    label: 'Adjustment',
+    route: null,
     children: [
       { key: 'material-usage', label: 'Material Usage', route: '/inventory-module/material_usage' },
       { key: 'stock-transfer', label: 'Stock Transfer', route: '/inventory-module/stock_adjustment_list' },
@@ -150,7 +176,10 @@ const INVENTORY_SUBPAGES = [
   },
   { key: 'sales', label: 'Sales', route: '/billing/item_sale_list' },
   {
-    key: 'reports', label: 'Reports', icon: FileBarChart2, route: null,
+    key: 'reports',
+    label: 'Reports',
+    icon: FileBarChart2,
+    route: null,
     children: [
       { key: 'purchase-details', label: 'Purchase Details', route: '/inventory-module/reports/purchase-details' },
       { key: 'purchase-order-receive-details', label: 'Purchase Order Receive Details', route: '/inventory-module/reports/purchase-order-receive-details' },
@@ -165,7 +194,10 @@ const REQUISITION_SUBPAGES = [
   { key: 'service-work-requisition', label: 'Service/Work Requisition', route: '/requisition-module/service-work-requisition-list' },
   { key: 'fund-requisition', label: 'Fund Requisition', route: '/requisition-module/fund-requisition' },
   {
-    key: 'reports', label: 'Reports', icon: FileBarChart2, route: null,
+    key: 'reports',
+    label: 'Reports',
+    icon: FileBarChart2,
+    route: null,
     children: [
       { key: 'fund-requisition-report', label: 'Fund Requisition Report', route: '/requisition-module/reports/fund-requisition' },
     ],
@@ -174,7 +206,22 @@ const REQUISITION_SUBPAGES = [
 
 const ACCOUNTING_SUBPAGES = [
   {
-    key: 'configuration', label: 'Configuration', icon: Settings, route: null,
+    key: 'approval-center',
+    label: 'Approval Center',
+    icon: ShieldCheck,
+    route: '/accounts-module/approval-center',
+  },
+  {
+    key: 'accountant-requests',
+    label: 'My Financial Requests',
+    icon: ClipboardList,
+    route: '/dashboard/accountant',
+  },
+  {
+    key: 'configuration',
+    label: 'Configuration',
+    icon: Settings,
+    route: null,
     children: [
       { key: 'chart-of-group', label: 'Chart of Group', route: '/accounts-module/chart-group' },
       { key: 'chart-of-accounts', label: 'Chart of Accounts', route: '/accounts-module/chart-accounts' },
@@ -182,7 +229,9 @@ const ACCOUNTING_SUBPAGES = [
     ],
   },
   {
-    key: 'contact', label: 'Contact', route: null,
+    key: 'contact',
+    label: 'Contact',
+    route: null,
     children: [
       { key: 'customer-accounts', label: 'Customer Accounts', route: '/accounts-module/customer-accounts' },
       { key: 'supplier-accounts', label: 'Supplier Accounts', route: '/accounts-module/supplier-accounts' },
@@ -190,10 +239,14 @@ const ACCOUNTING_SUBPAGES = [
     ],
   },
   {
-    key: 'billing', label: 'Billing', route: null,
+    key: 'billing',
+    label: 'Billing',
+    route: null,
     children: [
       {
-        key: 'billing-configuration', label: 'Configuration', route: null,
+        key: 'billing-configuration',
+        label: 'Configuration',
+        route: null,
         children: [
           { key: 'billing-category', label: 'Category', route: '/accounts-module/billing/category' },
           { key: 'billing-bill-item', label: 'Bill Item', route: '/inventory-module/bill-item' },
@@ -213,11 +266,16 @@ const ACCOUNTING_SUBPAGES = [
     ],
   },
   {
-    key: 'assets', label: 'Assets', route: null,
+    key: 'assets',
+    label: 'Assets',
+    route: null,
     children: [{ key: 'asset-list', label: 'Asset List', route: '/accounts-module/asset_list' }],
   },
   {
-    key: 'office-budget', label: 'Office Budget', icon: Wallet, route: null,
+    key: 'office-budget',
+    label: 'Office Budget',
+    icon: Wallet,
+    route: null,
     children: [
       { key: 'office-budget-tracker', label: 'Budget Tracker', route: '/accounts-module/office-budget' },
       { key: 'office-expense-list', label: 'Office Expense', route: '/accounts-module/office-expense-list' },
@@ -226,7 +284,9 @@ const ACCOUNTING_SUBPAGES = [
     ],
   },
   {
-    key: 'voucher', label: 'Voucher', route: null,
+    key: 'voucher',
+    label: 'Voucher',
+    route: null,
     children: [
       { key: 'expense-voucher', label: 'Expense', route: '/accounts-module/expense_list' },
       { key: 'receipt-voucher', label: 'Receipt Voucher', route: '/accounts-module/receipt-list' },
@@ -237,7 +297,10 @@ const ACCOUNTING_SUBPAGES = [
   },
   { key: 'bank-reconciliation', label: 'Bank Reconciliation', route: '/accounts-module/bank-reconciliation' },
   {
-    key: 'reports', label: 'Reports', icon: FileBarChart2, route: null,
+    key: 'reports',
+    label: 'Reports',
+    icon: FileBarChart2,
+    route: null,
     children: [
       { key: 'payable-report', label: 'Payable Report', route: '/accounts-module/reports/payable-report' },
       { key: 'expense-report', label: 'Expense Report', route: '/accounts-module/reports/expense-report' },
@@ -262,7 +325,9 @@ const HRM_SUBPAGES = [
 
   // Setup / Sub-structure
   {
-    key: 'employee-setup', label: 'Employee Setup', route: null,
+    key: 'employee-setup',
+    label: 'Employee Setup',
+    route: null,
     children: [
       { key: 'employee-list', label: 'Employee Directory', route: '/hrm-module/employee' },
       { key: 'department', label: 'Department', route: '/hrm-module/department' },
@@ -285,7 +350,10 @@ const HRM_SUBPAGES = [
   { key: 'leave-type', label: 'Leave Type', route: '/hrm-module/leave-type' },
   { key: 'leave-application', label: 'Leave Application', route: '/hrm-module/leave-application' },
   {
-    key: 'reports', label: 'Reports', icon: FileBarChart2, route: null,
+    key: 'reports',
+    label: 'Reports',
+    icon: FileBarChart2,
+    route: null,
     children: [
       { key: 'daily-attendance-report', label: 'Daily Attendance Report', route: '/hrm-module/reports/daily-attendance' },
       { key: 'attendance-register', label: 'Attendance Register', route: '/hrm-module/reports/attendance-register' },
@@ -299,7 +367,10 @@ const HRM_SUBPAGES = [
 
 const CRM_SUBPAGES = [
   {
-    key: 'configuration', label: 'Configuration', icon: Settings, route: null,
+    key: 'configuration',
+    label: 'Configuration',
+    icon: Settings,
+    route: null,
     children: [
       { key: 'communication-status', label: 'Communication Status', route: '/crm-module/communication_status' },
       { key: 'lead-category', label: 'Lead Category', route: '/crm-module/lead_category' },
@@ -313,7 +384,9 @@ const CRM_SUBPAGES = [
   },
   { key: 'lead', label: 'Lead', icon: UserPlus, route: '/crm-module/lead' },
   {
-    key: 'call-center', label: 'Call Center', route: null,
+    key: 'call-center',
+    label: 'Call Center',
+    route: null,
     children: [
       { key: 'follow-up', label: 'Follow Up', route: '/crm-module/call-center/follow-up' },
       { key: 'transfer', label: 'Transfer', route: '/crm-module/call-center/transfer' },
@@ -322,7 +395,10 @@ const CRM_SUBPAGES = [
     ],
   },
   {
-    key: 'visits', label: 'Visits', icon: MapPin, route: null,
+    key: 'visits',
+    label: 'Visits',
+    icon: MapPin,
+    route: null,
     children: [
       { key: 'visits-list', label: 'Visits', route: '/crm-module/visits' },
       { key: 'visit-report', label: 'Visit Report', route: '/crm-module/visits/report' },
@@ -358,7 +434,8 @@ export const menuContainsRoute = (item, pathname) => {
   return Boolean(item.children?.some((child) => menuContainsRoute(child, pathname)));
 };
 
-export const getActiveTopModule = (pathname) => TOP_MODULES.find((m) => menuContainsRoute(m, pathname)) || null;
+export const getActiveTopModule = (pathname) =>
+  TOP_MODULES.find((m) => menuContainsRoute(m, pathname)) || null;
 
 export const getMenuPath = (pathname) => {
   const result = [];
@@ -377,7 +454,8 @@ export const getMenuPath = (pathname) => {
   return result;
 };
 
-export const getExpandableModules = () => TOP_MODULES.filter((m) => m.children?.length > 0);
+export const getExpandableModules = () =>
+  TOP_MODULES.filter((m) => m.children?.length > 0);
 
 export const getFloatingIslandItems = () =>
   TOP_MODULES.map((m) => ({
@@ -419,9 +497,9 @@ export const findMenuItemByRoute = (pathname) => {
   return search(TOP_MODULES);
 };
 
-export const getModulesForRole = (role) => {
-  if (!role) return TOP_MODULES;
-  return TOP_MODULES.filter((m) => canAccessModule(role, m.key));
+export const getModulesForRole = (userOrRole) => {
+  if (!userOrRole) return TOP_MODULES;
+  return TOP_MODULES.filter((m) => canAccessModule(userOrRole, m.key));
 };
 
 export default TOP_MODULES;

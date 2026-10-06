@@ -3,12 +3,20 @@ const router = require('express').Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
+
+const auth = require('../middleware/auth');
+const { requireAdmin } = require('../middleware/permissions');
 const {
-  OfficeExpense, Voucher, VoucherEntry, ChartOfAccount, BudgetCategory, MonthlyBudget,
+  OfficeExpense,
+  Voucher,
+  VoucherEntry,
+  ChartOfAccount,
+  BudgetCategory,
+  MonthlyBudget,
 } = require('../models/associations');
 const logActivity = require('../utils/activityLog');
+const { notifyAdmin, notifyAccountant } = require('../utils/notify');
 
 const uploadDir = path.join(__dirname, '..', 'uploads', 'office-expenses');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -138,9 +146,6 @@ router.get('/report', auth, async (req, res) => {
       attributes: ['id', 'amount', 'date', 'status', 'budgetCategoryId'],
     });
 
-    const categoryIdToTop = {};
-    allCategories.forEach((c) => { categoryIdToTop[c.id] = c.parentId || c.id; });
-
     const spentByCategory = {};
     allCategories.forEach((c) => { spentByCategory[c.id] = { yearly: 0, monthly: Array(12).fill(0) }; });
 
@@ -247,6 +252,7 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
+// Create new expense request
 router.post('/', auth, upload.single('attachment'), async (req, res) => {
   try {
     const { title, budgetCategory, drAccount, crAccount, amount, reference, date } = req.body;
@@ -258,6 +264,9 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
       return res.status(400).json({ message: 'Debit account, Credit account and Amount are required' });
     }
 
+    const isAccountant = req.user?.role === 'accountant';
+    const initialStatus = 'pending';
+
     const officeExpense = await OfficeExpense.create({
       title: title || '',
       budgetCategoryId: budgetCategory,
@@ -266,8 +275,8 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
       amount: Number(amount),
       reference: reference || await generateReference(),
       date: date || Date.now(),
-      status: 'pending',
-      addedBy: req.user?.name || 'Admin',
+      status: initialStatus,
+      addedBy: req.user?.name || (isAccountant ? 'Accountant' : 'Admin'),
       attachment: req.file ? `/uploads/office-expenses/${req.file.filename}` : '',
     });
 
@@ -284,12 +293,25 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
     }
 
     await logActivity({
-      module: 'Expense', action: 'Created',
-      message: `Added expense "${officeExpense.title || officeExpense.reference}" (${officeExpense.reference})`,
-      amount: officeExpense.amount, budgetCategoryId: officeExpense.budgetCategoryId,
-      relatedType: 'OfficeExpense', relatedId: officeExpense.id,
-      performedBy: req.user?.name || 'Admin',
+      module: 'Expense',
+      action: isAccountant ? 'Submitted' : 'Created',
+      message: `${isAccountant ? 'Submitted expense request' : 'Added expense'} "${officeExpense.title || officeExpense.reference}" (${officeExpense.reference})`,
+      amount: officeExpense.amount,
+      budgetCategoryId: officeExpense.budgetCategoryId,
+      relatedType: 'OfficeExpense',
+      relatedId: officeExpense.id,
+      performedBy: req.user?.name || 'User',
     });
+
+    // Notify Admin when an Accountant submits a request
+    if (isAccountant) {
+      await notifyAdmin(
+        'OfficeExpenseRequest',
+        `New Office Expense request submitted by ${req.user.name || 'Accountant'}: "${officeExpense.title || officeExpense.reference}" (৳${Number(officeExpense.amount).toLocaleString()})`,
+        'OfficeExpense',
+        officeExpense.id
+      );
+    }
 
     res.status(201).json({ ...officeExpense.toJSON(), budgetWarning });
   } catch (err) {
@@ -297,10 +319,10 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
   }
 });
 
-// Update status (Approve / Reject / Pending)
-router.patch('/:id/status', auth, async (req, res) => {
+// Update status (Approve / Reject / Pending) — ADMIN ONLY
+router.patch('/:id/status', auth, requireAdmin, async (req, res) => {
   try {
-    const { status } = req.body;
+    const { status, remarks } = req.body;
     const normalizedStatus = String(status || '').toLowerCase();
     if (!['approved', 'pending', 'rejected'].includes(normalizedStatus)) {
       return res.status(400).json({ message: 'Status must be approved, pending, or rejected' });
@@ -309,14 +331,13 @@ router.patch('/:id/status', auth, async (req, res) => {
     const officeExpense = await OfficeExpense.findByPk(req.params.id, { include: listInclude });
     if (!officeExpense) return res.status(404).json({ message: 'Expense record not found' });
 
-    const previousStatus = officeExpense.status;
     officeExpense.status = normalizedStatus;
     await officeExpense.save();
 
     await logActivity({
       module: 'Expense',
       action: normalizedStatus === 'approved' ? 'Approved' : normalizedStatus === 'rejected' ? 'Rejected' : 'Updated',
-      message: `${normalizedStatus.toUpperCase()} expense "${officeExpense.title || officeExpense.reference}" (${officeExpense.reference})`,
+      message: `${normalizedStatus.toUpperCase()} expense "${officeExpense.title || officeExpense.reference}" (${officeExpense.reference})${remarks ? ` - Note: ${remarks}` : ''}`,
       amount: officeExpense.amount,
       budgetCategoryId: officeExpense.budgetCategoryId,
       relatedType: 'OfficeExpense',
@@ -324,30 +345,58 @@ router.patch('/:id/status', auth, async (req, res) => {
       performedBy: req.user?.name || 'Admin',
     });
 
+    // Notify Accountant about approval / rejection
+    if (['approved', 'rejected'].includes(normalizedStatus)) {
+      const notifType = normalizedStatus === 'approved' ? 'OfficeExpenseApproved' : 'OfficeExpenseRejected';
+      const notifMsg = normalizedStatus === 'approved'
+        ? `Your Office Expense "${officeExpense.title || officeExpense.reference}" (৳${Number(officeExpense.amount).toLocaleString()}) was approved by Admin.`
+        : `Your Office Expense "${officeExpense.title || officeExpense.reference}" was rejected by Admin. Reason: ${remarks || 'Not specified'}`;
+
+      await notifyAccountant(null, notifType, notifMsg, 'OfficeExpense', officeExpense.id);
+    }
+
     res.json(officeExpense);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
+// Edit expense record
 router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
   try {
     const officeExpense = await OfficeExpense.findByPk(req.params.id);
     if (!officeExpense) return res.status(404).json({ message: 'Not found' });
 
-    const previousAmount = Number(officeExpense.amount);
+    const isNonAdmin = !['superadmin', 'admin'].includes(req.user?.role);
+    if (isNonAdmin && officeExpense.status === 'approved') {
+      return res.status(403).json({ message: 'Approved expenses cannot be modified by Accountant. Contact Admin.' });
+    }
 
-    const fields = ['title', 'drAccount', 'crAccount', 'amount', 'reference', 'date', 'status'];
+    const previousAmount = Number(officeExpense.amount);
+    const fields = ['title', 'drAccount', 'crAccount', 'amount', 'reference', 'date'];
+
+    // Only Admin can manually update status through PUT
+    if (!isNonAdmin && req.body.status !== undefined) {
+      fields.push('status');
+    }
+
     fields.forEach((key) => {
       if (req.body[key] !== undefined) officeExpense[key] = req.body[key];
     });
+
     if (req.body.budgetCategory !== undefined) {
       if (!req.body.budgetCategory) {
         return res.status(400).json({ message: 'Office Budget Category is required' });
       }
       officeExpense.budgetCategoryId = req.body.budgetCategory;
     }
+
     if (req.file) officeExpense.attachment = `/uploads/office-expenses/${req.file.filename}`;
+
+    // If an Accountant edits a previously rejected item, move it back to 'pending'
+    if (isNonAdmin && officeExpense.status === 'rejected') {
+      officeExpense.status = 'pending';
+    }
 
     await officeExpense.save();
 
@@ -364,12 +413,25 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
     }
 
     await logActivity({
-      module: 'Expense', action: 'Updated',
+      module: 'Expense',
+      action: 'Updated',
       message: `Updated expense "${officeExpense.title || officeExpense.reference}" (${officeExpense.reference}) — ৳${previousAmount.toLocaleString()} → ৳${Number(officeExpense.amount).toLocaleString()}`,
-      amount: officeExpense.amount, budgetCategoryId: officeExpense.budgetCategoryId,
-      relatedType: 'OfficeExpense', relatedId: officeExpense.id,
-      performedBy: req.user?.name || 'Admin',
+      amount: officeExpense.amount,
+      budgetCategoryId: officeExpense.budgetCategoryId,
+      relatedType: 'OfficeExpense',
+      relatedId: officeExpense.id,
+      performedBy: req.user?.name || 'User',
     });
+
+    // Notify Admin if an Accountant re-submitted an edited request
+    if (isNonAdmin) {
+      await notifyAdmin(
+        'OfficeExpenseRequest',
+        `Expense request resubmitted by ${req.user.name || 'Accountant'}: "${officeExpense.title || officeExpense.reference}" (৳${Number(officeExpense.amount).toLocaleString()})`,
+        'OfficeExpense',
+        officeExpense.id
+      );
+    }
 
     res.json({ ...officeExpense.toJSON(), budgetWarning });
   } catch (err) {
@@ -377,21 +439,30 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
   }
 });
 
+// Delete expense record
 router.delete('/:id', auth, async (req, res) => {
   try {
     const officeExpense = await OfficeExpense.findByPk(req.params.id);
     if (!officeExpense) return res.status(404).json({ message: 'Not found' });
+
+    const isNonAdmin = !['superadmin', 'admin'].includes(req.user?.role);
+    if (isNonAdmin && officeExpense.status === 'approved') {
+      return res.status(403).json({ message: 'Approved expenses cannot be deleted by Accountant. Contact Admin.' });
+    }
 
     if (officeExpense.voucherId) {
       await Voucher.destroy({ where: { id: officeExpense.voucherId } });
     }
 
     await logActivity({
-      module: 'Expense', action: 'Deleted',
+      module: 'Expense',
+      action: 'Deleted',
       message: `Deleted expense "${officeExpense.title || officeExpense.reference}" (${officeExpense.reference})`,
-      amount: officeExpense.amount, budgetCategoryId: officeExpense.budgetCategoryId,
-      relatedType: 'OfficeExpense', relatedId: officeExpense.id,
-      performedBy: req.user?.name || 'Admin',
+      amount: officeExpense.amount,
+      budgetCategoryId: officeExpense.budgetCategoryId,
+      relatedType: 'OfficeExpense',
+      relatedId: officeExpense.id,
+      performedBy: req.user?.name || 'User',
     });
 
     await officeExpense.destroy();

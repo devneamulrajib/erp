@@ -1,17 +1,54 @@
-const { Notification } = require('../models/associations');
+// server/utils/notify.js
+const { Notification, User } = require('../models/associations');
 const { getIO } = require('./socket');
 
+// Notifies Admins (audience = 'admin') and emits live over socket
 async function notifyAdmin(type, message, relatedType, relatedId) {
   try {
-    await Notification.create({ type, message, relatedType, relatedId, audience: 'admin' });
+    const n = await Notification.create({
+      type,
+      message,
+      relatedType,
+      relatedId,
+      audience: 'admin',
+    });
+    const io = getIO();
+    if (io) {
+      io.to('admin').emit('notification', n.toJSON());
+      io.emit('admin_notification', n.toJSON());
+    }
+    return n;
   } catch (err) {
-    console.error('Failed to create notification:', err.message);
+    console.error('Failed to create admin notification:', err.message);
   }
 }
 
-// Notifies one supplier/vendor portal user via their ChartOfAccount id
-// (this is what PurchaseOrder.supplierId points at), and pushes it live
-// over the socket to that supplier's portal room if they're connected.
+// Notifies Accountants (audience = 'accountant' or scoped to specific user if accountantUserId is given)
+async function notifyAccountant(accountantUserId, type, message, relatedType, relatedId) {
+  try {
+    const n = await Notification.create({
+      type,
+      message,
+      relatedType,
+      relatedId,
+      audience: 'accountant',
+      audienceId: accountantUserId || null,
+    });
+    const io = getIO();
+    if (io) {
+      if (accountantUserId) {
+        io.to(`user:${accountantUserId}`).emit('notification', n.toJSON());
+      }
+      io.to('accountant').emit('notification', n.toJSON());
+      io.emit('accountant_notification', n.toJSON());
+    }
+    return n;
+  } catch (err) {
+    console.error('Failed to create accountant notification:', err.message);
+  }
+}
+
+// Notifies one supplier/vendor portal user
 async function notifySupplier(supplierId, type, message, relatedType, relatedId) {
   try {
     const n = await Notification.create({
@@ -26,7 +63,7 @@ async function notifySupplier(supplierId, type, message, relatedType, relatedId)
   }
 }
 
-// Same idea for a customer portal user.
+// Same idea for a customer portal user
 async function notifyCustomer(customerId, type, message, relatedType, relatedId) {
   try {
     const n = await Notification.create({
@@ -41,8 +78,7 @@ async function notifyCustomer(customerId, type, message, relatedType, relatedId)
   }
 }
 
-// Notifies one employee portal user (audienceId = Employee.id) and pushes it
-// live to their socket room ("employee:<id>", already created by socket.js).
+// Notifies one employee portal user
 async function notifyEmployee(employeeId, type, message, relatedType, relatedId) {
   try {
     const n = await Notification.create({
@@ -59,6 +95,7 @@ async function notifyEmployee(employeeId, type, message, relatedType, relatedId)
 
 module.exports = notifyAdmin;
 module.exports.notifyAdmin = notifyAdmin;
+module.exports.notifyAccountant = notifyAccountant;
 module.exports.notifySupplier = notifySupplier;
 module.exports.notifyCustomer = notifyCustomer;
 module.exports.notifyEmployee = notifyEmployee;

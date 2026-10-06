@@ -1,13 +1,20 @@
+// server/middleware/permissions.js
 const { canAccessModule } = require('../config/permissions');
 
-// Use after your existing `auth` middleware (req.user must already be set).
 function requireRole(...allowedRoles) {
   return (req, res, next) => {
     if (!req.user || !allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({ message: 'You do not have permission to do this' });
+      return res.status(403).json({ message: 'You do not have permission to perform this action' });
     }
     next();
   };
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.user || !['superadmin', 'admin'].includes(req.user.role)) {
+    return res.status(403).json({ message: 'Admin approval authority required' });
+  }
+  next();
 }
 
 function requireModule(moduleKey) {
@@ -19,4 +26,4 @@ function requireModule(moduleKey) {
   };
 }
 
-module.exports = { requireRole, requireModule };
+module.exports = { requireRole, requireAdmin, requireModule };

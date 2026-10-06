@@ -91,6 +91,7 @@ const listInclude = [
   { model: ExpenseApproval },
 ];
 
+// GET /next-code
 router.get('/next-code', auth, async (req, res) => {
   try {
     res.json({ code: await generateReference() });
@@ -99,6 +100,7 @@ router.get('/next-code', auth, async (req, res) => {
   }
 });
 
+// GET /
 router.get('/', auth, async (req, res) => {
   try {
     const { project, drAccount, crAccount, from, to } = req.query;
@@ -123,6 +125,7 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// GET /:id
 router.get('/:id', auth, async (req, res) => {
   try {
     const expense = await Expense.findByPk(req.params.id, { include: listInclude });
@@ -133,6 +136,7 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
+// POST /
 router.post('/', auth, upload.single('attachment'), async (req, res) => {
   try {
     const { project, category, drAccount, crAccount, amount, reference, date } = req.body;
@@ -168,16 +172,30 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
   }
 });
 
+// PUT /:id
 router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
   try {
     const expense = await Expense.findByPk(req.params.id);
     if (!expense) return res.status(404).json({ message: 'Not found' });
 
-    const fields = ['project', 'category', 'drAccount', 'crAccount', 'amount', 'reference', 'date', 'status'];
+    // RESTRICTION: Non-admin cannot edit approved expenses
+    const isNonAdmin = !['superadmin', 'admin'].includes(req.user?.role);
+    if (isNonAdmin && String(expense.status).toLowerCase() === 'approved') {
+      return res.status(403).json({ message: 'Approved expenses cannot be edited by an Accountant. Contact Admin.' });
+    }
+
+    const fields = ['project', 'category', 'drAccount', 'crAccount', 'amount', 'reference', 'date'];
+    if (!isNonAdmin) fields.push('status'); // Only Admin can change status directly
+
     fields.forEach((key) => {
       if (req.body[key] !== undefined) expense[key] = req.body[key];
     });
     if (req.file) expense.attachment = `/uploads/expenses/${req.file.filename}`;
+
+    // If an Accountant edits a rejected expense, reset it back to 'pending'
+    if (isNonAdmin && String(expense.status).toLowerCase() === 'rejected') {
+      expense.status = 'pending';
+    }
 
     await expense.save();
 
@@ -194,10 +212,17 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
   }
 });
 
+// DELETE /:id
 router.delete('/:id', auth, async (req, res) => {
   try {
     const expense = await Expense.findByPk(req.params.id);
     if (!expense) return res.status(404).json({ message: 'Not found' });
+
+    // RESTRICTION: Non-admin cannot delete approved expenses
+    const isNonAdmin = !['superadmin', 'admin'].includes(req.user?.role);
+    if (isNonAdmin && String(expense.status).toLowerCase() === 'approved') {
+      return res.status(403).json({ message: 'Approved expenses cannot be deleted by an Accountant. Contact Admin.' });
+    }
 
     if (expense.voucherId) {
       await Voucher.destroy({ where: { id: expense.voucherId } }); // cascades to its VoucherEntry rows
@@ -209,6 +234,7 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+// POST /:id/duplicate
 router.post('/:id/duplicate', auth, async (req, res) => {
   try {
     const original = await Expense.findByPk(req.params.id);

@@ -1,3 +1,4 @@
+// client/src/App.jsx
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -118,6 +119,10 @@ import OfficeExpensePage from './pages/OfficeExpensePage'
 import OfficeExpenseListPage from './pages/OfficeExpenseListPage'
 import OfficeReportPage from './pages/OfficeReportPage'
 
+// --- Approval & Accountant Dashboards ---
+import AdminApprovalCenter from './pages/AdminApprovalCenter'
+import AccountantDashboard from './pages/AccountantDashboard'
+
 import AttendanceLogPage from './pages/AttendanceLogPage'
 
 // --- Portal ---
@@ -208,7 +213,7 @@ function PortalDashboardRouter() {
 function App() {
   return (
     <BrowserRouter>
-    <TitleManager />
+      <TitleManager />
       <Routes>
         <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -362,8 +367,12 @@ function App() {
         <Route path="/accounts-module/office-expense/:id" element={<ProtectedRoute><OfficeExpensePage /></ProtectedRoute>} />
         <Route path="/accounts-module/office-report" element={<ProtectedRoute><OfficeReportPage /></ProtectedRoute>} />
 
+        {/* --- Approval & Accountant Hubs --- */}
+        <Route path="/accounts-module/approval-center" element={<AdminOnlyRoute><AdminApprovalCenter /></AdminOnlyRoute>} />
+        <Route path="/dashboard/accountant" element={<ProtectedRoute><AccountantDashboard /></ProtectedRoute>} />
+
         <Route path="/hrm-module/pay-slip-process" element={<ProtectedRoute><PaySlipProcess /></ProtectedRoute>} />
-<Route path="/hrm-module/pay-slip" element={<ProtectedRoute><PaySlip /></ProtectedRoute>} />
+        <Route path="/hrm-module/pay-slip" element={<ProtectedRoute><PaySlip /></ProtectedRoute>} />
 
         {/* --- Team members / role-based access --- */}
         <Route path="/settings/users" element={<AdminOnlyRoute><UserManagementPage /></AdminOnlyRoute>} />
