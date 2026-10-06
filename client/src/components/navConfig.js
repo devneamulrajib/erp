@@ -91,6 +91,7 @@ export const NAV_ACCENTS = {
   blue:    { color: '#2563eb', background: '#eff6ff' },
   emerald: { color: '#059669', background: '#ecfdf5' },
   amber:   { color: '#d97706', background: '#fffbeb' },
+  indigo:  { color: '#4f46e5', background: '#eef2ff' },
   violet:  { color: '#7c3aed', background: '#f5f3ff' },
   rose:    { color: '#e11d48', background: '#fff1f2' },
   cyan:    { color: '#0891b2', background: '#ecfeff' },
@@ -273,8 +274,9 @@ const ACCOUNTING_SUBPAGES = [
   },
   {
     key: 'office-budget',
-    label: 'Office Budget',
+    label: 'Office All',
     icon: Wallet,
+    highlight: true,
     route: null,
     children: [
       { key: 'office-budget-tracker', label: 'Budget Tracker', route: '/accounts-module/office-budget' },
