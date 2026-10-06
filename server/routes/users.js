@@ -4,7 +4,29 @@ const bcrypt = require('bcryptjs');
 const auth = require('../middleware/auth');
 const { requireRole } = require('../middleware/permissions');
 const User = require('../models/User');
+const sequelize = require('../config/db');
 const { ROLE_PERMISSIONS } = require('../config/permissions');
+
+// AUTO-MIGRATION: Self-heal the database on live server if columns are missing
+(async function autoMigrate() {
+  try {
+    await sequelize.query('ALTER TABLE Users ADD COLUMN roles TEXT NULL');
+    console.log('✅ Auto-migrated: added "roles" column to Users table.');
+  } catch (err) {
+    // Ignore if column already exists
+  }
+  try {
+    await sequelize.query('ALTER TABLE Users ADD COLUMN isActive TINYINT(1) NOT NULL DEFAULT 1');
+  } catch (err) {
+    // Ignore if column already exists
+  }
+  try {
+    // Ensure all existing users are activated
+    await sequelize.query('UPDATE Users SET isActive = 1 WHERE isActive IS NULL OR isActive = 0');
+  } catch (err) {
+    // Ignore if fails
+  }
+})();
 
 // GET all users
 router.get('/', auth, requireRole('superadmin', 'admin'), async (req, res) => {
@@ -14,7 +36,6 @@ router.get('/', auth, requireRole('superadmin', 'admin'), async (req, res) => {
       order: [['createdAt', 'ASC']],
     });
 
-    // Ensure superadmin is always active & format booleans cleanly
     const formatted = users.map((u) => {
       const data = u.toJSON();
       if (data.role === 'superadmin') {
@@ -43,7 +64,7 @@ router.post('/', auth, requireRole('superadmin', 'admin'), async (req, res) => {
       password: hashed,
       role,
       roles: Array.isArray(roles) ? roles : [],
-      isActive: true, // Always active upon creation
+      isActive: true,
     });
     res.json({ id: user.id, name: user.name, email: user.email, role: user.role, roles: user.roles, isActive: true });
   } catch (err) {
@@ -58,37 +79,37 @@ router.put('/:id/role', auth, requireRole('superadmin', 'admin'), async (req, re
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
+    const updateFields = {};
     if (role) {
       if (!ROLE_PERMISSIONS[role]) return res.status(400).json({ message: 'Invalid role' });
-      user.role = role;
+      updateFields.role = role;
     }
-
     if (roles !== undefined) {
-      user.roles = Array.isArray(roles) ? roles : [];
+      updateFields.roles = Array.isArray(roles) ? roles : [];
     }
 
-    await user.save();
-    res.json({ id: user.id, role: user.role, roles: user.roles });
+    await User.update(updateFields, { where: { id: req.params.id } });
+    const updated = await User.findByPk(req.params.id, { attributes: { exclude: ['password'] } });
+    res.json(updated);
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
 
-// PUT toggle status (Activate / Deactivate) — SUPERADMIN PROTECTED
+// PUT toggle status (Activate / Deactivate) — targeted update that will not crash
 router.put('/:id/status', auth, requireRole('superadmin', 'admin'), async (req, res) => {
   try {
     const { isActive } = req.body;
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // Superadmin can NEVER be deactivated
     if (user.role === 'superadmin') {
       return res.status(400).json({ message: 'Superadmin is always active and cannot be deactivated' });
     }
 
-    user.isActive = Boolean(isActive);
-    await user.save();
-    res.json({ id: user.id, isActive: user.isActive });
+    // Direct column update avoids touching any unmigrated columns
+    await User.update({ isActive: Boolean(isActive) }, { where: { id: req.params.id } });
+    res.json({ id: user.id, isActive: Boolean(isActive) });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
@@ -102,7 +123,7 @@ router.delete('/:id', auth, requireRole('superadmin', 'admin'), async (req, res)
     if (user.role === 'superadmin') {
       return res.status(400).json({ message: 'Superadmin cannot be deleted' });
     }
-    await user.destroy();
+    await User.destroy({ where: { id: req.params.id } });
     res.json({ message: 'User removed' });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
