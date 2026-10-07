@@ -100,6 +100,7 @@ app.use('/api/assign-share', require('./routes/assignShare'));
 app.use('/api/payslip', require('./routes/paySlip'));
 app.use('/api/attendance-corrections', require('./routes/attendanceCorrection'));
 app.use('/api/approvals', require('./routes/approvals'));
+app.use('/api/investor-management', require('./routes/investor'));
 app.use('/api/activity-log', require('./routes/activityLog'));
 
 const PORT = process.env.PORT || 5000;

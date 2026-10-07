@@ -124,9 +124,10 @@ import AdminApprovalCenter from './pages/AdminApprovalCenter'
 import AccountantDashboard from './pages/AccountantDashboard'
 
 import AttendanceLogPage from './pages/AttendanceLogPage'
-import PortalMyRequestsPage from './portal/pages/PortalMyRequestsPage';
-import PortalEmployeeProfilePage from './portal/pages/PortalEmployeeProfilePage';
+
 // --- Portal ---
+import PortalMyRequestsPage from './portal/pages/PortalMyRequestsPage'
+import PortalEmployeeProfilePage from './portal/pages/PortalEmployeeProfilePage'
 import PortalInvoices from './portal/pages/PortalInvoices'
 import PortalQuotesPage from './portal/pages/PortalQuotesPage'
 import PortalOrdersPage from './portal/pages/PortalOrdersPage'
@@ -144,6 +145,13 @@ import PortalProtectedRoute from './portal/components/PortalProtectedRoute'
 
 import PaySlipProcess from './pages/PaySlipProcess'
 import PaySlip from './pages/PaySlip'
+
+// --- Investors ---
+import InvestorDashboardPage from './pages/InvestorDashboardPage'
+import InvestorListPage from './pages/InvestorListPage'
+import InvestmentListPage from './pages/InvestmentListPage'
+import InvestmentDetailPage from './pages/InvestmentDetailPage'
+import InvestorReportsPage from './pages/InvestorReportsPage'
 
 import TitleManager from './components/TitleManager'
 // --- Team members / role-based access ---
@@ -327,7 +335,6 @@ function App() {
         <Route path="/billing/quote-list" element={<ProtectedRoute><QuoteList /></ProtectedRoute>} />
         <Route path="/billing/quote" element={<ProtectedRoute><QuotePage /></ProtectedRoute>} />
         <Route path="/billing/quote/:id" element={<ProtectedRoute><QuotePage /></ProtectedRoute>} />
-        <Route path="/portal/employee/attendance" element={<PortalProtectedRoute><PortalAttendancePage /></PortalProtectedRoute>} />
         <Route path="/accounts-module/payment-list" element={<ProtectedRoute><PaymentVoucherPage /></ProtectedRoute>} />
         <Route path="/accounts-module/payment-list/add" element={<ProtectedRoute><PaymentVoucherPage /></ProtectedRoute>} />
         <Route path="/billing/contractor_bill_report" element={<ProtectedRoute><ContractorBillReportPage /></ProtectedRoute>} />
@@ -339,12 +346,14 @@ function App() {
         <Route path="/accounts-module/contra_list_add/:id" element={<ProtectedRoute><ContraVoucherPage /></ProtectedRoute>} />
         <Route path="/inventory-module/reports/stock" element={<ProtectedRoute><StockReportPage /></ProtectedRoute>} />
         <Route path="/hrm-module/attendance-log" element={<ProtectedRoute><AttendanceLogPage /></ProtectedRoute>} />
-        
+
         {/* ========================================================
             --- HRM MODULE ROUTES ---
         ======================================================== */}
         <Route path="/hrm-module/employee" element={<ProtectedRoute><EmployeeListPage /></ProtectedRoute>} />
         <Route path="/hrm-module/reports/:reportName" element={<ProtectedRoute><EmployeeListPage /></ProtectedRoute>} />
+        <Route path="/hrm-module/pay-slip-process" element={<ProtectedRoute><PaySlipProcess /></ProtectedRoute>} />
+        <Route path="/hrm-module/pay-slip" element={<ProtectedRoute><PaySlip /></ProtectedRoute>} />
         <Route path="/hrm-module/:subpage" element={<ProtectedRoute><EmployeeListPage /></ProtectedRoute>} />
 
         <Route path="/dashboard/accounts" element={<ProtectedRoute><AccountsDashboard /></ProtectedRoute>} />
@@ -372,19 +381,24 @@ function App() {
         <Route path="/accounts-module/approval-center" element={<AdminOnlyRoute><AdminApprovalCenter /></AdminOnlyRoute>} />
         <Route path="/dashboard/accountant" element={<ProtectedRoute><AccountantDashboard /></ProtectedRoute>} />
 
-        <Route path="/hrm-module/pay-slip-process" element={<ProtectedRoute><PaySlipProcess /></ProtectedRoute>} />
-        <Route path="/hrm-module/pay-slip" element={<ProtectedRoute><PaySlip /></ProtectedRoute>} />
+        {/* --- Investors --- */}
+        <Route path="/investors/dashboard" element={<ProtectedRoute><InvestorDashboardPage /></ProtectedRoute>} />
+        <Route path="/investors" element={<ProtectedRoute><InvestorListPage /></ProtectedRoute>} />
+        <Route path="/investments" element={<ProtectedRoute><InvestmentListPage /></ProtectedRoute>} />
+        <Route path="/investments/:id" element={<ProtectedRoute><InvestmentDetailPage /></ProtectedRoute>} />
+        <Route path="/investor-reports" element={<ProtectedRoute><InvestorReportsPage /></ProtectedRoute>} />
 
         {/* --- Team members / role-based access --- */}
         <Route path="/settings/users" element={<AdminOnlyRoute><UserManagementPage /></AdminOnlyRoute>} />
-        <Route path="/portal/employee/requests" element={/* same wrapper as leave */ <PortalMyRequestsPage />} />
-<Route path="/portal/employee/profile" element={/* same wrapper as leave */ <PortalEmployeeProfilePage />} />
 
         {/* --- Portal --- */}
         <Route path="/portal/login" element={<PortalPublicOnlyRoute><PortalLogin /></PortalPublicOnlyRoute>} />
         <Route path="/portal/dashboard" element={<PortalProtectedRoute><PortalDashboardRouter /></PortalProtectedRoute>} />
+        <Route path="/portal/employee/attendance" element={<PortalProtectedRoute><PortalAttendancePage /></PortalProtectedRoute>} />
         <Route path="/portal/employee/leave" element={<PortalProtectedRoute><PortalLeaveRequestPage /></PortalProtectedRoute>} />
         <Route path="/portal/employee/advance" element={<PortalProtectedRoute><PortalAdvanceRequestPage /></PortalProtectedRoute>} />
+        <Route path="/portal/employee/requests" element={<PortalProtectedRoute><PortalMyRequestsPage /></PortalProtectedRoute>} />
+        <Route path="/portal/employee/profile" element={<PortalProtectedRoute><PortalEmployeeProfilePage /></PortalProtectedRoute>} />
         <Route path="/portal/invoices" element={<PortalProtectedRoute><PortalInvoices /></PortalProtectedRoute>} />
         <Route path="/portal/quotes" element={<PortalProtectedRoute><PortalQuotesPage /></PortalProtectedRoute>} />
         <Route path="/portal/orders" element={<PortalProtectedRoute><PortalOrdersPage /></PortalProtectedRoute>} />
