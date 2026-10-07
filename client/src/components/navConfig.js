@@ -19,6 +19,8 @@ import {
   Wallet,
   HandCoins,
   ShieldCheck,
+  TrendingUp,
+  LineChart,
 } from 'lucide-react';
 import { canAccessModule } from '../config/permissions';
 
@@ -319,13 +321,16 @@ const ACCOUNTING_SUBPAGES = [
   },
 ];
 
-const HRM_SUBPAGES = [
-  // Direct Employees & Salary access
-  { key: 'employee-list-direct', label: 'Employees & Salary', icon: Users, route: '/hrm-module/employee' },
-  // Direct Advance Salary & Loan Request access
-  { key: 'advance-loan-direct', label: 'Advance Salary / Loan', icon: HandCoins, route: '/hrm-module/employee' },
+const INVESTOR_SUBPAGES = [
+  { key: 'portfolio-dashboard', label: 'Portfolio Dashboard', icon: LineChart, route: '/investors/dashboard' },
+  { key: 'investor-list', label: 'Investor List', icon: Users, route: '/investors' },
+  { key: 'investments', label: 'Investments', icon: TrendingUp, route: '/investments' },
+  { key: 'portfolio-reports', label: 'Portfolio Reports', icon: FileBarChart2, route: '/investor-reports' },
+];
 
-  // Setup / Sub-structure
+const HRM_SUBPAGES = [
+  { key: 'employee-list-direct', label: 'Employees & Salary', icon: Users, route: '/hrm-module/employee' },
+  { key: 'advance-loan-direct', label: 'Advance Salary / Loan', icon: HandCoins, route: '/hrm-module/employee' },
   {
     key: 'employee-setup',
     label: 'Employee Setup',
@@ -417,14 +422,24 @@ const SETTINGS_SUBPAGES = [
    TOP LEVEL MODULES
    ============================================================ */
 export const TOP_MODULES = [
-  { key: 'dashboards',  label: 'Dashboards', shortLabel: 'Home',     icon: LayoutGrid,    route: '/dashboard',           children: DASHBOARD_SUBPAGES,   ui: { priority: 1, accent: 'slate' } },
-  { key: 'project',     label: 'Project',    shortLabel: 'Projects', icon: Building2,     route: null,                   children: PROJECT_SUBPAGES,     ui: { priority: 2, accent: 'blue' } },
-  { key: 'inventory',   label: 'Inventory',  shortLabel: 'Stock',    icon: ShoppingBag,   route: '/dashboard/inventory', children: INVENTORY_SUBPAGES,   ui: { priority: 3, accent: 'emerald' } },
-  { key: 'requisition', label: 'Requisition',shortLabel: 'Requests', icon: ClipboardList, route: null,                   children: REQUISITION_SUBPAGES, ui: { priority: 4, accent: 'amber' } },
-  { key: 'accounts',    label: 'Accounting', shortLabel: 'Accounts', icon: Calculator,    route: null,                   children: ACCOUNTING_SUBPAGES,  ui: { priority: 5, accent: 'violet' } },
-  { key: 'hrm',         label: 'HRM',        shortLabel: 'HR',       icon: UserRound,     route: null,                   children: HRM_SUBPAGES,         ui: { priority: 6, accent: 'rose' } },
-  { key: 'crm',         label: 'CRM',        shortLabel: 'CRM',      icon: FileText,      route: null,                   children: CRM_SUBPAGES,         ui: { priority: 7, accent: 'cyan' } },
-  { key: 'settings',    label: 'Settings',   shortLabel: 'Settings', icon: Settings,      route: null,                   children: SETTINGS_SUBPAGES,    ui: { priority: 8, accent: 'slate' } },
+  { key: 'dashboards',  label: 'Dashboards', shortLabel: 'Home',      icon: LayoutGrid,    route: '/dashboard',           children: DASHBOARD_SUBPAGES,   ui: { priority: 1, accent: 'slate' } },
+  { key: 'project',     label: 'Project',    shortLabel: 'Projects',  icon: Building2,     route: null,                   children: PROJECT_SUBPAGES,     ui: { priority: 2, accent: 'blue' } },
+  { key: 'inventory',   label: 'Inventory',  shortLabel: 'Stock',     icon: ShoppingBag,   route: '/dashboard/inventory', children: INVENTORY_SUBPAGES,   ui: { priority: 3, accent: 'emerald' } },
+  { key: 'requisition', label: 'Requisition',shortLabel: 'Requests',  icon: ClipboardList, route: null,                   children: REQUISITION_SUBPAGES, ui: { priority: 4, accent: 'amber' } },
+  { key: 'accounts',    label: 'Accounting', shortLabel: 'Accounts',  icon: Calculator,    route: null,                   children: ACCOUNTING_SUBPAGES,  ui: { priority: 5, accent: 'violet' } },
+  {
+    key: 'investors',
+    label: 'Investors',
+    shortLabel: 'Investors',
+    icon: Users,
+    route: null,
+    roles: ['admin', 'superadmin', 'accountant'],
+    children: INVESTOR_SUBPAGES,
+    ui: { priority: 6, accent: 'indigo' },
+  },
+  { key: 'hrm',         label: 'HRM',        shortLabel: 'HR',        icon: UserRound,     route: null,                   children: HRM_SUBPAGES,         ui: { priority: 7, accent: 'rose' } },
+  { key: 'crm',         label: 'CRM',        shortLabel: 'CRM',       icon: FileText,      route: null,                   children: CRM_SUBPAGES,         ui: { priority: 8, accent: 'cyan' } },
+  { key: 'settings',    label: 'Settings',   shortLabel: 'Settings',  icon: Settings,      route: null,                   children: SETTINGS_SUBPAGES,    ui: { priority: 9, accent: 'slate' } },
 ];
 
 /* ============================================================
@@ -501,7 +516,16 @@ export const findMenuItemByRoute = (pathname) => {
 
 export const getModulesForRole = (userOrRole) => {
   if (!userOrRole) return TOP_MODULES;
-  return TOP_MODULES.filter((m) => canAccessModule(userOrRole, m.key));
+
+  const role = typeof userOrRole === 'string' ? userOrRole : userOrRole.role;
+
+  return TOP_MODULES.filter((m) => {
+    // If the top module has an explicit role restriction, check that first
+    if (m.roles && Array.isArray(m.roles) && role) {
+      if (!m.roles.includes(role)) return false;
+    }
+    return canAccessModule(userOrRole, m.key);
+  });
 };
 
 export default TOP_MODULES;

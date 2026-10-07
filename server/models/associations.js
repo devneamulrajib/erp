@@ -167,8 +167,12 @@ const Attendance = require('./Attendance');
 const PaySlip = require('./PaySlip');
 const SalaryDeduction = require('./SalaryDeduction');
 
+// Investor module
+const Investor = require('./Investor');
+const Investment = require('./Investment');
+const InvestorPayment = require('./InvestorPayment');
 
-// Add relations:
+// ---- Employee / HR Relationships ----
 Employee.hasMany(EmployeeAdvance, { as: 'advances', foreignKey: 'employeeId', onDelete: 'CASCADE' });
 EmployeeAdvance.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
 
@@ -183,8 +187,6 @@ Employee.hasMany(Attendance, { as: 'attendanceRecords', foreignKey: 'employeeId'
 Attendance.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
 
 // ---- PaySlip / SalaryDeduction (Payroll) ----
-// Links a paid slip to the OfficeExpense row that deducted it from the
-// office budget (see routes/paySlip.js -> POST /:id/pay).
 OfficeExpense.hasOne(PaySlip, { foreignKey: 'officeExpenseId' });
 PaySlip.belongsTo(OfficeExpense, { as: 'officeExpense', foreignKey: 'officeExpenseId' });
 
@@ -302,7 +304,7 @@ AdjustmentBillItem.belongsTo(AdjustmentBill, { foreignKey: 'adjustmentBillId' })
 AdjustmentBill.hasMany(AdjustmentBillPayment, { foreignKey: 'adjustmentBillId', onDelete: 'CASCADE' });
 AdjustmentBillPayment.belongsTo(AdjustmentBill, { foreignKey: 'adjustmentBillId' });
 
-// ---- Customer (legacy/internal model — kept only for CustomerNominee) ----
+// ---- Customer ----
 Customer.hasMany(CustomerNominee, { foreignKey: 'customerId', onDelete: 'CASCADE' });
 CustomerNominee.belongsTo(Customer, { foreignKey: 'customerId' });
 
@@ -320,7 +322,7 @@ VoucherEntry.belongsTo(Voucher, { foreignKey: 'voucherId' });
 Voucher.hasMany(VoucherApproval, { foreignKey: 'voucherId', onDelete: 'CASCADE' });
 VoucherApproval.belongsTo(Voucher, { foreignKey: 'voucherId' });
 
-// ---- ChartOfGroup (self-referential) ----
+// ---- ChartOfGroup ----
 ChartOfGroup.belongsTo(ChartOfGroup, { as: 'Under', foreignKey: 'underId' });
 ChartOfGroup.hasMany(ChartOfGroup, { as: 'Children', foreignKey: 'underId' });
 
@@ -589,7 +591,6 @@ ServiceRequisition.belongsTo(Project, { as: 'project', foreignKey: 'projectId' }
 Site.hasMany(ServiceRequisition, { foreignKey: 'siteId' });
 ServiceRequisition.belongsTo(Site, { as: 'site', foreignKey: 'siteId' });
 
-// ServiceRequisition <-> ChartOfAccount (as supplier) — supports the portal
 ChartOfAccount.hasMany(ServiceRequisition, { foreignKey: 'supplierId' });
 ServiceRequisition.belongsTo(ChartOfAccount, { as: 'supplier', foreignKey: 'supplierId' });
 
@@ -667,10 +668,6 @@ PurchaseOrder.belongsTo(Site, { as: 'site', foreignKey: 'siteId' });
 Category.hasMany(PurchaseOrder, { foreignKey: 'categoryId' });
 PurchaseOrder.belongsTo(Category, { as: 'category', foreignKey: 'categoryId' });
 
-// PurchaseOrder -> Bill: the supplier invoice/bill auto-generated once admin
-// confirms delivery (see server/routes/purchaseOrder.js -> generateBillFromOrder).
-// constraints: false because convertedToBillId is a plain column added via the
-// migration script, not a real DB foreign key.
 PurchaseOrder.belongsTo(Bill, { as: 'bill', foreignKey: 'convertedToBillId', constraints: false });
 
 // ---- StockTransfer ----
@@ -713,7 +710,7 @@ PaymentVoucherApproval.belongsTo(PaymentVoucher, { foreignKey: 'paymentVoucherId
 ReceiptVoucher.hasMany(ReceiptVoucherApproval, { as: 'approvals', foreignKey: 'receiptVoucherId', onDelete: 'CASCADE' });
 ReceiptVoucherApproval.belongsTo(ReceiptVoucher, { foreignKey: 'receiptVoucherId' });
 
-// ---- Voucher (dashboard needs project/contact/bank names) ----
+// ---- Voucher ----
 Project.hasMany(Voucher, { foreignKey: 'projectId' });
 Voucher.belongsTo(Project, { as: 'project', foreignKey: 'projectId' });
 
@@ -727,26 +724,40 @@ Voucher.belongsTo(BankAccount, { as: 'bank', foreignKey: 'bankId' });
 BudgetCategory.hasMany(MonthlyBudget, { as: 'monthlyBudgets', foreignKey: 'budgetCategoryId', onDelete: 'CASCADE' });
 MonthlyBudget.belongsTo(BudgetCategory, { as: 'budgetCategory', foreignKey: 'budgetCategoryId' });
 
-// NOTE: kept for backward compatibility with any already-recorded general
-// Expense rows that used budgetCategoryId — but the ExpensePage UI no
-// longer writes to it, and it is NOT summed into office budget totals.
 BudgetCategory.hasMany(Expense, { foreignKey: 'budgetCategoryId' });
 Expense.belongsTo(BudgetCategory, { as: 'budgetCategory', foreignKey: 'budgetCategoryId' });
 
-// This is the real source of office budget spend.
 BudgetCategory.hasMany(OfficeExpense, { as: 'officeExpenses', foreignKey: 'budgetCategoryId' });
 OfficeExpense.belongsTo(BudgetCategory, { as: 'budgetCategory', foreignKey: 'budgetCategoryId' });
 
 Voucher.hasOne(OfficeExpense, { foreignKey: 'voucherId' });
 OfficeExpense.belongsTo(Voucher, { foreignKey: 'voucherId' });
 
-// Self-referential: top-level category <-> its subcategories
 BudgetCategory.belongsTo(BudgetCategory, { as: 'parent', foreignKey: 'parentId' });
 BudgetCategory.hasMany(BudgetCategory, { as: 'subcategories', foreignKey: 'parentId' });
 
 // ---- PortalRequest ----
 ChartOfAccount.hasMany(PortalRequest, { as: 'portalRequests', foreignKey: 'customerId', onDelete: 'CASCADE' });
 PortalRequest.belongsTo(ChartOfAccount, { as: 'customer', foreignKey: 'customerId' });
+
+// ---- Investor & Investment Relationships ----
+Investor.hasMany(Investment, { as: 'investments', foreignKey: 'investorId', onDelete: 'CASCADE' });
+Investment.belongsTo(Investor, { as: 'investor', foreignKey: 'investorId' });
+
+Investor.hasMany(InvestorPayment, { as: 'payments', foreignKey: 'investorId', onDelete: 'CASCADE' });
+InvestorPayment.belongsTo(Investor, { as: 'investor', foreignKey: 'investorId' });
+
+Investment.hasMany(InvestorPayment, { as: 'payments', foreignKey: 'investmentId', onDelete: 'CASCADE' });
+InvestorPayment.belongsTo(Investment, { as: 'investment', foreignKey: 'investmentId' });
+
+Project.hasMany(Investment, { as: 'investments', foreignKey: 'projectId' });
+Investment.belongsTo(Project, { as: 'project', foreignKey: 'projectId' });
+
+Investment.belongsTo(Voucher, { as: 'voucher', foreignKey: 'voucherId' });
+InvestorPayment.belongsTo(Voucher, { as: 'voucher', foreignKey: 'voucherId' });
+
+Investor.belongsTo(ChartOfAccount, { as: 'ledgerAccount', foreignKey: 'chartOfAccountId' });
+Investor.belongsTo(User, { as: 'portalUser', foreignKey: 'userId' });
 
 module.exports = {
   AdjustmentBill,
@@ -870,4 +881,7 @@ module.exports = {
   SalaryDeduction,
   PortalRequest,
   Notification,
+  Investor,
+  Investment,
+  InvestorPayment,
 };
