@@ -124,7 +124,8 @@ import AdminApprovalCenter from './pages/AdminApprovalCenter'
 import AccountantDashboard from './pages/AccountantDashboard'
 
 import AttendanceLogPage from './pages/AttendanceLogPage'
-
+import PortalMyRequestsPage from './portal/pages/PortalMyRequestsPage';
+import PortalEmployeeProfilePage from './portal/pages/PortalEmployeeProfilePage';
 // --- Portal ---
 import PortalInvoices from './portal/pages/PortalInvoices'
 import PortalQuotesPage from './portal/pages/PortalQuotesPage'
@@ -376,6 +377,8 @@ function App() {
 
         {/* --- Team members / role-based access --- */}
         <Route path="/settings/users" element={<AdminOnlyRoute><UserManagementPage /></AdminOnlyRoute>} />
+        <Route path="/portal/employee/requests" element={/* same wrapper as leave */ <PortalMyRequestsPage />} />
+<Route path="/portal/employee/profile" element={/* same wrapper as leave */ <PortalEmployeeProfilePage />} />
 
         {/* --- Portal --- */}
         <Route path="/portal/login" element={<PortalPublicOnlyRoute><PortalLogin /></PortalPublicOnlyRoute>} />

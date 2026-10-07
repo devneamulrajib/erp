@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { getPortalUser, portalLogout } from '../api/portalAuth';
 import { PortalNotificationsProvider, usePortalNotifications } from '../context/PortalNotificationsContext';
+import trikonLogo from '../../assets/trikon-logo.png';
 
 const NAV_ITEMS = [
   { to: '/portal/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: null },
@@ -27,6 +28,31 @@ const NAV_ITEMS = [
   { to: '/portal/employee/advance', label: 'Advance', icon: Banknote, roles: ['employee'] },
   { to: '/portal/requests', label: 'Requests', icon: MessageSquare, roles: ['customer', 'supplier', 'vendor'] },
 ];
+
+// Company logo. Falls back to the "T" tile if the image ever fails to load.
+function BrandLogo() {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white font-bold text-sm shrink-0">
+        T
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center overflow-hidden p-1 shrink-0">
+      <img
+        src={trikonLogo}
+        alt="Trikon"
+        onError={() => setFailed(true)}
+        className="w-full h-full object-contain"
+        draggable={false}
+      />
+    </div>
+  );
+}
 
 function PortalLayoutInner({ children }) {
   const user = getPortalUser();
@@ -53,7 +79,13 @@ function PortalLayoutInner({ children }) {
     }
   }
 
-  function handleLogout() {
+  // Employees: the avatar opens their Profile (logout lives there, with a confirmation).
+  // Other roles keep the original direct logout.
+  function handleAvatarClick() {
+    if (user?.role === 'employee') {
+      navigate('/portal/employee/profile');
+      return;
+    }
     portalLogout();
     navigate('/portal/login');
   }
@@ -74,10 +106,8 @@ function PortalLayoutInner({ children }) {
         <header className="px-5 md:px-0 pt-5 pb-4 md:py-6 border-b border-slate-100 md:border-none">
           <div className="flex items-center justify-between md:bg-white md:border md:border-slate-200 md:rounded-2xl md:px-5 md:py-3.5">
             <div className="flex items-center gap-3 md:gap-8 min-w-0">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white font-bold text-sm shrink-0">
-                  T
-                </div>
+              <Link to="/portal/dashboard" className="flex items-center gap-3 min-w-0">
+                <BrandLogo />
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="font-bold text-slate-900 text-sm truncate">TRIKON</span>
@@ -89,7 +119,7 @@ function PortalLayoutInner({ children }) {
                   </div>
                   <p className="text-xs text-slate-400 truncate hidden md:block">Business Portal</p>
                 </div>
-              </div>
+              </Link>
 
               {/* Desktop inline nav — replaces the bottom tab bar above md */}
               <nav className="hidden md:flex items-center gap-1">
@@ -146,7 +176,11 @@ function PortalLayoutInner({ children }) {
                   </div>
                 )}
               </div>
-              <button onClick={handleLogout} className="relative">
+              <button
+                onClick={handleAvatarClick}
+                aria-label={user?.role === 'employee' ? 'Open profile' : 'Log out'}
+                className="relative"
+              >
                 <div className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-semibold">
                   {initials}
                 </div>
@@ -160,7 +194,7 @@ function PortalLayoutInner({ children }) {
         <main className="flex-1 px-5 md:px-0 py-5 pb-24 md:pb-10">{children}</main>
 
         {/* Bottom tab bar — mobile only; desktop uses the header nav instead */}
-        <nav className="md:hidden sticky bottom-0 bg-white border-t border-slate-100 px-2 py-2 flex items-center justify-around">
+        <nav className="md:hidden sticky bottom-0 bg-white border-t border-slate-100 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] flex items-center justify-around">
           {visibleItems.map((item) => {
             const Icon = item.icon;
             const active = location.pathname === item.to;

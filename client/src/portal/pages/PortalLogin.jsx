@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { portalLogin } from '../api/portalAuth';
+import trikonLogo from '../../assets/trikon-logo.png';
 
 function LoginIllustration() {
   return (
@@ -26,6 +27,17 @@ function SocialButton({ children, label }) {
     <button type="button" aria-label={label} className="w-11 h-11 rounded-xl border border-slate-200 flex items-center justify-center hover:bg-slate-50 hover:border-slate-300 transition-colors">
       {children}
     </button>
+  );
+}
+
+function BrandLogo() {
+  const [failed, setFailed] = useState(false);
+  return failed ? (
+    <div className="w-12 h-12 rounded-xl bg-slate-900 flex items-center justify-center text-white font-bold">T</div>
+  ) : (
+    <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center overflow-hidden p-1.5">
+      <img src={trikonLogo} alt="Trikon" onError={() => setFailed(true)} className="w-full h-full object-contain" draggable={false} />
+    </div>
   );
 }
 
@@ -56,6 +68,10 @@ export default function PortalLogin() {
       <div className="w-full max-w-3xl bg-white rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 grid grid-cols-1 lg:grid-cols-2 overflow-hidden">
 
         <div className="p-8 sm:p-10 flex flex-col justify-center">
+          <div className="flex items-center gap-3 mb-6">
+            <BrandLogo />
+            <span className="font-bold text-slate-900 tracking-tight">TRIKON</span>
+          </div>
           <h1 className="text-2xl font-bold text-slate-800 tracking-tight mb-1">Welcome Back!</h1>
           <p className="text-sm text-slate-400 mb-7">We Are Happy To Have You Back</p>
 

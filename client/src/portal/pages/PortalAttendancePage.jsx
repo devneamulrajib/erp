@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarCheck, CalendarX, CalendarDays } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { CalendarCheck, CalendarX, CalendarDays, CheckCircle2 } from 'lucide-react';
 import PortalLayout from '../components/PortalLayout';
 import CheckInCard from '../components/CheckInCard';
+import CorrectionSheet from '../components/CorrectionSheet';
 import { getAttendanceSummary } from '../api/portalEmployee';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = Array.from({ length: 12 }, (_, i) =>
   new Date(2000, i, 1).toLocaleString(undefined, { month: 'long' })
 );
+const TAP = '[-webkit-tap-highlight-color:transparent] touch-manipulation';
+const CORRECTION_WINDOW_DAYS = 30; // keep in sync with the server
 
 const CELL_STYLES = {
   Present: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -47,6 +51,8 @@ export default function PortalAttendancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tick, setTick] = useState(0);
+  const [correctionDate, setCorrectionDate] = useState(null); // null = sheet closed
+  const [sent, setSent] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +78,19 @@ export default function PortalAttendancePage() {
   const daysInMonth = new Date(year, month, 0).getDate();
   const firstDow = new Date(year, month - 1, 1).getDay();
 
+  // Earliest date a correction can still be requested for
+  const earliest = useMemo(() => {
+    if (!data?.today) return null;
+    return new Date(new Date(`${data.today}T00:00:00Z`).getTime() - CORRECTION_WINDOW_DAYS * 86400000)
+      .toISOString()
+      .slice(0, 10);
+  }, [data]);
+
+  const canCorrect = (date, status) =>
+    status === 'Absent' && data?.today && date < data.today && earliest && date >= earliest;
+
+  const hasCorrectable = ready && view === 'month' && (data.days || []).some((d) => canCorrect(d.date, d.status));
+
   const selectCls =
     'border border-slate-200 rounded-lg bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-400';
 
@@ -82,6 +101,16 @@ export default function PortalAttendancePage() {
 
       <CheckInCard onChange={() => setTick((t) => t + 1)} />
 
+      {sent && (
+        <div className="flex items-start gap-2.5 bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm rounded-xl px-4 py-3 mb-4">
+          <CheckCircle2 size={18} className="shrink-0 mt-0.5" />
+          <p className="flex-1">
+            Correction request sent to HR.{' '}
+            <Link to="/portal/employee/requests" className="font-semibold underline">Track it in My Requests</Link>
+          </p>
+        </div>
+      )}
+
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
@@ -90,8 +119,8 @@ export default function PortalAttendancePage() {
               key={key}
               type="button"
               onClick={() => setView(key)}
-              className={`px-3.5 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                view === key ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
+              className={`px-3.5 py-2 text-sm font-medium rounded-md transition-colors ${TAP} ${
+                view === key ? 'bg-slate-900 text-white' : 'text-slate-500 active:bg-slate-100'
               }`}
             >
               {label}
@@ -138,19 +167,38 @@ export default function PortalAttendancePage() {
               const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
               const status = byDate[date];
               const isToday = data.today === date;
+              const cls = `aspect-square flex items-center justify-center rounded-lg border text-xs font-semibold ${
+                status ? CELL_STYLES[status] : 'border-transparent text-slate-300'
+              } ${isToday ? 'ring-2 ring-slate-900' : ''}`;
+
+              if (canCorrect(date, status)) {
+                return (
+                  <button
+                    key={date}
+                    type="button"
+                    title="Tap to request a correction"
+                    aria-label={`Request attendance correction for ${date}`}
+                    onClick={() => { setSent(false); setCorrectionDate(date); }}
+                    className={`${cls} active:bg-red-100 ${TAP}`}
+                  >
+                    {day}
+                  </button>
+                );
+              }
               return (
-                <div
-                  key={date}
-                  title={status || ''}
-                  className={`aspect-square flex items-center justify-center rounded-lg border text-xs font-semibold ${
-                    status ? CELL_STYLES[status] : 'border-transparent text-slate-300'
-                  } ${isToday ? 'ring-2 ring-slate-900' : ''}`}
-                >
+                <div key={date} title={status || ''} className={cls}>
                   {day}
                 </div>
               );
             })}
           </div>
+
+          {hasCorrectable && (
+            <p className="text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5 mt-4">
+              Were you at work on a day marked Absent? Tap that red day to ask HR for a correction.
+            </p>
+          )}
+
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-4 text-[11px] text-slate-500">
             {LEGEND.map(([label, dot]) => (
               <span key={label} className="inline-flex items-center gap-1.5">
@@ -186,6 +234,13 @@ export default function PortalAttendancePage() {
           </table>
         </div>
       )}
+
+      <CorrectionSheet
+        open={correctionDate !== null}
+        initialDate={correctionDate || ''}
+        onClose={() => setCorrectionDate(null)}
+        onDone={() => { setCorrectionDate(null); setSent(true); }}
+      />
     </PortalLayout>
   );
 }
