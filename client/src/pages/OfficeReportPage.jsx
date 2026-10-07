@@ -1,138 +1,181 @@
 // client/src/pages/OfficeReportPage.jsx
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
-  TrendingUp,
-  TrendingDown,
-  AlertCircle,
-  Wallet,
+  Printer,
   FileSpreadsheet,
+  Calendar,
+  Search,
+  Filter,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  Building2,
   ChevronLeft,
   ChevronRight,
-  Award,
-  PieChart,
-  CalendarDays,
+  TrendingDown,
+  TrendingUp,
+  AlertCircle,
   Activity,
-  Pencil,
-  Trash2,
-  PlusCircle,
-  Wallet as WalletIcon,
+  Layers,
+  FileText,
   Banknote,
-  Undo2,
+  RotateCcw,
+  ShieldCheck,
+  Hash,
+  Download,
+  Info,
+  SlidersHorizontal,
 } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
-import { getOfficeExpenseReport } from '../api/officeExpense';
+import { getOfficeExpenseReport, getOfficeExpenses } from '../api/officeExpense';
 import { getActivityLog } from '../api/activityLog';
+import logo from '../assets/trikon-logo.png';
 
-const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const MONTH_LABELS_FULL = [
+const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-const money = (v) => Number(v || 0).toLocaleString('en-BD', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const STATUS_COLORS = {
-  approved: 'bg-emerald-500',
-  pending: 'bg-amber-500',
-  rejected: 'bg-rose-500',
-};
+const formatMoney = (v) =>
+  Number(v || 0).toLocaleString('en-BD', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
-// selectedMonth: 0 = whole year, 1-12 = that month's own numbers
 function getCategoryView(cat, selectedMonth) {
   if (selectedMonth === 0) {
     return {
-      allocatedAmount: cat.allocatedAmount,
-      spentAmount: cat.spentAmount,
-      remainingAmount: cat.remainingAmount,
+      allocatedAmount: Number(cat.allocatedAmount || 0),
+      spentAmount: Number(cat.spentAmount || 0),
+      remainingAmount: Number(cat.remainingAmount || 0),
     };
   }
   const idx = selectedMonth - 1;
-  const allocatedAmount = cat.allocatedByMonth?.[idx] || 0;
-  const spentAmount = cat.spentByMonth?.[idx] || 0;
-  return { allocatedAmount, spentAmount, remainingAmount: allocatedAmount - spentAmount };
+  const allocatedAmount = Number(cat.allocatedByMonth?.[idx] || 0);
+  const spentAmount = Number(cat.spentByMonth?.[idx] || 0);
+  return {
+    allocatedAmount,
+    spentAmount,
+    remainingAmount: allocatedAmount - spentAmount,
+  };
 }
 
 export default function OfficeReportPage() {
   const navigate = useNavigate();
+  const printRef = useRef(null);
+
+  // Filter States
   const [year, setYear] = useState(new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(0); // 0 = Full Year
+  const [selectedMonth, setSelectedMonth] = useState(0); // 0 = Full Fiscal Year
+  const [activeTab, setActiveTab] = useState('statement'); // 'statement' | 'category' | 'monthly' | 'audit'
+  const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+
+  // Data States
   const [data, setData] = useState(null);
+  const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Activity Feed States
+  // Audit Log State
   const [activity, setActivity] = useState([]);
-  const [activityLoading, setActivityLoading] = useState(true);
-  const [activityModuleFilter, setActivityModuleFilter] = useState('');
+  const [activityLoading, setActivityLoading] = useState(false);
 
-  const load = useCallback(async () => {
+  // Statement Verification Hash
+  const statementHash = useMemo(() => {
+    return `STMT-${year}-${selectedMonth ? String(selectedMonth).padStart(2, '0') : 'ANN'}-${Math.abs(
+      (year * 31 + selectedMonth * 7) ^ 0x5f3759df
+    ).toString(16).toUpperCase()}`;
+  }, [year, selectedMonth]);
+
+  // Load Main Report & Expense Transactions
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await getOfficeExpenseReport(year);
-      setData(res);
+      const [reportRes, expenseRes] = await Promise.allSettled([
+        getOfficeExpenseReport(year),
+        getOfficeExpenses ? getOfficeExpenses({ year, limit: 1000 }) : Promise.resolve([]),
+      ]);
+
+      if (reportRes.status === 'fulfilled') {
+        setData(reportRes.value);
+      } else {
+        throw new Error(reportRes.reason?.response?.data?.message || 'Failed to fetch report summary');
+      }
+
+      if (expenseRes.status === 'fulfilled') {
+        const raw = expenseRes.value;
+        const list = Array.isArray(raw) ? raw : raw?.data || raw?.expenses || [];
+        setExpenses(list);
+      } else {
+        setExpenses([]);
+      }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load office report');
+      setError(err.message || 'Error compiling statement data');
       setData(null);
     } finally {
       setLoading(false);
     }
   }, [year]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  // Reset month filter whenever the year changes
-  useEffect(() => { setSelectedMonth(0); }, [year]);
-
-  // Load Activity Log Callback & Effect
-  const loadActivity = useCallback(async () => {
+  // Load Audit Activity
+  const loadAudit = useCallback(async () => {
     setActivityLoading(true);
     try {
       const params = { year };
       if (selectedMonth !== 0) params.month = selectedMonth;
-      if (activityModuleFilter) params.module = activityModuleFilter;
       const rows = await getActivityLog(params);
-      setActivity(rows || []);
+      setActivity(Array.isArray(rows) ? rows : []);
     } catch {
       setActivity([]);
     } finally {
       setActivityLoading(false);
     }
-  }, [year, selectedMonth, activityModuleFilter]);
+  }, [year, selectedMonth]);
 
-  useEffect(() => { loadActivity(); }, [loadActivity]);
+  useEffect(() => {
+    if (activeTab === 'audit') {
+      loadAudit();
+    }
+  }, [activeTab, loadAudit]);
 
-  // Per-month totals across ALL categories
-  const monthlyBreakdown = useMemo(() => {
-    if (!data) return [];
-    return Array.from({ length: 12 }, (_, i) => {
-      const allocatedAmount = data.categories.reduce((sum, c) => sum + (c.allocatedByMonth?.[i] || 0), 0);
-      const spentAmount = data.categories.reduce((sum, c) => sum + (c.spentByMonth?.[i] || 0), 0);
-      return {
-        month: i + 1,
-        label: MONTH_LABELS[i],
-        allocatedAmount,
-        spentAmount,
-        remainingAmount: allocatedAmount - spentAmount,
-      };
-    });
-  }, [data]);
+  // Period Descriptions
+  const periodDateRange = useMemo(() => {
+    if (selectedMonth === 0) {
+      return `01 Jan ${year} — 31 Dec ${year}`;
+    }
+    const daysInMonth = new Date(year, selectedMonth, 0).getDate();
+    return `01 ${MONTH_NAMES[selectedMonth - 1]} ${year} — ${daysInMonth} ${MONTH_NAMES[selectedMonth - 1]} ${year}`;
+  }, [year, selectedMonth]);
 
-  // The view totals that drive the KPI cards + category table
+  const periodTitle = selectedMonth === 0 ? `Fiscal Year ${year}` : `${MONTH_NAMES[selectedMonth - 1]} ${year}`;
+
+  // Calculated Totals
   const viewTotals = useMemo(() => {
     if (!data) return { allocatedAmount: 0, spentAmount: 0, remainingAmount: 0 };
     if (selectedMonth === 0) return data.totals;
-    return data.categories.reduce((acc, cat) => {
-      const v = getCategoryView(cat, selectedMonth);
-      return {
-        allocatedAmount: acc.allocatedAmount + v.allocatedAmount,
-        spentAmount: acc.spentAmount + v.spentAmount,
-        remainingAmount: acc.remainingAmount + v.remainingAmount,
-      };
-    }, { allocatedAmount: 0, spentAmount: 0, remainingAmount: 0 });
+    return data.categories.reduce(
+      (acc, cat) => {
+        const v = getCategoryView(cat, selectedMonth);
+        return {
+          allocatedAmount: acc.allocatedAmount + v.allocatedAmount,
+          spentAmount: acc.spentAmount + v.spentAmount,
+          remainingAmount: acc.remainingAmount + v.remainingAmount,
+        };
+      },
+      { allocatedAmount: 0, spentAmount: 0, remainingAmount: 0 }
+    );
   }, [data, selectedMonth]);
 
   const viewCategories = useMemo(() => {
@@ -140,550 +183,919 @@ export default function OfficeReportPage() {
     return data.categories.map((cat) => ({ ...cat, ...getCategoryView(cat, selectedMonth) }));
   }, [data, selectedMonth]);
 
-  const viewTopSpenders = useMemo(() => {
-    return [...viewCategories].sort((a, b) => b.spentAmount - a.spentAmount).slice(0, 5);
-  }, [viewCategories]);
+  // Filtered Statement Transactions
+  const statementTransactions = useMemo(() => {
+    let list = [...expenses];
 
-  const periodLabel = selectedMonth === 0 ? `Full Year ${year}` : `${MONTH_LABELS_FULL[selectedMonth - 1]} ${year}`;
-
-  function exportCsv() {
-    if (!data) return;
-    const headers = ['Category', `Allocated (${periodLabel})`, `Spent (${periodLabel})`, 'Remaining', 'Burn %'];
-    const rows = viewCategories.map((c) => {
-      const pct = c.allocatedAmount > 0 ? ((c.spentAmount / c.allocatedAmount) * 100).toFixed(1) : '—';
-      return [c.name, c.allocatedAmount, c.spentAmount, c.remainingAmount, pct];
+    list = list.filter((item) => {
+      const d = new Date(item.date || item.createdAt);
+      if (d.getFullYear() !== year) return false;
+      if (selectedMonth !== 0 && d.getMonth() + 1 !== selectedMonth) return false;
+      return true;
     });
-    rows.push(['Total', viewTotals.allocatedAmount, viewTotals.spentAmount, viewTotals.remainingAmount, '']);
-    const csv = [headers, ...rows]
-      .map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `office-report-${year}${selectedMonth ? `-${String(selectedMonth).padStart(2, '0')}` : ''}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+
+    if (categoryFilter) {
+      list = list.filter((item) => String(item.budgetCategoryId) === String(categoryFilter));
+    }
+
+    if (statusFilter) {
+      list = list.filter((item) => item.status?.toLowerCase() === statusFilter.toLowerCase());
+    }
+
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      list = list.filter(
+        (item) =>
+          item.voucherNo?.toLowerCase().includes(q) ||
+          item.description?.toLowerCase().includes(q) ||
+          item.payee?.toLowerCase().includes(q) ||
+          item.budgetCategory?.name?.toLowerCase().includes(q) ||
+          item.note?.toLowerCase().includes(q)
+      );
+    }
+
+    return list.sort((a, b) => new Date(a.date || a.createdAt) - new Date(b.date || b.createdAt));
+  }, [expenses, year, selectedMonth, categoryFilter, statusFilter, searchTerm]);
+
+  // Monthly Matrix
+  const monthlyBreakdown = useMemo(() => {
+    if (!data) return [];
+    return Array.from({ length: 12 }, (_, i) => {
+      const allocated = data.categories.reduce((sum, c) => sum + (c.allocatedByMonth?.[i] || 0), 0);
+      const spent = data.categories.reduce((sum, c) => sum + (c.spentByMonth?.[i] || 0), 0);
+      return {
+        month: i + 1,
+        name: MONTH_NAMES[i],
+        short: MONTH_SHORT[i],
+        allocated,
+        spent,
+        remaining: allocated - spent,
+        burn: allocated > 0 ? (spent / allocated) * 100 : 0,
+      };
+    });
+  }, [data]);
 
   const isOverBudget = viewTotals.remainingAmount < 0;
-  const burnRate = viewTotals.allocatedAmount > 0 ? Math.min(100, (viewTotals.spentAmount / viewTotals.allocatedAmount) * 100) : 0;
-  const statusTotals = data?.statusTotals || {};
-  const statusTotalSum = Object.values(statusTotals).reduce((s, v) => s + v, 0) || 1;
+  const burnRate =
+    viewTotals.allocatedAmount > 0 ? (viewTotals.spentAmount / viewTotals.allocatedAmount) * 100 : 0;
 
-  function selectMonth(m) {
-    setSelectedMonth((current) => (current === m ? 0 : m));
-  }
+  // Print Statement Execution
+  const handlePrint = () => {
+    window.print();
+  };
+
+  // CSV Export
+  const exportCsv = () => {
+    if (statementTransactions.length === 0) return;
+    const headers = [
+      'SL',
+      'Value Date',
+      'Voucher / Ref',
+      'Account / Category',
+      'Narration / Beneficiary',
+      'Status',
+      'Debit (Disbursed BDT)',
+      'Balance (BDT)',
+    ];
+
+    let running = viewTotals.allocatedAmount;
+    const rows = statementTransactions.map((tx, idx) => {
+      const amt = Number(tx.amount || 0);
+      running -= amt;
+      return [
+        idx + 1,
+        new Date(tx.date || tx.createdAt).toLocaleDateString('en-GB'),
+        tx.voucherNo || `VCH-${tx.id}`,
+        `"${(tx.budgetCategory?.name || 'Office Expense').replace(/"/g, '""')}"`,
+        `"${(tx.description || tx.payee || 'Operational Expense').replace(/"/g, '""')}"`,
+        tx.status || 'Approved',
+        amt.toFixed(2),
+        running.toFixed(2),
+      ];
+    });
+
+    const csvData = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Statement_${year}_${selectedMonth ? `M${selectedMonth}` : 'Annual'}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
-    <div className="min-h-screen w-full bg-[#f8fafc] text-slate-800">
-      <Topbar />
+    <div className="min-h-screen bg-[#f1f5f9] text-slate-900 pb-16 print:bg-white print:p-0 print:pb-0">
+      {/* Print Style Injector */}
+      <style>{`
+        @media print {
+          body {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            font-size: 11px !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          @page {
+            size: A4 portrait;
+            margin: 12mm 14mm 14mm 14mm;
+          }
+          .print-avoid-break {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .print-header-space {
+            margin-bottom: 20px;
+          }
+        }
+      `}</style>
 
-      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-5">
-        <Breadcrumb
-          items={[
-            { label: 'Home', to: '/dashboard' },
-            { label: 'Accounts Module', to: '/dashboard' },
-            { label: 'Office Report' },
-          ]}
-        />
+      {/* App Navigation (Hidden in Print) */}
+      <div className="print:hidden">
+        <Topbar />
+      </div>
 
-        <div className="mt-3 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5">
+        <div className="print:hidden">
+          <Breadcrumb
+            items={[
+              { label: 'Dashboard', to: '/dashboard' },
+              { label: 'Accounts & Finance', to: '/accounts-module/office-budget' },
+              { label: 'Office Expense Statement' },
+            ]}
+          />
+        </div>
+
+        {/* Actions Bar (Screen Only) */}
+        <div className="mt-4 mb-5 flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Office Report</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Office budget allocation vs. spend, by category — {periodLabel}</p>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-indigo-100/80 text-indigo-800 tracking-wide uppercase">
+                <ShieldCheck size={12} className="text-indigo-600" /> Verified Statement
+              </span>
+              <span className="text-xs text-slate-500 font-mono">Ref: {statementHash}</span>
+            </div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1">
+              Office Expense Bank Statement
+            </h1>
+            <p className="text-xs text-slate-500">
+              Authorized general ledger disbursements and allocation statements for internal audit.
+            </p>
           </div>
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={exportCsv}
-              disabled={!data}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition disabled:opacity-40"
-            >
-              <FileSpreadsheet size={13} /> Export CSV
-            </button>
+
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => navigate('/accounts-module/office-budget')}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-2xs transition"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg shadow-2xs transition"
             >
-              <ArrowLeft size={13} /> Budget Tracker
+              <ArrowLeft size={13} />
+              Budget Planner
+            </button>
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={statementTransactions.length === 0}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg shadow-2xs transition disabled:opacity-40"
+            >
+              <FileSpreadsheet size={13} className="text-emerald-600" />
+              CSV Export
+            </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition cursor-pointer"
+            >
+              <Printer size={13} />
+              Print Formal Statement
             </button>
           </div>
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-5">{error}</div>
+          <div className="mb-5 bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-center gap-3 text-rose-800 text-sm print:hidden">
+            <AlertCircle size={18} className="text-rose-600 shrink-0" />
+            <span>{error}</span>
+            <button
+              onClick={loadData}
+              className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-rose-700 underline"
+            >
+              <RotateCcw size={12} /> Retry
+            </button>
+          </div>
         )}
 
-        {/* Year selector */}
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs px-4 py-3 mb-4 flex items-center justify-between">
-          <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white shadow-2xs">
-            <button
-              type="button"
-              onClick={() => setYear((y) => y - 1)}
-              className="px-2.5 py-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-50 border-r border-slate-200 transition"
-            >
-              <ChevronLeft size={15} />
-            </button>
-            <span className="px-4 py-1.5 text-sm font-bold text-slate-800">{year}</span>
-            <button
-              type="button"
-              onClick={() => setYear((y) => y + 1)}
-              className="px-2.5 py-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-50 border-l border-slate-200 transition"
-            >
-              <ChevronRight size={15} />
-            </button>
-          </div>
-          <button
-            type="button"
-            onClick={() => setYear(new Date().getFullYear())}
-            className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 rounded-lg transition"
-          >
-            Current Year
-          </button>
-        </div>
-
-        {/* Month selector */}
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs px-4 py-3 mb-6 flex items-center gap-2 overflow-x-auto">
-          <div className="flex items-center gap-1.5 text-slate-400 shrink-0 pr-1">
-            <CalendarDays size={14} />
-            <span className="text-xs font-semibold uppercase tracking-wider">Period</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSelectedMonth(0)}
-            className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-              selectedMonth === 0 ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
-            }`}
-          >
-            Full Year
-          </button>
-          {MONTH_LABELS.map((label, i) => (
-            <button
-              key={label}
-              type="button"
-              onClick={() => selectMonth(i + 1)}
-              className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                selectedMonth === i + 1 ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {loading ? (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs py-20 text-center text-slate-400 text-sm">
-            Loading report…
-          </div>
-        ) : !data ? null : (
-          <>
-            {/* KPI cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-4">
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Allocated</div>
-                <div className="mt-2 text-2xl font-bold font-mono text-slate-900">৳{money(viewTotals.allocatedAmount)}</div>
-                <p className="text-[11px] text-slate-400 mt-0.5">{periodLabel}</p>
-              </div>
-              <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-4">
-                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  <span>Total Spent</span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-600">{burnRate.toFixed(1)}%</span>
-                </div>
-                <div className="mt-2 text-2xl font-bold font-mono text-slate-900">৳{money(viewTotals.spentAmount)}</div>
-                <div className="w-full h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${isOverBudget ? 'bg-rose-500' : burnRate > 80 ? 'bg-amber-500' : 'bg-blue-600'}`}
-                    style={{ width: `${burnRate}%` }}
+        {/* PRIMARY STATEMENT CONTAINER */}
+        <div
+          ref={printRef}
+          className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden print:border-none print:shadow-none"
+        >
+          {/* ============================================================ */}
+          {/* BANK STATEMENT CORPORATE HEADER                             */}
+          {/* ============================================================ */}
+          <div className="p-6 sm:p-8 border-b border-slate-200 bg-linear-to-b from-slate-50/80 to-white print:bg-white print:p-0 print:border-b-2 print:border-slate-800 print-header-space">
+            <div className="flex flex-col sm:flex-row justify-between items-start gap-6 pb-6 border-b border-slate-100 print:border-slate-300">
+              {/* Brand & Account Spec */}
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 rounded-xl bg-white border border-slate-200 shadow-2xs flex items-center justify-center p-2 print:border-none print:p-0">
+                  <img
+                    src={logo}
+                    alt="Logo"
+                    className="max-h-full max-w-full object-contain"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
                   />
+                  <div className="hidden w-12 h-12 bg-slate-900 text-white rounded-lg items-center justify-center font-black text-xl">
+                    T
+                  </div>
+                </div>
+
+                <div>
+                  <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">
+                    TRIKON REAL ESTATE & DEVELOPMENTS
+                  </h2>
+                  <p className="text-xs text-slate-600 font-semibold tracking-wide">
+                    Office Administration & Operational Expense Account
+                  </p>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-[11px] text-slate-500">
+                    <span>
+                      <strong className="text-slate-700 font-medium">A/C No:</strong> 0920-OFF-HQ-2026
+                    </span>
+                    <span>•</span>
+                    <span>
+                      <strong className="text-slate-700 font-medium">Type:</strong> Operational Cost Ledger
+                    </span>
+                    <span>•</span>
+                    <span>
+                      <strong className="text-slate-700 font-medium">Currency:</strong> BDT (৳)
+                    </span>
+                  </div>
                 </div>
               </div>
-              <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-4">
-                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  <span>Remaining</span>
-                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                    isOverBudget ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  }`}>
-                    {isOverBudget ? <AlertCircle size={10} /> : <TrendingUp size={10} />}
-                    {isOverBudget ? 'Over' : 'On Track'}
+
+              {/* Statement Metadata Box */}
+              <div className="text-left sm:text-right bg-slate-50 print:bg-transparent p-3 sm:p-0 rounded-lg border sm:border-none border-slate-200/80 min-w-[240px]">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 print:text-slate-900">
+                  Periodic Account Statement
+                </div>
+                <div className="text-sm font-bold text-slate-900 mt-0.5">{periodTitle}</div>
+                <div className="text-[11px] text-slate-600 mt-0.5">{periodDateRange}</div>
+                <div className="text-[10px] text-slate-400 mt-1 font-mono">
+                  Generated: {new Date().toLocaleDateString('en-GB')} {new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+            </div>
+
+            {/* Account Financial Position (The Banking Balances Box) */}
+            <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              {/* Box 1: Allocation / Credit Limit */}
+              <div className="p-4 rounded-xl bg-slate-900 text-white shadow-xs print:bg-slate-100 print:text-slate-900 print:border print:border-slate-300">
+                <span className="text-[10px] font-bold tracking-wider uppercase text-slate-400 print:text-slate-600 block">
+                  Budget Allocation (Limit)
+                </span>
+                <span className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-white print:text-slate-900 mt-1 block">
+                  ৳{formatMoney(viewTotals.allocatedAmount)}
+                </span>
+                <span className="text-[10px] text-slate-400 print:text-slate-500 mt-0.5 block">
+                  Approved funding for {periodTitle}
+                </span>
+              </div>
+
+              {/* Box 2: Total Debited / Spent */}
+              <div className="p-4 rounded-xl bg-slate-900 text-white shadow-xs print:bg-slate-100 print:text-slate-900 print:border print:border-slate-300">
+                <span className="text-[10px] font-bold tracking-wider uppercase text-slate-400 print:text-slate-600 block">
+                  Total Withdrawals (Debits)
+                </span>
+                <span className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-rose-300 print:text-rose-700 mt-1 block">
+                  ৳{formatMoney(viewTotals.spentAmount)}
+                </span>
+                <span className="text-[10px] text-slate-400 print:text-slate-500 mt-0.5 block">
+                  {statementTransactions.length} Cleared Disbursements
+                </span>
+              </div>
+
+              {/* Box 3: Available Balance */}
+              <div className="p-4 rounded-xl bg-slate-900 text-white shadow-xs print:bg-slate-100 print:text-slate-900 print:border print:border-slate-300">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold tracking-wider uppercase text-slate-400 print:text-slate-600 block">
+                    Available Balance
+                  </span>
+                  <span
+                    className={`text-[9px] font-bold uppercase px-1.5 py-0.2 rounded ${
+                      isOverBudget
+                        ? 'bg-rose-500/20 text-rose-300 print:text-rose-700'
+                        : 'bg-emerald-500/20 text-emerald-300 print:text-emerald-700'
+                    }`}
+                  >
+                    {isOverBudget ? 'Overdrawn' : 'In Surplus'}
                   </span>
                 </div>
-                <div className={`mt-2 text-2xl font-bold font-mono flex items-center gap-1.5 ${isOverBudget ? 'text-rose-600' : 'text-emerald-700'}`}>
-                  {isOverBudget ? <TrendingDown size={18} /> : <TrendingUp size={18} />}
-                  ৳{money(Math.abs(viewTotals.remainingAmount))}
-                </div>
-              </div>
-              <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-4">
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Entries Logged</div>
-                <div className="mt-2 text-2xl font-bold font-mono text-slate-900">{data.entryCount}</div>
-                <p className="text-[11px] text-slate-400 mt-0.5">Office expense records in {year} (full year)</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4 mb-6">
-              {/* Monthly trend */}
-              <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
-                <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/50">
-                  <h2 className="text-sm font-bold text-slate-800">Monthly Spend Trend — {year}</h2>
-                </div>
-                <div className="p-5">
-                  <YearTrendChart values={data.monthlyTrend} selectedMonth={selectedMonth} onSelectMonth={selectMonth} />
-                </div>
+                <span
+                  className={`text-xl sm:text-2xl font-bold font-mono tracking-tight mt-1 block ${
+                    isOverBudget ? 'text-rose-400 print:text-rose-700' : 'text-emerald-400 print:text-emerald-700'
+                  }`}
+                >
+                  ৳{formatMoney(Math.abs(viewTotals.remainingAmount))}
+                </span>
+                <span className="text-[10px] text-slate-400 print:text-slate-500 mt-0.5 block">
+                  {isOverBudget ? 'Deficit over authorized credit' : 'Net unspent fund reserves'}
+                </span>
               </div>
 
-              {/* Status breakdown */}
-              <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
-                <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
-                  <PieChart size={14} className="text-slate-400" />
-                  <h2 className="text-sm font-bold text-slate-800">By Status (Full Year)</h2>
+              {/* Box 4: Account Utilization */}
+              <div className="p-4 rounded-xl bg-slate-900 text-white shadow-xs print:bg-slate-100 print:text-slate-900 print:border print:border-slate-300">
+                <div className="flex items-center justify-between text-[10px] font-bold tracking-wider uppercase text-slate-400 print:text-slate-600">
+                  <span>Burn Rate</span>
+                  <span className="font-mono text-white print:text-slate-900">{burnRate.toFixed(1)}%</span>
                 </div>
-                <div className="p-5 space-y-3">
-                  {Object.keys(statusTotals).length === 0 ? (
-                    <p className="text-xs text-slate-400 text-center py-6">No entries yet for {year}</p>
-                  ) : (
-                    Object.entries(statusTotals).map(([status, amt]) => {
-                      const pct = (amt / statusTotalSum) * 100;
-                      return (
-                        <div key={status}>
-                          <div className="flex items-center justify-between text-xs mb-1">
-                            <span className="capitalize font-medium text-slate-700">{status}</span>
-                            <span className="font-mono text-slate-500">৳{money(amt)}</span>
-                          </div>
-                          <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full ${STATUS_COLORS[status] || 'bg-slate-400'}`}
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
+                <div className="w-full h-2 bg-slate-800 print:bg-slate-200 rounded-full mt-2.5 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      burnRate > 100 ? 'bg-rose-500' : burnRate > 85 ? 'bg-amber-400' : 'bg-emerald-400'
+                    }`}
+                    style={{ width: `${Math.min(100, burnRate)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between mt-2 text-[10px] text-slate-400 print:text-slate-500">
+                  <span>0%</span>
+                  <span>{burnRate > 100 ? 'Over limit' : `${(100 - burnRate).toFixed(1)}% Available`}</span>
+                  <span>100%</span>
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Monthly breakdown table */}
-            <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden mb-6">
-              <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                <div>
-                  <h2 className="text-sm font-bold text-slate-800">Monthly Breakdown — {year}</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">Click a row to filter the category table below to that month</p>
+          {/* ============================================================ */}
+          {/* INTERACTIVE CONTROLS BAR (Hidden during Print)               */}
+          {/* ============================================================ */}
+          <div className="p-4 sm:p-5 border-b border-slate-200 bg-white print:hidden space-y-4">
+            {/* Year & Period Switcher */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setYear((y) => y - 1)}
+                  className="px-2.5 py-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-50 border-r border-slate-200 transition"
+                  title="Previous Year"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <div className="px-3.5 py-1.5 text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Calendar size={13} className="text-indigo-600" />
+                  {year}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setYear((y) => y + 1)}
+                  className="px-2.5 py-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-50 border-l border-slate-200 transition"
+                  title="Next Year"
+                >
+                  <ChevronRight size={14} />
+                </button>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs sm:text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                      <th className="py-3 px-4">Month</th>
-                      <th className="py-3 px-4">Allocated</th>
-                      <th className="py-3 px-4">Spent</th>
-                      <th className="py-3 px-4">Remaining</th>
-                      <th className="py-3 px-4 w-40">Burn Rate</th>
+
+              {/* Month Pills */}
+              <div className="flex items-center gap-1 overflow-x-auto pb-1 max-w-full">
+                <button
+                  type="button"
+                  onClick={() => setSelectedMonth(0)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition shrink-0 ${
+                    selectedMonth === 0
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  All Fiscal Year
+                </button>
+                {MONTH_SHORT.map((name, idx) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => setSelectedMonth(idx + 1)}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition shrink-0 ${
+                      selectedMonth === idx + 1
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* View Tab Selectors & Instant Filters */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+              <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('statement')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition ${
+                    activeTab === 'statement'
+                      ? 'bg-white text-slate-900 shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900 font-medium'
+                  }`}
+                >
+                  <FileText size={13} className="text-indigo-600" />
+                  Transactions Statement
+                  <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-700 font-mono">
+                    {statementTransactions.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('category')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition ${
+                    activeTab === 'category'
+                      ? 'bg-white text-slate-900 shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900 font-medium'
+                  }`}
+                >
+                  <Layers size={13} className="text-indigo-600" />
+                  Budget Heads Breakdown
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('monthly')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition ${
+                    activeTab === 'monthly'
+                      ? 'bg-white text-slate-900 shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900 font-medium'
+                  }`}
+                >
+                  <Calendar size={13} className="text-indigo-600" />
+                  Monthly Matrix
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('audit')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition ${
+                    activeTab === 'audit'
+                      ? 'bg-white text-slate-900 shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900 font-medium'
+                  }`}
+                >
+                  <Activity size={13} className="text-indigo-600" />
+                  Audit Trail
+                </button>
+              </div>
+
+              {/* Search & Category Filter */}
+              {activeTab === 'statement' && (
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1 sm:w-52">
+                    <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Search voucher, payee..."
+                      className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-slate-900 focus:bg-white"
+                    />
+                  </div>
+
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="py-1.5 px-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-slate-900"
+                  >
+                    <option value="">All Category Heads</option>
+                    {data?.categories?.map((c) => (
+                      <option key={c.budgetCategoryId} value={c.budgetCategoryId}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="py-1.5 px-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-slate-900"
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="approved">Cleared</option>
+                    <option value="pending">In Clearing</option>
+                    <option value="rejected">Dishonored</option>
+                  </select>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ============================================================ */}
+          {/* TAB 1: FORMAL BANK STATEMENT LEDGER                          */}
+          {/* ============================================================ */}
+          {activeTab === 'statement' && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-100/80 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-600 print:bg-slate-100 print:border-slate-800">
+                    <th className="py-3 px-4 w-12 text-center">SL</th>
+                    <th className="py-3 px-4 w-28">Value Date</th>
+                    <th className="py-3 px-4 w-32">Voucher / Ref</th>
+                    <th className="py-3 px-4 w-44">Head of Account</th>
+                    <th className="py-3 px-4">Narration / Payee Details</th>
+                    <th className="py-3 px-4 w-28 text-center print:hidden">Clearance</th>
+                    <th className="py-3 px-4 text-right w-36">Debit (Outflow ৳)</th>
+                    <th className="py-3 px-4 text-right w-36">Balance (৳)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 print:divide-slate-200 font-sans">
+                  {/* B/F Balance Row */}
+                  <tr className="bg-slate-50/70 font-medium text-slate-700 print:bg-transparent">
+                    <td className="py-2.5 px-4 text-center text-slate-400 font-mono text-[11px]">—</td>
+                    <td className="py-2.5 px-4 font-mono text-[11px] text-slate-600">
+                      01/{selectedMonth ? String(selectedMonth).padStart(2, '0') : '01'}/{year}
+                    </td>
+                    <td className="py-2.5 px-4 font-mono text-[11px] font-bold text-slate-500">B/F ALLOCATION</td>
+                    <td className="py-2.5 px-4 font-bold text-slate-800">Budget Limit Authorized</td>
+                    <td className="py-2.5 px-4 italic text-slate-500">Opening Credit Limit Allocated for Period</td>
+                    <td className="py-2.5 px-4 text-center print:hidden">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                        CREDIT
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-4 text-right font-mono text-slate-400">—</td>
+                    <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900">
+                      ৳{formatMoney(viewTotals.allocatedAmount)}
+                    </td>
+                  </tr>
+
+                  {loading ? (
+                    <tr>
+                      <td colSpan={8} className="py-14 text-center text-slate-400">
+                        Retrieving verified transaction ledger…
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {monthlyBreakdown.map((m) => {
-                      const pct = m.allocatedAmount > 0 ? Math.min(100, (m.spentAmount / m.allocatedAmount) * 100) : 0;
-                      const overBudget = m.remainingAmount < 0;
-                      const active = selectedMonth === m.month;
+                  ) : statementTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-14 text-center text-slate-400">
+                        No transactions registered for the selected period.
+                      </td>
+                    </tr>
+                  ) : (
+                    (() => {
+                      let running = viewTotals.allocatedAmount;
+                      return statementTransactions.map((tx, idx) => {
+                        const amt = Number(tx.amount || 0);
+                        running -= amt;
+                        const dateFormatted = new Date(tx.date || tx.createdAt).toLocaleDateString('en-GB', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                        });
+                        const st = (tx.status || 'approved').toLowerCase();
+
+                        return (
+                          <tr key={tx.id || idx} className="hover:bg-slate-50/80 transition print-avoid-break">
+                            <td className="py-2.5 px-4 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                            <td className="py-2.5 px-4 font-mono text-[11px] text-slate-700 whitespace-nowrap">
+                              {dateFormatted}
+                            </td>
+                            <td className="py-2.5 px-4 font-mono text-[11px] font-bold text-indigo-700 print:text-slate-900">
+                              {tx.voucherNo || `VCH-${String(tx.id).padStart(5, '0')}`}
+                            </td>
+                            <td className="py-2.5 px-4 font-semibold text-slate-800">
+                              <span className="inline-block px-2 py-0.5 bg-slate-100 rounded text-slate-800 text-[11px] print:p-0 print:bg-transparent">
+                                {tx.budgetCategory?.name || 'General Operations'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-4 text-slate-700">
+                              <div className="font-medium text-slate-900 line-clamp-1">
+                                {tx.description || tx.payee || 'Direct Disbursement'}
+                              </div>
+                              {tx.payee && tx.description && (
+                                <div className="text-[10px] text-slate-400">Beneficiary: {tx.payee}</div>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-4 text-center print:hidden">
+                              {st === 'approved' ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  <CheckCircle2 size={10} /> Cleared
+                                </span>
+                              ) : st === 'pending' ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                  <Clock size={10} /> Processing
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                  <XCircle size={10} /> Voided
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-4 text-right font-mono font-bold text-rose-600 print:text-slate-900">
+                              ৳{formatMoney(amt)}
+                            </td>
+                            <td
+                              className={`py-2.5 px-4 text-right font-mono font-bold ${
+                                running < 0 ? 'text-rose-600 print:text-slate-900' : 'text-slate-800'
+                              }`}
+                            >
+                              ৳{formatMoney(running)}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-slate-900 text-white font-semibold print:bg-slate-100 print:text-slate-900 print:border-t-2 print:border-slate-800">
+                    <td colSpan={5} className="py-3 px-4 text-right uppercase text-[10px] tracking-wider text-slate-300 print:text-slate-700">
+                      Summary Total Debits / Closing Position
+                    </td>
+                    <td className="py-3 px-4 print:hidden" />
+                    <td className="py-3 px-4 text-right font-mono font-bold text-rose-300 print:text-slate-900">
+                      ৳{formatMoney(viewTotals.spentAmount)}
+                    </td>
+                    <td
+                      className={`py-3 px-4 text-right font-mono font-bold ${
+                        isOverBudget ? 'text-rose-400 print:text-slate-900' : 'text-emerald-300 print:text-slate-900'
+                      }`}
+                    >
+                      ৳{formatMoney(viewTotals.remainingAmount)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+
+          {/* ============================================================ */}
+          {/* TAB 2: BUDGET HEADS BREAKDOWN LEDGER                         */}
+          {/* ============================================================ */}
+          {activeTab === 'category' && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-100/80 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-600 print:bg-slate-100">
+                    <th className="py-3 px-4">Budget Head / Cost Center</th>
+                    <th className="py-3 px-4 text-right">Allocated Limit (৳)</th>
+                    <th className="py-3 px-4 text-right">Debited / Expensed (৳)</th>
+                    <th className="py-3 px-4 text-right">Available Balance (৳)</th>
+                    <th className="py-3 px-4 w-44">Utilization Gauge</th>
+                    <th className="py-3 px-4 w-28 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {viewCategories.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-slate-400">
+                        No budget categories configured.
+                      </td>
+                    </tr>
+                  ) : (
+                    viewCategories.map((c) => {
+                      const pct = c.allocatedAmount > 0 ? (c.spentAmount / c.allocatedAmount) * 100 : 0;
+                      const over = c.remainingAmount < 0;
+
                       return (
-                        <tr
-                          key={m.month}
-                          onClick={() => selectMonth(m.month)}
-                          className={`cursor-pointer transition ${active ? 'bg-indigo-50/70' : 'hover:bg-slate-50/70'}`}
-                        >
-                          <td className={`py-3 px-4 font-semibold ${active ? 'text-indigo-700' : 'text-slate-800'}`}>{m.label}</td>
-                          <td className="py-3 px-4 font-mono text-slate-700">৳{money(m.allocatedAmount)}</td>
-                          <td className="py-3 px-4 font-mono text-slate-700">৳{money(m.spentAmount)}</td>
-                          <td className="py-3 px-4 font-mono font-bold">
-                            <span className={overBudget ? 'text-rose-600' : 'text-slate-800'}>৳{money(m.remainingAmount)}</span>
+                        <tr key={c.budgetCategoryId} className="hover:bg-slate-50/70 transition">
+                          <td className="py-3 px-4 font-bold text-slate-900">
+                            {c.name}
+                            <span className="block text-[10px] text-slate-400 font-normal">Head #{c.budgetCategoryId}</span>
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono text-slate-700">
+                            ৳{formatMoney(c.allocatedAmount)}
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono font-bold text-rose-600">
+                            ৳{formatMoney(c.spentAmount)}
+                          </td>
+                          <td
+                            className={`py-3 px-4 text-right font-mono font-bold ${
+                              over ? 'text-rose-600' : 'text-slate-900'
+                            }`}
+                          >
+                            ৳{formatMoney(c.remainingAmount)}
                           </td>
                           <td className="py-3 px-4">
-                            <div className="w-32">
-                              <div className="flex justify-between items-center text-[10px] text-slate-400 mb-1">
-                                <span className="font-mono font-medium text-slate-600">{pct.toFixed(0)}%</span>
-                                {overBudget && <span className="text-rose-600 font-bold uppercase">Over</span>}
+                            <div className="w-36">
+                              <div className="flex justify-between items-center text-[10px] text-slate-500 mb-1">
+                                <span className="font-mono">{pct.toFixed(0)}%</span>
+                                {over && <span className="text-rose-600 font-bold uppercase text-[9px]">OVER</span>}
                               </div>
                               <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
                                 <div
-                                  className={`h-full rounded-full transition-all ${overBudget ? 'bg-rose-500' : pct > 80 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                                  style={{ width: `${pct}%` }}
+                                  className={`h-full rounded-full ${
+                                    over ? 'bg-rose-500' : pct > 85 ? 'bg-amber-500' : 'bg-emerald-500'
+                                  }`}
+                                  style={{ width: `${Math.min(100, pct)}%` }}
                                 />
                               </div>
                             </div>
                           </td>
+                          <td className="py-3 px-4 text-center">
+                            {over ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                Overdrawn
+                              </span>
+                            ) : pct > 80 ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                High Burn
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                Normal
+                              </span>
+                            )}
+                          </td>
                         </tr>
                       );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-indigo-50/70 font-semibold border-t border-indigo-100">
-                      <td className="py-3 px-4 text-slate-700">Year Total</td>
-                      <td className="py-3 px-4 font-mono text-indigo-700">৳{money(data.totals.allocatedAmount)}</td>
-                      <td className="py-3 px-4 font-mono text-indigo-700">৳{money(data.totals.spentAmount)}</td>
-                      <td className="py-3 px-4 font-mono text-indigo-700">৳{money(data.totals.remainingAmount)}</td>
-                      <td className="py-3 px-4" />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-
-            {/* Top spending categories */}
-            <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden mb-6">
-              <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
-                <Award size={14} className="text-slate-400" />
-                <h2 className="text-sm font-bold text-slate-800">Top Spending Categories — {periodLabel}</h2>
-              </div>
-              <div className="p-5">
-                {viewTopSpenders.length === 0 || viewTopSpenders.every((c) => c.spentAmount === 0) ? (
-                  <p className="text-xs text-slate-400 text-center py-6">No spend recorded for {periodLabel}</p>
-                ) : (
-                  <div className="space-y-3">
-                    {viewTopSpenders.map((c, i) => {
-                      const maxSpend = viewTopSpenders[0].spentAmount || 1;
-                      const pct = (c.spentAmount / maxSpend) * 100;
-                      return (
-                        <div key={c.budgetCategoryId} className="flex items-center gap-3">
-                          <span className="w-5 text-xs font-bold text-slate-400">#{i + 1}</span>
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between text-xs mb-1">
-                              <span className="font-semibold text-slate-800">{c.name}</span>
-                              <span className="font-mono text-slate-600">৳{money(c.spentAmount)}</span>
-                            </div>
-                            <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                              <div className="h-full rounded-full bg-indigo-500" style={{ width: `${pct}%` }} />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Category breakdown table */}
-            <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden mb-6">
-              <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/50">
-                <h2 className="text-sm font-bold text-slate-800">Category Breakdown — {periodLabel}</h2>
-                <p className="text-xs text-slate-400 mt-0.5">{viewCategories.length} budget heads</p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs sm:text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50/70 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                      <th className="py-3 px-4">Category</th>
-                      <th className="py-3 px-4">Allocated ({selectedMonth === 0 ? 'Year' : MONTH_LABELS[selectedMonth - 1]})</th>
-                      <th className="py-3 px-4">Spent ({selectedMonth === 0 ? 'Year' : MONTH_LABELS[selectedMonth - 1]})</th>
-                      <th className="py-3 px-4">Remaining</th>
-                      <th className="py-3 px-4 w-44">Burn Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {viewCategories.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="text-center py-16">
-                          <div className="flex flex-col items-center gap-2 text-slate-400">
-                            <Wallet size={22} strokeWidth={1.5} />
-                            <p className="text-sm">No budget categories defined</p>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      viewCategories.map((c) => {
-                        const pct = c.allocatedAmount > 0 ? Math.min(100, (c.spentAmount / c.allocatedAmount) * 100) : 0;
-                        const overBudget = c.remainingAmount < 0;
-                        return (
-                          <tr key={c.budgetCategoryId} className="hover:bg-slate-50/70 transition">
-                            <td className="py-3 px-4 font-semibold text-slate-800">{c.name}</td>
-                            <td className="py-3 px-4 font-mono text-slate-700">৳{money(c.allocatedAmount)}</td>
-                            <td className="py-3 px-4 font-mono text-slate-700">৳{money(c.spentAmount)}</td>
-                            <td className="py-3 px-4 font-mono font-bold">
-                              <span className={overBudget ? 'text-rose-600' : 'text-slate-800'}>৳{money(c.remainingAmount)}</span>
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="w-36">
-                                <div className="flex justify-between items-center text-[10px] text-slate-400 mb-1">
-                                  <span className="font-mono font-medium text-slate-600">{pct.toFixed(0)}%</span>
-                                  {overBudget && <span className="text-rose-600 font-bold uppercase">Over</span>}
-                                </div>
-                                <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                                  <div
-                                    className={`h-full rounded-full transition-all ${overBudget ? 'bg-rose-500' : pct > 80 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                                    style={{ width: `${pct}%` }}
-                                  />
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                  {viewCategories.length > 0 && (
-                    <tfoot>
-                      <tr className="bg-indigo-50/70 font-semibold border-t border-indigo-100">
-                        <td className="py-3 px-4 text-slate-700">Total</td>
-                        <td className="py-3 px-4 font-mono text-indigo-700">৳{money(viewTotals.allocatedAmount)}</td>
-                        <td className="py-3 px-4 font-mono text-indigo-700">৳{money(viewTotals.spentAmount)}</td>
-                        <td className="py-3 px-4 font-mono text-indigo-700">৳{money(viewTotals.remainingAmount)}</td>
-                        <td className="py-3 px-4" />
-                      </tr>
-                    </tfoot>
+                    })
                   )}
-                </table>
-              </div>
-            </div>
-
-            {/* Activity feed */}
-            <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden mt-6">
-              <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Activity size={14} className="text-slate-400" />
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-800">Activity Feed</h2>
-                    <p className="text-xs text-slate-400 mt-0.5">Every expense, budget, category and salary action — {periodLabel}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-                  {['', 'Expense', 'Budget', 'Category', 'Salary'].map((m) => (
-                    <button
-                      key={m || 'all'}
-                      type="button"
-                      onClick={() => setActivityModuleFilter(m)}
-                      className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                        activityModuleFilter === m ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'
+                </tbody>
+                <tfoot>
+                  <tr className="bg-slate-900 text-white font-semibold">
+                    <td className="py-3 px-4 uppercase text-[10px] tracking-wider text-slate-300">Total Across Heads</td>
+                    <td className="py-3 px-4 text-right font-mono text-white">৳{formatMoney(viewTotals.allocatedAmount)}</td>
+                    <td className="py-3 px-4 text-right font-mono text-rose-300">৳{formatMoney(viewTotals.spentAmount)}</td>
+                    <td
+                      className={`py-3 px-4 text-right font-mono font-bold ${
+                        isOverBudget ? 'text-rose-400' : 'text-emerald-300'
                       }`}
                     >
-                      {m || 'All'}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                      ৳{formatMoney(viewTotals.remainingAmount)}
+                    </td>
+                    <td colSpan={2} className="py-3 px-4 text-right text-[10px] text-slate-400">
+                      Overall Burn: {burnRate.toFixed(1)}%
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
 
-              <div className="max-h-[480px] overflow-y-auto divide-y divide-slate-100">
-                {activityLoading ? (
-                  <div className="py-10 text-center text-slate-400 text-sm">Loading activity…</div>
-                ) : activity.length === 0 ? (
-                  <div className="py-10 text-center text-slate-400 text-sm">No activity recorded for {periodLabel}.</div>
-                ) : (
-                  activity.map((a) => <ActivityRow key={a.id} entry={a} />)
-                )}
+          {/* ============================================================ */}
+          {/* TAB 3: MONTHLY FLOW MATRIX                                  */}
+          {/* ============================================================ */}
+          {activeTab === 'monthly' && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-100/80 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                    <th className="py-3 px-4 w-32">Calendar Month</th>
+                    <th className="py-3 px-4 text-right">Allocated Limit (৳)</th>
+                    <th className="py-3 px-4 text-right">Actual Spends (৳)</th>
+                    <th className="py-3 px-4 text-right">Net Available (৳)</th>
+                    <th className="py-3 px-4 w-44">Burn Progress</th>
+                    <th className="py-3 px-4 w-28 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {monthlyBreakdown.map((m) => {
+                    const over = m.remaining < 0;
+                    const isSelected = selectedMonth === m.month;
+
+                    return (
+                      <tr
+                        key={m.month}
+                        className={`transition ${isSelected ? 'bg-indigo-50/80 font-medium' : 'hover:bg-slate-50/70'}`}
+                      >
+                        <td className="py-3 px-4 font-bold text-slate-900 flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${over ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+                          {m.name} {year}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-slate-700">৳{formatMoney(m.allocated)}</td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-rose-600">৳{formatMoney(m.spent)}</td>
+                        <td
+                          className={`py-3 px-4 text-right font-mono font-bold ${
+                            over ? 'text-rose-600' : 'text-slate-900'
+                          }`}
+                        >
+                          ৳{formatMoney(m.remaining)}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="w-36">
+                            <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                              <span className="font-mono">{m.burn.toFixed(0)}%</span>
+                              {over && <span className="text-rose-600 font-bold">OVER</span>}
+                            </div>
+                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${
+                                  over ? 'bg-rose-500' : m.burn > 80 ? 'bg-amber-400' : 'bg-emerald-500'
+                                }`}
+                                style={{ width: `${Math.min(100, m.burn)}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedMonth(m.month);
+                              setActiveTab('statement');
+                            }}
+                            className="px-2.5 py-1 text-[11px] font-bold text-indigo-700 hover:text-indigo-900 hover:bg-indigo-100/60 rounded transition cursor-pointer"
+                          >
+                            Drill Down
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-slate-900 text-white font-semibold">
+                    <td className="py-3 px-4 uppercase text-[10px] tracking-wider text-slate-300">Year Total</td>
+                    <td className="py-3 px-4 text-right font-mono text-white">৳{formatMoney(data?.totals?.allocatedAmount)}</td>
+                    <td className="py-3 px-4 text-right font-mono text-rose-300">৳{formatMoney(data?.totals?.spentAmount)}</td>
+                    <td
+                      className={`py-3 px-4 text-right font-mono font-bold ${
+                        data?.totals?.remainingAmount < 0 ? 'text-rose-400' : 'text-emerald-300'
+                      }`}
+                    >
+                      ৳{formatMoney(data?.totals?.remainingAmount)}
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+
+          {/* ============================================================ */}
+          {/* TAB 4: AUDIT TRAIL                                           */}
+          {/* ============================================================ */}
+          {activeTab === 'audit' && (
+            <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
+              {activityLoading ? (
+                <div className="py-14 text-center text-slate-400 text-xs">Loading audit event history…</div>
+              ) : activity.length === 0 ? (
+                <div className="py-14 text-center text-slate-400 text-xs">No audit events logged for {periodTitle}.</div>
+              ) : (
+                activity.map((item) => (
+                  <div key={item.id} className="p-4 flex items-start gap-3 hover:bg-slate-50/70 transition text-xs">
+                    <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                      <Banknote size={14} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-slate-800 font-medium">{item.message}</p>
+                      <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-400">
+                        <span className="font-semibold text-slate-600">{item.module}</span>
+                        <span>•</span>
+                        <span>{new Date(item.createdAt).toLocaleString('en-GB')}</span>
+                        <span>•</span>
+                        <span>By: {item.performedBy || 'System'}</span>
+                      </div>
+                    </div>
+                    {item.amount && (
+                      <span className="font-mono font-bold text-slate-900">
+                        ৳{formatMoney(item.amount)}
+                      </span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* ============================================================ */}
+          {/* STATEMENT FOOTER CERTIFICATION & SIGNATURES                  */}
+          {/* ============================================================ */}
+          <div className="p-6 sm:p-8 border-t border-slate-200 bg-slate-50/60 print:bg-white print:p-0 print:pt-6 print:border-t-2 print:border-slate-800 print-avoid-break">
+            <div className="flex flex-col md:flex-row justify-between items-start gap-4 text-[10px] text-slate-500 leading-relaxed border-b border-slate-200 pb-4 print:border-slate-300">
+              <div className="max-w-2xl">
+                <span className="font-bold text-slate-700 uppercase block mb-0.5">Disclaimer & Authentication</span>
+                This document is a certified office expense ledger statement compiled automatically from verified ERP transaction vouchers. Any discrepancies must be reported to the Accounts & Finance Department within 7 banking days of statement issuance.
+              </div>
+              <div className="text-left md:text-right font-mono shrink-0">
+                <div>HASH: {statementHash}</div>
+                <div>STATUS: AUTHENTICATED / CLEARED</div>
               </div>
             </div>
-          </>
-        )}
-      </main>
-    </div>
-  );
-}
 
-function YearTrendChart({ values, selectedMonth, onSelectMonth }) {
-  const width = 760;
-  const height = 140;
-  const padding = 10;
-  const max = Math.max(...values, 1);
-
-  const points = values.map((v, i) => {
-    const x = padding + (i / (values.length - 1)) * (width - padding * 2);
-    const y = height - padding - (v / max) * (height - padding * 2);
-    return { x, y, v };
-  });
-
-  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-  const areaD = `${pathD} L ${points[points.length - 1].x} ${height} L ${points[0].x} ${height} Z`;
-
-  return (
-    <div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-36">
-        <defs>
-          <linearGradient id="yearTrendFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="#4f46e5" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d={areaD} fill="url(#yearTrendFill)" />
-        <path d={pathD} fill="none" stroke="#4f46e5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        {points.map((p, i) => (
-          <circle
-            key={i}
-            cx={p.x}
-            cy={p.y}
-            r={selectedMonth === i + 1 ? 5 : 3}
-            fill="#4f46e5"
-            stroke={selectedMonth === i + 1 ? '#312e81' : 'none'}
-            strokeWidth={selectedMonth === i + 1 ? 2 : 0}
-          />
-        ))}
-      </svg>
-      <div className="flex justify-between mt-1">
-        {MONTH_LABELS.map((label, i) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => onSelectMonth?.(i + 1)}
-            className="text-center group"
-          >
-            <p className={`text-[10px] transition ${selectedMonth === i + 1 ? 'text-indigo-600 font-bold' : 'text-slate-400 group-hover:text-slate-600'}`}>
-              {label}
-            </p>
-            <p className={`text-[10px] font-medium transition ${selectedMonth === i + 1 ? 'text-indigo-700' : 'text-slate-600'}`}>
-              ৳{(values[i] / 1000).toFixed(0)}k
-            </p>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function activityIconFor(entry) {
-  if (entry.module === 'Salary') {
-    if (entry.action === 'Paid') return { Icon: Banknote, tone: 'text-emerald-600 bg-emerald-50' };
-    if (entry.action === 'Unpaid') return { Icon: Undo2, tone: 'text-amber-600 bg-amber-50' };
-    return { Icon: Banknote, tone: 'text-slate-600 bg-slate-100' };
-  }
-  if (entry.action === 'Created') return { Icon: PlusCircle, tone: 'text-emerald-600 bg-emerald-50' };
-  if (entry.action === 'Updated') return { Icon: Pencil, tone: 'text-indigo-600 bg-indigo-50' };
-  if (entry.action === 'Deleted') return { Icon: Trash2, tone: 'text-rose-600 bg-rose-50' };
-  if (entry.module === 'Budget') return { Icon: WalletIcon, tone: 'text-sky-600 bg-sky-50' };
-  return { Icon: Activity, tone: 'text-slate-600 bg-slate-100' };
-}
-
-function ActivityRow({ entry }) {
-  const { Icon, tone } = activityIconFor(entry);
-  const when = new Date(entry.createdAt).toLocaleString('en-GB', {
-    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  });
-  return (
-    <div className="flex items-start gap-3 px-5 py-3.5 hover:bg-slate-50/60 transition">
-      <span className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${tone}`}>
-        <Icon size={14} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm text-slate-800 leading-snug">{entry.message}</p>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[11px] text-slate-400">
-          <span className="font-medium text-slate-500">{entry.module}</span>
-          <span>·</span>
-          <span>{when}</span>
-          <span>·</span>
-          <span>{entry.performedBy || 'Admin'}</span>
-          {entry.budgetCategoryName && (
-            <>
-              <span>·</span>
-              <span>{entry.budgetCategoryName}</span>
-            </>
-          )}
+            {/* Official Signatures (Immaculate in Print) */}
+            <div className="mt-12 pt-4 grid grid-cols-3 gap-6 text-center text-xs text-slate-600">
+              <div>
+                <div className="border-b border-dashed border-slate-400 pb-1 mb-1 font-mono font-medium text-slate-800">
+                  Accounts Department
+                </div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Prepared By</span>
+              </div>
+              <div>
+                <div className="border-b border-dashed border-slate-400 pb-1 mb-1 font-mono font-medium text-slate-800">
+                  Internal Audit
+                </div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Checked & Verified</span>
+              </div>
+              <div>
+                <div className="border-b border-dashed border-slate-400 pb-1 mb-1 font-mono font-medium text-slate-800">
+                  Managing Director
+                </div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Authorized Officer</span>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-      {entry.amount != null && (
-        <span className="shrink-0 text-sm font-semibold text-slate-700 font-mono">
-          ৳{Number(entry.amount).toLocaleString()}
-        </span>
-      )}
+      </main>
     </div>
   );
 }

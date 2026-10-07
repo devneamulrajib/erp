@@ -98,6 +98,7 @@ app.use('/api/portal/notifications', require('./routes/portalNotifications'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/assign-share', require('./routes/assignShare'));
 app.use('/api/payslip', require('./routes/paySlip'));
+app.use('/api/attendance-corrections', require('./routes/attendanceCorrection'));
 app.use('/api/approvals', require('./routes/approvals'));
 app.use('/api/activity-log', require('./routes/activityLog'));
 

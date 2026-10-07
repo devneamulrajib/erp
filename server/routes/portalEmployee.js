@@ -5,6 +5,9 @@ const { Employee, EmployeeAdvance, LeaveRequest, Attendance } = require('../mode
 const { notifyAdmin } = require('../utils/notify');
 
 router.use(portalAuth, requireRole('employee'));
+router.use('/salary', require('./portalSalary'));
+router.use('/requests', require('./portalEmployeeRequests'));
+router.use('/account', require('./portalEmployeeAccount'));
 
 /* ---------- Attendance settings (edit here) ---------- */
 const TIMEZONE = process.env.APP_TIMEZONE || 'Asia/Dhaka';
@@ -94,8 +97,7 @@ router.get('/profile', async (req, res) => {
     const employee = await Employee.findByPk(req.portalUser.customerId, {
       attributes: [
         'id', 'name', 'code', 'designation', 'department', 'phone', 'email',
-        'joiningDate', 'basicSalary', 'houseRent', 'medicalAllowance',
-        'otherAllowance', 'grossSalary', 'bankName', 'bankAccountNo', 'status',
+        'joiningDate', 'bankName', 'bankAccountNo', 'status',
       ],
     });
     if (!employee) return res.status(404).json({ message: 'Not found' });
