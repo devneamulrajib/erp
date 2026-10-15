@@ -1,13 +1,28 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
-import { Pencil, Trash2, Landmark } from 'lucide-react';
+import { Pencil, Trash2, Landmark, List } from 'lucide-react';
 import {
   getBankAccounts, createBankAccount, updateBankAccount, deleteBankAccount,
+  getBankSummary, getBankTransactions,
 } from '../api/bankAccount';
+
+const fmtDate = (d) =>
+  d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+
+function formatMoney(n) {
+  return (Number(n) || 0).toLocaleString('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+const STATUS_STYLE = {
+  Pending: 'bg-amber-50 text-amber-700',
+  Honour: 'bg-emerald-50 text-emerald-700',
+  DisHonour: 'bg-red-50 text-red-700',
+};
 
 export default function BankAccountPage() {
   const [accounts, setAccounts] = useState([]);
+  const [summary, setSummary] = useState({});
   const [loading, setLoading] = useState(true);
 
   const [editingId, setEditingId] = useState(null);
@@ -16,11 +31,19 @@ export default function BankAccountPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
+  const [openId, setOpenId] = useState(null);
+  const [txn, setTxn] = useState(null);
+  const [txnLoading, setTxnLoading] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getBankAccounts();
+      const [data, sum] = await Promise.all([
+        getBankAccounts(),
+        getBankSummary().catch(() => ({})),
+      ]);
       setAccounts(Array.isArray(data) ? data : []);
+      setSummary(sum || {});
     } catch (err) {
       console.error('Failed to load bank accounts', err);
       setAccounts([]);
@@ -30,6 +53,23 @@ export default function BankAccountPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  async function toggleTransactions(id) {
+    if (openId === id) {
+      setOpenId(null);
+      return;
+    }
+    setOpenId(id);
+    setTxn(null);
+    setTxnLoading(true);
+    try {
+      setTxn(await getBankTransactions(id));
+    } catch (err) {
+      setTxn({ rows: [], opening: 0, closing: 0, error: err.response?.data?.message || err.message });
+    } finally {
+      setTxnLoading(false);
+    }
+  }
 
   function resetForm() {
     setEditingId(null);
@@ -78,10 +118,6 @@ export default function BankAccountPage() {
     } catch (err) {
       window.alert(err.response?.data?.message || 'Failed to delete');
     }
-  }
-
-  function formatMoney(n) {
-    return (n || 0).toLocaleString('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   return (
@@ -154,42 +190,123 @@ export default function BankAccountPage() {
               <thead>
                 <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
                   <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Name</th>
-                  <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Balance</th>
-                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Last Updated</th>
+                  <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Opening</th>
+                  <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Received</th>
+                  <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Paid</th>
+                  <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Current Balance</th>
                   <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={4} className="text-center py-12 text-slate-400 text-sm">Loading…</td></tr>
+                  <tr><td colSpan={6} className="text-center py-12 text-slate-400 text-sm">Loading…</td></tr>
                 ) : accounts.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="text-center py-16">
+                    <td colSpan={6} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <Landmark size={28} strokeWidth={1.5} />
                         <p className="text-sm">No bank accounts yet. Add one above to get started.</p>
                       </div>
                     </td>
                   </tr>
-                ) : accounts.map((a) => (
-                  <tr key={a.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="px-5 py-3.5 font-medium text-slate-800">{a.name}</td>
-                    <td className="px-5 py-3.5 text-right font-mono text-slate-700">{formatMoney(a.balance)}</td>
-                    <td className="px-5 py-3.5 text-slate-500">
-                      {a.lastUpdated ? new Date(a.lastUpdated).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <div className="flex gap-1.5">
-                        <button onClick={() => startEdit(a)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors" title="Edit">
-                          <Pencil size={14} />
-                        </button>
-                        <button onClick={() => handleDelete(a.id)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors" title="Delete">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                ) : accounts.map((a) => {
+                  const s = summary[a.id] || { current: Number(a.balance) || 0, received: 0, paid: 0, pendingCheques: 0 };
+                  return (
+                    <Fragment key={a.id}>
+                      <tr className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-5 py-3.5 font-medium text-slate-800">
+                          {a.name}
+                          {s.pendingCheques > 0 && (
+                            <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                              {formatMoney(s.pendingCheques)} cheques pending
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-right font-mono text-slate-500">{formatMoney(a.balance)}</td>
+                        <td className="px-5 py-3.5 text-right font-mono text-emerald-700">{formatMoney(s.received)}</td>
+                        <td className="px-5 py-3.5 text-right font-mono text-rose-600">{formatMoney(s.paid)}</td>
+                        <td className="px-5 py-3.5 text-right font-mono font-semibold text-slate-900">{formatMoney(s.current)}</td>
+                        <td className="px-5 py-3.5">
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => toggleTransactions(a.id)}
+                              className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
+                                openId === a.id ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500 hover:bg-indigo-100 hover:text-indigo-600'
+                              }`}
+                              title="View transactions"
+                            >
+                              <List size={14} />
+                            </button>
+                            <button onClick={() => startEdit(a)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors" title="Edit">
+                              <Pencil size={14} />
+                            </button>
+                            <button onClick={() => handleDelete(a.id)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 transition-colors" title="Delete">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {openId === a.id && (
+                        <tr className="bg-slate-50/60">
+                          <td colSpan={6} className="px-5 py-4">
+                            {txnLoading ? (
+                              <p className="text-center text-sm text-slate-400 py-4">Loading transactions…</p>
+                            ) : txn?.error ? (
+                              <p className="text-center text-sm text-red-600 py-4">{txn.error}</p>
+                            ) : !txn || txn.rows.length === 0 ? (
+                              <p className="text-center text-sm text-slate-400 py-4">
+                                No transactions yet for this bank.
+                              </p>
+                            ) : (
+                              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="bg-slate-50 text-slate-500">
+                                      <th className="px-3 py-2 text-left font-medium">Date</th>
+                                      <th className="px-3 py-2 text-left font-medium">Voucher</th>
+                                      <th className="px-3 py-2 text-left font-medium">Details</th>
+                                      <th className="px-3 py-2 text-right font-medium">In</th>
+                                      <th className="px-3 py-2 text-right font-medium">Out</th>
+                                      <th className="px-3 py-2 text-right font-medium">Balance</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {txn.rows.map((r, i) => (
+                                      <tr key={`${r.id}-${i}`}>
+                                        <td className="whitespace-nowrap px-3 py-2 text-slate-600">{fmtDate(r.date)}</td>
+                                        <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-700">
+                                          {r.type}-{r.voucherNo}
+                                        </td>
+                                        <td className="px-3 py-2 text-slate-600">
+                                          {r.description}
+                                          {r.status && (
+                                            <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_STYLE[r.status] || ''}`}>
+                                              {r.status}
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="px-3 py-2 text-right font-mono text-emerald-700">
+                                          {r.debit ? formatMoney(r.debit) : ''}
+                                        </td>
+                                        <td className="px-3 py-2 text-right font-mono text-rose-600">
+                                          {r.credit ? formatMoney(r.credit) : ''}
+                                        </td>
+                                        <td className="px-3 py-2 text-right font-mono font-medium text-slate-800">
+                                          {formatMoney(r.balance)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

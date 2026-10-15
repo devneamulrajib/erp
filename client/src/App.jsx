@@ -1,4 +1,5 @@
 // client/src/App.jsx
+import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -125,7 +126,13 @@ import AccountantDashboard from './pages/AccountantDashboard'
 
 import AttendanceLogPage from './pages/AttendanceLogPage'
 
-// --- Portal ---
+// --- Core Portal ---
+import PortalLogin from './portal/pages/PortalLogin'
+import PortalDashboard from './portal/pages/PortalDashboard'
+import PortalEmployeeDashboard from './portal/pages/PortalEmployeeDashboard'
+import PortalAttendancePage from './portal/pages/PortalAttendancePage'
+import PortalLeaveRequestPage from './portal/pages/PortalLeaveRequestPage'
+import PortalAdvanceRequestPage from './portal/pages/PortalAdvanceRequestPage'
 import PortalMyRequestsPage from './portal/pages/PortalMyRequestsPage'
 import PortalEmployeeProfilePage from './portal/pages/PortalEmployeeProfilePage'
 import PortalInvoices from './portal/pages/PortalInvoices'
@@ -135,26 +142,34 @@ import PortalRequestsPage from './portal/pages/PortalRequestsPage'
 import PortalPurchaseOrderView from './portal/pages/PortalPurchaseOrderView'
 import PortalMaterialRequisitionsPage from './portal/pages/PortalMaterialRequisitionsPage'
 import PortalMaterialRequisitionView from './portal/pages/PortalMaterialRequisitionView'
-import PortalLogin from './portal/pages/PortalLogin'
-import PortalDashboard from './portal/pages/PortalDashboard'
-import PortalAttendancePage from './portal/pages/PortalAttendancePage'
-import PortalEmployeeDashboard from './portal/pages/PortalEmployeeDashboard'
-import PortalLeaveRequestPage from './portal/pages/PortalLeaveRequestPage'
-import PortalAdvanceRequestPage from './portal/pages/PortalAdvanceRequestPage'
 import PortalProtectedRoute from './portal/components/PortalProtectedRoute'
+
+// --- Investor Portal Experience ---
+import InvestorPortalLayout from './portal/investor/components/InvestorPortalLayout'
+import { InvestorPrivacyProvider } from './portal/investor/context/InvestorPrivacyContext'
+import PortalInvestorDashboard from './portal/pages/PortalInvestorDashboard'
+import PortalInvestorInvestments from './portal/pages/PortalInvestorInvestments'
+import PortalInvestorInvestmentDetail from './portal/pages/PortalInvestorInvestmentDetail'
+import PortalInvestorHistory from './portal/pages/PortalInvestorHistory'
+import PortalInvestorCompare from './portal/pages/PortalInvestorCompare'
+import PortalInvestorPayments from './portal/pages/PortalInvestorPayments'
+import PortalInvestorProfile from './portal/pages/PortalInvestorProfile'
+import PortalInvestorInbox from './portal/pages/PortalInvestorInbox'
 
 import PaySlipProcess from './pages/PaySlipProcess'
 import PaySlip from './pages/PaySlip'
+import SupportTicketsPage from './pages/SupportTicketsPage';
 
-// --- Investors ---
+
+// --- Investors (Admin / ERP) ---
 import InvestorDashboardPage from './pages/InvestorDashboardPage'
 import InvestorListPage from './pages/InvestorListPage'
+import InvestorProfilePage from './pages/InvestorProfilePage'
 import InvestmentListPage from './pages/InvestmentListPage'
 import InvestmentDetailPage from './pages/InvestmentDetailPage'
 import InvestorReportsPage from './pages/InvestorReportsPage'
 
 import TitleManager from './components/TitleManager'
-// --- Team members / role-based access ---
 import UserManagementPage from './pages/UserManagementPage'
 import { canAccessModule, getModuleForPath } from './config/permissions'
 
@@ -211,12 +226,18 @@ function PortalPublicOnlyRoute({ children }) {
   return children;
 }
 
-// Employees and customers/suppliers land on different dashboards after
-// login, but both use the same /portal/dashboard URL.
+// Dynamically routes portal users to their dedicated dashboard based on assigned role
 function PortalDashboardRouter() {
   const raw = localStorage.getItem('portalUser');
   const user = raw ? JSON.parse(raw) : null;
-  return user?.role === 'employee' ? <PortalEmployeeDashboard /> : <PortalDashboard />;
+
+  if (user?.role === 'employee') {
+    return <PortalEmployeeDashboard />;
+  }
+  if (user?.role === 'investor') {
+    return <Navigate to="/portal/investor/dashboard" replace />;
+  }
+  return <PortalDashboard />;
 }
 
 function App() {
@@ -224,6 +245,9 @@ function App() {
     <BrowserRouter>
       <TitleManager />
       <Routes>
+        {/* ========================================================
+            --- PUBLIC & ERP CORE ROUTES ---
+        ======================================================== */}
         <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/dashboard/project" element={<ProtectedRoute><ProjectDashboard /></ProtectedRoute>} />
@@ -347,14 +371,13 @@ function App() {
         <Route path="/inventory-module/reports/stock" element={<ProtectedRoute><StockReportPage /></ProtectedRoute>} />
         <Route path="/hrm-module/attendance-log" element={<ProtectedRoute><AttendanceLogPage /></ProtectedRoute>} />
 
-        {/* ========================================================
-            --- HRM MODULE ROUTES ---
-        ======================================================== */}
+        {/* --- HRM MODULE ROUTES --- */}
         <Route path="/hrm-module/employee" element={<ProtectedRoute><EmployeeListPage /></ProtectedRoute>} />
         <Route path="/hrm-module/reports/:reportName" element={<ProtectedRoute><EmployeeListPage /></ProtectedRoute>} />
         <Route path="/hrm-module/pay-slip-process" element={<ProtectedRoute><PaySlipProcess /></ProtectedRoute>} />
         <Route path="/hrm-module/pay-slip" element={<ProtectedRoute><PaySlip /></ProtectedRoute>} />
         <Route path="/hrm-module/:subpage" element={<ProtectedRoute><EmployeeListPage /></ProtectedRoute>} />
+        <Route path="/support-tickets" element={<AdminOnlyRoute><SupportTicketsPage /></AdminOnlyRoute>} />
 
         <Route path="/dashboard/accounts" element={<ProtectedRoute><AccountsDashboard /></ProtectedRoute>} />
         <Route path="/inventory-module/reports/purchase-order-receive-details" element={<ProtectedRoute><PurchaseOrderReceiveReportPage /></ProtectedRoute>} />
@@ -369,7 +392,7 @@ function App() {
         <Route path="/accounts-module/reports/balance-sheet" element={<ProtectedRoute><BalanceSheetPage /></ProtectedRoute>} />
         <Route path="/accounts-module/reports/trial-balance" element={<ProtectedRoute><TrialBalancePage /></ProtectedRoute>} />
 
-        {/* --- Office budget module --- */}
+        {/* --- Office Budget Module --- */}
         <Route path="/accounts-module/office-budget" element={<ProtectedRoute><OfficeBudgetPage /></ProtectedRoute>} />
         <Route path="/accounts-module/budget-categories" element={<ProtectedRoute><BudgetCategoryPage /></ProtectedRoute>} />
         <Route path="/accounts-module/office-expense-list" element={<ProtectedRoute><OfficeExpenseListPage /></ProtectedRoute>} />
@@ -381,35 +404,70 @@ function App() {
         <Route path="/accounts-module/approval-center" element={<AdminOnlyRoute><AdminApprovalCenter /></AdminOnlyRoute>} />
         <Route path="/dashboard/accountant" element={<ProtectedRoute><AccountantDashboard /></ProtectedRoute>} />
 
-        {/* --- Investors --- */}
+        {/* --- Investors (Admin / ERP Panel) --- */}
         <Route path="/investors/dashboard" element={<ProtectedRoute><InvestorDashboardPage /></ProtectedRoute>} />
         <Route path="/investors" element={<ProtectedRoute><InvestorListPage /></ProtectedRoute>} />
+        <Route path="/investors/:id" element={<ProtectedRoute><InvestorProfilePage /></ProtectedRoute>} />
         <Route path="/investments" element={<ProtectedRoute><InvestmentListPage /></ProtectedRoute>} />
         <Route path="/investments/:id" element={<ProtectedRoute><InvestmentDetailPage /></ProtectedRoute>} />
         <Route path="/investor-reports" element={<ProtectedRoute><InvestorReportsPage /></ProtectedRoute>} />
 
-        {/* --- Team members / role-based access --- */}
+        {/* --- Team / User Settings --- */}
         <Route path="/settings/users" element={<AdminOnlyRoute><UserManagementPage /></AdminOnlyRoute>} />
 
-        {/* --- Portal --- */}
+        {/* ========================================================
+            --- CLIENT & EMPLOYEE PORTAL ROUTES ---
+        ======================================================== */}
         <Route path="/portal/login" element={<PortalPublicOnlyRoute><PortalLogin /></PortalPublicOnlyRoute>} />
-        <Route path="/portal/dashboard" element={<PortalProtectedRoute><PortalDashboardRouter /></PortalProtectedRoute>} />
-        <Route path="/portal/employee/attendance" element={<PortalProtectedRoute><PortalAttendancePage /></PortalProtectedRoute>} />
-        <Route path="/portal/employee/leave" element={<PortalProtectedRoute><PortalLeaveRequestPage /></PortalProtectedRoute>} />
-        <Route path="/portal/employee/advance" element={<PortalProtectedRoute><PortalAdvanceRequestPage /></PortalProtectedRoute>} />
-        <Route path="/portal/employee/requests" element={<PortalProtectedRoute><PortalMyRequestsPage /></PortalProtectedRoute>} />
-        <Route path="/portal/employee/profile" element={<PortalProtectedRoute><PortalEmployeeProfilePage /></PortalProtectedRoute>} />
-        <Route path="/portal/invoices" element={<PortalProtectedRoute><PortalInvoices /></PortalProtectedRoute>} />
-        <Route path="/portal/quotes" element={<PortalProtectedRoute><PortalQuotesPage /></PortalProtectedRoute>} />
-        <Route path="/portal/orders" element={<PortalProtectedRoute><PortalOrdersPage /></PortalProtectedRoute>} />
-        <Route path="/portal/orders/:id" element={<PortalProtectedRoute><PortalPurchaseOrderView /></PortalProtectedRoute>} />
-        <Route path="/portal/requests" element={<PortalProtectedRoute><PortalRequestsPage /></PortalProtectedRoute>} />
-        <Route path="/portal/material-requisitions" element={<PortalProtectedRoute><PortalMaterialRequisitionsPage /></PortalProtectedRoute>} />
-        <Route path="/portal/material-requisitions/:id" element={<PortalProtectedRoute><PortalMaterialRequisitionView /></PortalProtectedRoute>} />
+        <Route
+          path="/portal/dashboard"
+          element={
+            <PortalProtectedRoute allowedRoles={['customer', 'supplier', 'employee', 'investor']}>
+              <PortalDashboardRouter />
+            </PortalProtectedRoute>
+          }
+        />
+        <Route path="/portal/employee/attendance" element={<PortalProtectedRoute allowedRoles={['employee']}><PortalAttendancePage /></PortalProtectedRoute>} />
+        <Route path="/portal/employee/leave" element={<PortalProtectedRoute allowedRoles={['employee']}><PortalLeaveRequestPage /></PortalProtectedRoute>} />
+        <Route path="/portal/employee/advance" element={<PortalProtectedRoute allowedRoles={['employee']}><PortalAdvanceRequestPage /></PortalProtectedRoute>} />
+        <Route path="/portal/employee/requests" element={<PortalProtectedRoute allowedRoles={['employee']}><PortalMyRequestsPage /></PortalProtectedRoute>} />
+        <Route path="/portal/employee/profile" element={<PortalProtectedRoute allowedRoles={['employee']}><PortalEmployeeProfilePage /></PortalProtectedRoute>} />
+        <Route path="/portal/invoices" element={<PortalProtectedRoute allowedRoles={['customer', 'supplier']}><PortalInvoices /></PortalProtectedRoute>} />
+        <Route path="/portal/quotes" element={<PortalProtectedRoute allowedRoles={['customer', 'supplier']}><PortalQuotesPage /></PortalProtectedRoute>} />
+        <Route path="/portal/orders" element={<PortalProtectedRoute allowedRoles={['customer', 'supplier']}><PortalOrdersPage /></PortalProtectedRoute>} />
+        <Route path="/portal/orders/:id" element={<PortalProtectedRoute allowedRoles={['customer', 'supplier']}><PortalPurchaseOrderView /></PortalProtectedRoute>} />
+        <Route path="/portal/requests" element={<PortalProtectedRoute allowedRoles={['customer', 'supplier']}><PortalRequestsPage /></PortalProtectedRoute>} />
+        <Route path="/portal/material-requisitions" element={<PortalProtectedRoute allowedRoles={['customer', 'supplier', 'employee']}><PortalMaterialRequisitionsPage /></PortalProtectedRoute>} />
+        <Route path="/portal/material-requisitions/:id" element={<PortalProtectedRoute allowedRoles={['customer', 'supplier', 'employee']}><PortalMaterialRequisitionView /></PortalProtectedRoute>} />
+
+        {/* ========================================================
+            --- DEDICATED INVESTOR PORTAL (QUIET WEALTH) ---
+        ======================================================== */}
+        <Route
+          path="/portal/investor"
+          element={
+            <PortalProtectedRoute allowedRoles={['investor']}>
+              <InvestorPrivacyProvider>
+                <InvestorPortalLayout />
+              </InvestorPrivacyProvider>
+            </PortalProtectedRoute>
+          }
+        >
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<PortalInvestorDashboard />} />
+          <Route path="investments" element={<PortalInvestorInvestments />} />
+          <Route path="investments/:id" element={<PortalInvestorInvestmentDetail />} />
+          <Route path="history" element={<PortalInvestorHistory />} />
+          <Route path="compare" element={<PortalInvestorCompare />} />
+          <Route path="payments" element={<PortalInvestorPayments />} />
+          <Route path="inbox" element={<PortalInvestorInbox />} />
+          <Route path="profile" element={<PortalInvestorProfile />} />
+        </Route>
+
         <Route path="/portal" element={<Navigate to="/portal/dashboard" replace />} />
 
         {/* Fallback */}
-        <Route path="*" element={<Navigate to="/login" />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   )
