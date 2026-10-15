@@ -1,10 +1,12 @@
 // server/utils/investorCalculations.js
+const { Op } = require('sequelize');
 const {
   Sale,
   Expense,
   Purchase,
   ContractorBill,
   LabourBill,
+  Project,
 } = require('../models/associations');
 
 /**
@@ -23,24 +25,36 @@ async function safeSum(label, model, field, where) {
 }
 
 /**
- * Calculates Project Financials (Revenue, Expenses, Net Profit)
- * Reuses existing project-linked tables to prevent double counting.
+ * Short-lived cache so a request that handles several investments in the
+ * same project (summary, compare, ...) calculates that project only once.
+ * Stores the promise, so parallel callers share the same in-flight query.
  */
-async function getProjectFinancials(projectId) {
-  if (!projectId) {
-    return { revenue: 0, expenses: 0, netProfit: 0 };
+const CACHE_TTL_MS = 30 * 1000;
+const financialsCache = new Map(); // projectId -> { at, promise }
+
+async function computeProjectFinancials(projectId) {
+  // Expense stores the project as free text (name), not an ID, so look the
+  // name up and match on either the name or the ID-as-string.
+  let projectName = null;
+  try {
+    const project = await Project.findByPk(projectId);
+    projectName = project?.name || null;
+  } catch (err) {
+    console.warn(`[investorCalculations] Project lookup skipped: ${err.message}`);
   }
+  const expenseKeys = [projectName, String(projectId)].filter(Boolean);
 
-  const where = { projectId };
+  const byProjectId = { projectId };
 
-  // 1. Total Project Revenue
-  const totalSales = await safeSum('Sale', Sale, 'totalAmount', where);
-
-  // 2. Total Project Expenses (operational, materials, contractor and labour costs)
-  const generalExpenses = await safeSum('Expense', Expense, 'amount', where);
-  const purchases = await safeSum('Purchase', Purchase, 'grandTotal', where);
-  const contractorBills = await safeSum('ContractorBill', ContractorBill, 'netPayable', where);
-  const labourBills = await safeSum('LabourBill', LabourBill, 'netPayable', where);
+  const [totalSales, generalExpenses, purchases, contractorBills, labourBills] = await Promise.all([
+    // Revenue
+    safeSum('Sale', Sale, 'grandTotal', byProjectId),
+    // Costs
+    safeSum('Expense', Expense, 'amount', { project: { [Op.in]: expenseKeys } }),
+    safeSum('Purchase', Purchase, 'grandTotal', byProjectId),
+    safeSum('ContractorBill', ContractorBill, 'grandTotal', byProjectId),
+    safeSum('LabourBill', LabourBill, 'grandTotal', byProjectId),
+  ]);
 
   const totalExpenses = generalExpenses + purchases + contractorBills + labourBills;
   const netProfit = Math.max(0, totalSales - totalExpenses);
@@ -50,6 +64,26 @@ async function getProjectFinancials(projectId) {
     expenses: totalExpenses,
     netProfit,
   };
+}
+
+/**
+ * Calculates Project Financials (Revenue, Expenses, Net Profit)
+ * Reuses existing project-linked tables to prevent double counting.
+ */
+async function getProjectFinancials(projectId) {
+  if (!projectId) {
+    return { revenue: 0, expenses: 0, netProfit: 0 };
+  }
+
+  const cached = financialsCache.get(projectId);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+    return cached.promise;
+  }
+
+  const promise = computeProjectFinancials(projectId);
+  financialsCache.set(projectId, { at: Date.now(), promise });
+  promise.catch(() => financialsCache.delete(projectId));
+  return promise;
 }
 
 /**

@@ -756,6 +756,12 @@ Investment.belongsTo(Project, { as: 'project', foreignKey: 'projectId' });
 Investment.belongsTo(Voucher, { as: 'voucher', foreignKey: 'voucherId' });
 InvestorPayment.belongsTo(Voucher, { as: 'voucher', foreignKey: 'voucherId' });
 
+BankAccount.hasMany(InvestorPayment, { foreignKey: 'bankAccountId' });
+InvestorPayment.belongsTo(BankAccount, { as: 'bankAccount', foreignKey: 'bankAccountId' });
+
+BankAccount.hasMany(Investment, { foreignKey: 'bankAccountId' });
+Investment.belongsTo(BankAccount, { as: 'bankAccount', foreignKey: 'bankAccountId' });
+
 Investor.belongsTo(ChartOfAccount, { as: 'ledgerAccount', foreignKey: 'chartOfAccountId' });
 Investor.belongsTo(User, { as: 'portalUser', foreignKey: 'userId' });
 

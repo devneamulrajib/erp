@@ -161,6 +161,19 @@ router.get('/cash-bank-books', auth, async (req, res) => {
       ? await BankAccount.findAll({ where: { id: bank } })
       : await BankAccount.findAll({ order: [['name', 'ASC']] });
 
+    // Receipt / Payment vouchers move the bank by the voucher amount.
+    // Other types keep the old per-entry behaviour.
+    const movements = (v) => {
+      const amt = Number(v.amount) || 0;
+      if (v.type === 'Receipt') return [{ debit: amt, credit: 0, note: '' }];
+      if (v.type === 'Payment') return [{ debit: 0, credit: amt, note: '' }];
+      return (v.entries || []).map((e) => ({
+        debit: Number(e.debit) || 0,
+        credit: Number(e.credit) || 0,
+        note: e.note || '',
+      }));
+    };
+
     const books = [];
 
     for (const b of banks) {
@@ -173,8 +186,8 @@ router.get('/cash-bank-books', auth, async (req, res) => {
       });
       let openingBalance = Number(b.balance) || 0;
       openingVouchers.forEach((v) => {
-        (v.entries || []).forEach((e) => {
-          openingBalance += (Number(e.debit) || 0) - (Number(e.credit) || 0);
+        movements(v).forEach((m) => {
+          openingBalance += m.debit - m.credit;
         });
       });
 
@@ -190,21 +203,19 @@ router.get('/cash-bank-books', auth, async (req, res) => {
       let periodCredit = 0;
 
       periodVouchers.forEach((v) => {
-        (v.entries || []).forEach((e) => {
-          const debit = Number(e.debit) || 0;
-          const credit = Number(e.credit) || 0;
-          periodDebit += debit;
-          periodCredit += credit;
-          running += debit - credit;
+        movements(v).forEach((m) => {
+          periodDebit += m.debit;
+          periodCredit += m.credit;
+          running += m.debit - m.credit;
           rows.push({
             date: v.date,
             voucherLabel: `${v.type}-${v.voucherNo}`,
             voucherId: v.id,
             description: v.contact?.name || v.narration || v.type,
-            debit,
-            credit,
+            debit: m.debit,
+            credit: m.credit,
             balance: running,
-            note: e.note || v.narration || '',
+            note: m.note || v.narration || '',
           });
         });
       });
