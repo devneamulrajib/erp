@@ -116,6 +116,7 @@ app.use('/api/vouchers', require('./routes/voucher'));
 app.use('/api/journal-vouchers', require('./routes/journalVoucher'));
 app.use('/api/contra-vouchers', require('./routes/contraVoucher'));
 app.use('/api/accounting-reports', require('./routes/accountingReports'));
+app.use('/api/support-tickets', require('./routes/supportTicket'));
 
 // ==========================================
 // HR, Payroll & Investor Management Routes

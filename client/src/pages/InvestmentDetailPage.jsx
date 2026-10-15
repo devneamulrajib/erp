@@ -1,54 +1,39 @@
 // client/src/pages/InvestmentDetailPage.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { getInvestmentById, recordInvestorPayment } from '../api/investor';
+import { getInvestmentById, getInvestmentMoney } from '../api/investor';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
+import { PaymentModal, PaymentLinesView, formatBDT, fmtDate } from '../components/InvestorMoneyForms';
 
-const formatBDT = (amount) => `৳ ${Number(amount || 0).toLocaleString('en-IN')}`;
+const TYPE_LABELS = {
+  profit_distribution: 'Profit payout',
+  principal_return: 'Capital return',
+  combined: 'Capital + profit',
+};
 
 export default function InvestmentDetailPage() {
   const { id } = useParams();
   const [data, setData] = useState(null);
+  const [money, setMoney] = useState({ receipts: [], payouts: [], receivedTotal: 0, receivedDue: 0 });
   const [loading, setLoading] = useState(true);
-  const [showPayModal, setShowPayModal] = useState(false);
+  const [modal, setModal] = useState(null); // 'payout' | 'receipt' | null
 
-  const [paymentForm, setPaymentForm] = useState({
-    amount: '',
-    paymentType: 'profit_distribution',
-    paymentMethod: 'Bank',
-    referenceNo: '',
-    notes: '',
-  });
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
-      const res = await getInvestmentById(id);
-      setData(res.data);
+      const [inv, mon] = await Promise.all([getInvestmentById(id), getInvestmentMoney(id)]);
+      setData(inv.data);
+      setMoney(mon.data);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     loadData();
-  }, [id]);
-
-  const handlePaymentSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      await recordInvestorPayment({
-        investmentId: id,
-        ...paymentForm,
-      });
-      setShowPayModal(false);
-      loadData();
-    } catch (err) {
-      alert(err.response?.data?.message || err.message);
-    }
-  };
+  }, [loadData]);
 
   if (loading || !data) {
     return (
@@ -62,6 +47,7 @@ export default function InvestmentDetailPage() {
   }
 
   const m = data.metrics || {};
+  const cancelled = data.status === 'cancelled';
 
   return (
     <div className="min-h-screen w-full bg-slate-50 text-left">
@@ -80,7 +66,7 @@ export default function InvestmentDetailPage() {
         <div className="flex flex-wrap gap-4 justify-between items-center bg-white p-5 rounded-xl border border-slate-200">
           <div>
             <span className="text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
-              {(data.status || '').replace('_', ' ')}
+              {(data.status || '').replace(/_/g, ' ')}
             </span>
             <h1 className="text-2xl font-bold text-slate-800 mt-2">
               Investment {data.investmentCode} — {data.investor?.name}
@@ -89,12 +75,22 @@ export default function InvestmentDetailPage() {
               Project: <span className="font-semibold">{data.project?.name || 'General Operations'}</span> | Date: {data.investmentDate}
             </p>
           </div>
-          <button
-            onClick={() => setShowPayModal(true)}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium shadow-sm transition"
-          >
-            Disburse Payment to Investor
-          </button>
+          {!cancelled && (
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setModal('receipt')}
+                className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg font-medium shadow-sm transition"
+              >
+                Record Payment Received
+              </button>
+              <button
+                onClick={() => setModal('payout')}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium shadow-sm transition"
+              >
+                Pay Investor
+              </button>
+            </div>
+          )}
         </div>
 
         {/* FINANCIAL CALCULATION WATERFALL */}
@@ -134,7 +130,17 @@ export default function InvestmentDetailPage() {
         </div>
 
         {/* Summary Balances */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-2">
+            <p className="text-xs uppercase font-bold text-slate-500">Received from Investor</p>
+            <p className="text-2xl font-bold text-teal-600">{formatBDT(money.receivedTotal)}</p>
+            <p className="text-xs text-slate-400">
+              {money.receivedDue > 0
+                ? `Still to receive: ${formatBDT(money.receivedDue)} of ${formatBDT(m.principal)}`
+                : 'Full investment amount received'}
+            </p>
+          </div>
+
           <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-2">
             <p className="text-xs uppercase font-bold text-slate-500">Current Investment Value</p>
             <p className="text-2xl font-bold text-slate-800">{formatBDT(m.currentInvestmentValue)}</p>
@@ -142,7 +148,7 @@ export default function InvestmentDetailPage() {
           </div>
 
           <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-2">
-            <p className="text-xs uppercase font-bold text-slate-500">Disbursed to Date</p>
+            <p className="text-xs uppercase font-bold text-slate-500">Paid to Investor</p>
             <p className="text-2xl font-bold text-emerald-600">{formatBDT(m.totalPaid)}</p>
             <p className="text-xs text-slate-400">Principal returned: ৳{m.principalPaid?.toLocaleString()} | Profit paid: ৳{m.profitPaid?.toLocaleString()}</p>
           </div>
@@ -154,11 +160,9 @@ export default function InvestmentDetailPage() {
           </div>
         </div>
 
-        {/* Payment History Table */}
+        {/* Payouts */}
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-          <div className="p-4 border-b border-slate-200 font-bold text-slate-800">
-            Payment & Disbursement History
-          </div>
+          <div className="p-4 border-b border-slate-200 font-bold text-slate-800">Payouts to Investor</div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm text-slate-600">
               <thead className="bg-slate-50 text-slate-700 text-xs uppercase border-b border-slate-200">
@@ -166,30 +170,71 @@ export default function InvestmentDetailPage() {
                   <th className="p-3">Payment ID</th>
                   <th className="p-3">Date</th>
                   <th className="p-3">Type</th>
-                  <th className="p-3">Method</th>
-                  <th className="p-3">Amount</th>
-                  <th className="p-3">Status</th>
+                  <th className="p-3">Paid by</th>
+                  <th className="p-3 text-right">Amount</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {(data.payments || []).map((p) => (
-                  <tr key={p.id}>
+                {money.payouts.map((p) => (
+                  <tr key={p.id} className="align-top">
                     <td className="p-3 font-semibold text-slate-800">{p.paymentCode}</td>
-                    <td className="p-3">{p.paymentDate}</td>
-                    <td className="p-3 capitalize">{(p.paymentType || '').replace('_', ' ')}</td>
-                    <td className="p-3">{p.paymentMethod}</td>
-                    <td className="p-3 font-bold text-slate-900">{formatBDT(p.amount)}</td>
+                    <td className="p-3 whitespace-nowrap">{fmtDate(p.paymentDate)}</td>
                     <td className="p-3">
-                      <span className="px-2 py-0.5 text-xs rounded bg-emerald-100 text-emerald-800">
-                        {p.status}
-                      </span>
+                      {TYPE_LABELS[p.paymentType] || p.paymentType}
+                      {p.paymentType === 'combined' && (
+                        <span className="block text-xs text-slate-400">
+                          Capital {formatBDT(p.principalPaid)} · Profit {formatBDT(p.profitPaid)}
+                        </span>
+                      )}
                     </td>
+                    <td className="p-3">
+                      <PaymentLinesView lines={p.lines} fallbackMethod={p.paymentMethod} fallbackRef={p.referenceNo} />
+                    </td>
+                    <td className="p-3 text-right font-bold text-slate-900">{formatBDT(p.amount)}</td>
                   </tr>
                 ))}
-                {(!data.payments || data.payments.length === 0) && (
+                {money.payouts.length === 0 && (
                   <tr>
-                    <td colSpan="6" className="p-4 text-center text-slate-400">
-                      No payment disbursements recorded yet.
+                    <td colSpan="5" className="p-4 text-center text-slate-400">
+                      No payouts recorded yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Receipts */}
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+          <div className="p-4 border-b border-slate-200 font-bold text-slate-800">Payments Received from Investor</div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-slate-600">
+              <thead className="bg-slate-50 text-slate-700 text-xs uppercase border-b border-slate-200">
+                <tr>
+                  <th className="p-3">Receipt ID</th>
+                  <th className="p-3">Date</th>
+                  <th className="p-3">Paid by</th>
+                  <th className="p-3">Notes</th>
+                  <th className="p-3 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {money.receipts.map((r) => (
+                  <tr key={r.id} className="align-top">
+                    <td className="p-3 font-semibold text-slate-800">{r.receiptCode}</td>
+                    <td className="p-3 whitespace-nowrap">{fmtDate(r.receiptDate)}</td>
+                    <td className="p-3">
+                      <PaymentLinesView lines={r.lines} fallbackMethod={r.paymentMethod} />
+                    </td>
+                    <td className="p-3 text-xs text-slate-500">{r.notes || '—'}</td>
+                    <td className="p-3 text-right font-bold text-slate-900">{formatBDT(r.amount)}</td>
+                  </tr>
+                ))}
+                {money.receipts.length === 0 && (
+                  <tr>
+                    <td colSpan="5" className="p-4 text-center text-slate-400">
+                      No payments received from the investor yet.
                     </td>
                   </tr>
                 )}
@@ -199,78 +244,19 @@ export default function InvestmentDetailPage() {
         </div>
       </div>
 
-      {/* Record Payment Modal */}
-      {showPayModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white max-w-md w-full rounded-xl p-6 shadow-xl border border-slate-200">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">Record Payment to Investor</h3>
-            <form onSubmit={handlePaymentSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Payment Amount (৳)</label>
-                <input
-                  type="number"
-                  required
-                  value={paymentForm.amount}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-emerald-500"
-                  placeholder="e.g. 50000"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Disbursement Type</label>
-                <select
-                  value={paymentForm.paymentType}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, paymentType: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="profit_distribution">Profit Distribution</option>
-                  <option value="principal_return">Principal Capital Return</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Payment Method</label>
-                <select
-                  value={paymentForm.paymentMethod}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, paymentMethod: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="Bank">Bank Transfer</option>
-                  <option value="Cash">Cash</option>
-                  <option value="Cheque">Cheque</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Reference / Cheque No.</label>
-                <input
-                  type="text"
-                  value={paymentForm.referenceNo}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, referenceNo: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-emerald-500"
-                  placeholder="Transaction or Cheque #"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowPayModal(false)}
-                  className="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold"
-                >
-                  Save & Post Voucher
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {modal && (
+        <PaymentModal
+          direction={modal}
+          investorId={data.investorId}
+          investorName={data.investor?.name}
+          investments={[data]}
+          investmentId={data.id}
+          onClose={() => setModal(null)}
+          onSaved={() => {
+            setModal(null);
+            loadData();
+          }}
+        />
       )}
     </div>
   );

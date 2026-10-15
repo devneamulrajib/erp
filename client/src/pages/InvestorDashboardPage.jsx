@@ -6,10 +6,9 @@ import {
   getDashboardSummary,
   getInvestors,
   createInvestor,
-  createInvestment,
 } from '../api/investor';
 import { getProjects } from '../api/project';
-import { getChartOfAccounts } from '../api/chartOfAccounts';
+import InvestmentFormDrawer from '../components/InvestmentFormDrawer';
 
 /* ------------------------------------------------------------------ */
 /* Design tokens                                                       */
@@ -75,32 +74,9 @@ const emptyInvestorForm = () => ({
   notes: '',
 });
 
-const emptyInvestmentForm = () => ({
-  investorId: '',
-  projectId: '',
-  principalAmount: '',
-  investmentDate: today(),
-  maturityDate: '',
-  investmentType: 'project_based',
-  profitSharePercent: '',
-  expectedRoiPercent: '',
-  expectedProfit: '',
-  debitAccountId: '',
-  notes: '',
-});
-
 const toList = (res) => {
   const list = res?.data ?? res ?? [];
   return Array.isArray(list) ? list : [];
-};
-
-// Same formula the submit handler uses, shared so the live preview always matches what is saved
-const calcExpected = (form) => {
-  const principal = Number(form.principalAmount) || 0;
-  const expectedProfit = form.expectedProfit
-    ? Number(form.expectedProfit)
-    : (principal * (Number(form.expectedRoiPercent) || 0)) / 100;
-  return { principal, expectedProfit, expectedReturn: principal + expectedProfit };
 };
 
 /* ------------------------------------------------------------------ */
@@ -284,7 +260,6 @@ export default function InvestorDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [investors, setInvestors] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [cashBankAccounts, setCashBankAccounts] = useState([]);
 
   // Modals
   const [showAddInvestorModal, setShowAddInvestorModal] = useState(false);
@@ -299,7 +274,6 @@ export default function InvestorDashboardPage() {
   });
 
   const [investorForm, setInvestorForm] = useState(emptyInvestorForm());
-  const [investmentForm, setInvestmentForm] = useState(emptyInvestmentForm());
 
   const loadSummary = async () => {
     setLoading(true);
@@ -331,26 +305,9 @@ export default function InvestorDashboardPage() {
     }
   };
 
-  const loadAccounts = async () => {
-    try {
-      const res = await getChartOfAccounts();
-      const all = toList(res);
-      const filtered = all.filter(
-        (a) =>
-          a.type === 'Asset' ||
-          /bank|cash/i.test(a.name || '') ||
-          /bank|cash/i.test(a.chartOfGroup?.name || '')
-      );
-      setCashBankAccounts(filtered.length ? filtered : all);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   useEffect(() => {
     loadInvestors();
     loadProjects();
-    loadAccounts();
   }, []);
 
   useEffect(() => {
@@ -372,30 +329,7 @@ export default function InvestorDashboardPage() {
     }
   };
 
-  const handleCreateInvestment = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    try {
-      const { expectedProfit, expectedReturn } = calcExpected(investmentForm);
-
-      await createInvestment({
-        ...investmentForm,
-        expectedProfit,
-        expectedReturn,
-      });
-
-      setShowAddInvestmentModal(false);
-      setInvestmentForm(emptyInvestmentForm());
-      await loadSummary();
-    } catch (err) {
-      alert(err.response?.data?.message || err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const setInv = (key) => (e) => setInvestorForm({ ...investorForm, [key]: e.target.value });
-  const setInvt = (key) => (e) => setInvestmentForm({ ...investmentForm, [key]: e.target.value });
 
   // Data helpers
   const kpis = data?.kpis || {};
@@ -413,7 +347,7 @@ export default function InvestorDashboardPage() {
     data?.activeInvestorsCount ??
     investors.filter((i) => i.status === 'active' || !i.status).length;
 
-  // Liability bar ratio calculation (empty bar when nothing has been recorded yet)
+  // Liability bar ratio calculation
   const paidOutAmount = Number(kpis.totalPaid || 0);
   const stillOwedAmount = Number(kpis.outstandingLiability || 0);
   const totalLiabilityPool = paidOutAmount + stillOwedAmount;
@@ -432,7 +366,6 @@ export default function InvestorDashboardPage() {
   const initialLoading = loading && !data;
   const refreshing = loading && !!data;
 
-  const investmentPreview = calcExpected(investmentForm);
   const showFixedReturn =
     investorForm.investmentType === 'fixed_return' || investorForm.investmentType === 'hybrid';
 
@@ -1025,153 +958,14 @@ export default function InvestorDashboardPage() {
       {/* 2. NEW INVESTMENT DRAWER                                      */}
       {/* ============================================================ */}
       {showAddInvestmentModal && (
-        <Drawer
-          title="New investment"
-          description="Record capital received from an investor."
+        <InvestmentFormDrawer
+          variant="dashboard"
           onClose={() => setShowAddInvestmentModal(false)}
-        >
-          <form onSubmit={handleCreateInvestment} className="flex min-h-0 flex-1 flex-col">
-            <div className="flex-1 space-y-7 overflow-y-auto px-6 py-6">
-              <FormSection title="Who and where">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <Field label="Investor" required>
-                    <select
-                      required
-                      value={investmentForm.investorId}
-                      onChange={setInvt('investorId')}
-                      className={inputCls}
-                    >
-                      <option value="">Choose investor</option>
-                      {investors.map((i) => (
-                        <option key={i.id} value={i.id}>
-                          {i.name}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Project">
-                    <select
-                      value={investmentForm.projectId}
-                      onChange={setInvt('projectId')}
-                      className={inputCls}
-                    >
-                      <option value="">General business</option>
-                      {projects.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                </div>
-              </FormSection>
-
-              <FormSection title="Amount and deposit">
-                <Field label="Principal amount (৳)" required>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    value={investmentForm.principalAmount}
-                    onChange={setInvt('principalAmount')}
-                    className={`${inputCls} ip-display text-lg font-semibold tabular-nums`}
-                    placeholder="1000000"
-                  />
-                </Field>
-                <Field label="Deposit ledger">
-                  <select
-                    value={investmentForm.debitAccountId}
-                    onChange={setInvt('debitAccountId')}
-                    className={inputCls}
-                  >
-                    <option value="">Select cash / bank account...</option>
-                    {cashBankAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              </FormSection>
-
-              <FormSection title="Dates and returns">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <Field label="Investment date">
-                    <input
-                      type="date"
-                      required
-                      value={investmentForm.investmentDate}
-                      onChange={setInvt('investmentDate')}
-                      className={inputCls}
-                    />
-                  </Field>
-                  <Field label="Maturity date">
-                    <input
-                      type="date"
-                      value={investmentForm.maturityDate}
-                      onChange={setInvt('maturityDate')}
-                      className={inputCls}
-                    />
-                  </Field>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <Field label="Profit share %">
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={investmentForm.profitSharePercent}
-                      onChange={setInvt('profitSharePercent')}
-                      className={inputCls}
-                    />
-                  </Field>
-                  <Field label="Expected ROI %">
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={investmentForm.expectedRoiPercent}
-                      onChange={setInvt('expectedRoiPercent')}
-                      className={inputCls}
-                    />
-                  </Field>
-                </div>
-
-                {investmentPreview.principal > 0 && (
-                  <div className="grid grid-cols-2 gap-4 rounded-xl bg-[#0F2E2B] p-4 text-white">
-                    <div>
-                      <p className="text-xs text-white/60">Expected profit</p>
-                      <p className="ip-display mt-0.5 text-lg font-semibold tabular-nums text-[#7BC8A4]">
-                        {formatBDT(investmentPreview.expectedProfit)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-white/60">Expected return</p>
-                      <p className="ip-display mt-0.5 text-lg font-semibold tabular-nums">
-                        {formatBDT(investmentPreview.expectedReturn)}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <Field label="Notes">
-                  <textarea
-                    rows="2"
-                    value={investmentForm.notes}
-                    onChange={setInvt('notes')}
-                    className={inputCls}
-                  />
-                </Field>
-              </FormSection>
-            </div>
-
-            <DrawerFooter
-              onCancel={() => setShowAddInvestmentModal(false)}
-              submitting={submitting}
-              submitLabel="Record investment"
-              submittingLabel="Recording..."
-            />
-          </form>
-        </Drawer>
+          onSaved={() => {
+            setShowAddInvestmentModal(false);
+            loadSummary();
+          }}
+        />
       )}
     </div>
   );
