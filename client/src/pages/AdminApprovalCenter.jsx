@@ -153,6 +153,9 @@ export default function AdminApprovalCenter() {
                 <option value="PaymentVoucher">Payment Voucher</option>
                 <option value="MonthlyBudget">Budget Allocation</option>
                 <option value="PaySlip">Salary Disbursement</option>
+                <option value="ReceiptVoucher">Receipt Voucher</option>
+                <option value="JournalVoucher">Journal Voucher</option>
+                <option value="ContraVoucher">Contra Voucher</option>
               </select>
 
               <div className="inline-flex p-1 rounded-xl bg-slate-100 border border-slate-200/80 text-xs">
