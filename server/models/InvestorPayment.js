@@ -13,8 +13,9 @@ const InvestorPayment = sequelize.define('InvestorPayment', {
   },
   principalPaid: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
   profitPaid: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
+  // 'Multiple' = split across several methods (see InvestorPaymentLines)
   paymentMethod: {
-    type: DataTypes.ENUM('Cash', 'Bank', 'Cheque'),
+    type: DataTypes.ENUM('Cash', 'Bank', 'Cheque', 'Multiple'),
     defaultValue: 'Bank',
   },
   bankAccountId: DataTypes.INTEGER,

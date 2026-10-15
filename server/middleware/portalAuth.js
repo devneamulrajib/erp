@@ -9,12 +9,17 @@ function portalAuth(req, res, next) {
   const token = header.split(' ')[1];
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded.portal || !decoded.customerId || !decoded.role) {
+    const userId = decoded.id || decoded.customerId;
+
+    if (!decoded.portal || !userId || !decoded.role) {
       return res.status(401).json({ message: 'Invalid portal token' });
     }
+
     req.portalUser = {
-      customerId: decoded.customerId,
-      role: decoded.role, // 'customer' | 'supplier' | 'vendor'
+      id: userId,
+      customerId: userId, // backwards-compatibility
+      role: decoded.role, // 'customer' | 'supplier' | 'vendor' | 'employee' | 'investor'
+      name: decoded.name,
     };
     next();
   } catch {

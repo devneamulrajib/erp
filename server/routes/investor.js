@@ -9,6 +9,28 @@ const {
   Project,
 } = require('../models/associations');
 const { computeInvestmentMetrics } = require('../utils/investorCalculations');
+const logActivity = require('../utils/activityLog');
+
+const INVESTMENT_TYPES = ['project_based', 'fixed_return', 'equity'];
+const TYPE_LABELS = {
+  project_based: 'project profit share',
+  fixed_return: 'fixed return',
+  equity: 'equity (hybrid)',
+};
+
+const who = (req) => req.user?.name || req.user?.username || req.user?.email || 'Admin';
+const short = (s) => String(s || '').slice(0, 240);
+const log = (req, investorId, action, message, amount) =>
+  logActivity({
+    module: 'Investor',
+    action,
+    message: short(message),
+    amount,
+    relatedType: 'Investor',
+    relatedId: Number(investorId),
+    performedBy: who(req),
+  });
+const bdt = (n) => `৳ ${Number(n || 0).toLocaleString('en-IN')}`;
 
 async function generateInvestorCode() {
   const count = await Investor.count();
@@ -18,11 +40,6 @@ async function generateInvestmentCode() {
   const count = await Investment.count();
   return `INVST-${String(count + 1).padStart(5, '0')}`;
 }
-async function generatePaymentCode() {
-  const count = await InvestorPayment.count();
-  return `IPAY-${String(count + 1).padStart(5, '0')}`;
-}
-
 /**
  * Loads investments plus their investor, project and payments using
  * separate queries, so nothing depends on association aliases.
@@ -201,6 +218,7 @@ router.post('/investors', auth, async (req, res) => {
       notes: notes || null,
     });
 
+    await log(req, investor.id, 'Investor Created', `Investor ${investor.name} (${investor.investorCode}) registered`);
     res.status(201).json(investor);
   } catch (err) {
     console.error('Create Investor Error:', err);
@@ -222,6 +240,7 @@ router.put('/investors/:id', auth, async (req, res) => {
     }
 
     await investor.update(updateData);
+    await log(req, investor.id, 'Investor Updated', 'Investor profile updated');
     res.json(investor);
   } catch (err) {
     console.error('Update Investor Error:', err);
@@ -292,26 +311,71 @@ router.post('/investments', auth, async (req, res) => {
         .json({ message: 'Valid Investor and Principal Amount (> 0) are required' });
     }
 
+    const investor = await Investor.findByPk(investorId);
+    if (!investor) return res.status(404).json({ message: 'Investor not found' });
+
+    // ---- Return type rules ----
+    const type = investmentType || 'project_based';
+    if (!INVESTMENT_TYPES.includes(type)) {
+      return res.status(400).json({ message: 'Choose a valid return type.' });
+    }
+
+    const share = Number(profitSharePercent) || 0;
+    const roi = Number(expectedRoiPercent) || 0;
+    if (share < 0 || share > 100 || roi < 0 || roi > 100) {
+      return res.status(400).json({ message: 'Percentages must be between 0 and 100.' });
+    }
+    if (type === 'fixed_return' && roi <= 0) {
+      return res.status(400).json({ message: 'A fixed return investment needs a return percentage.' });
+    }
+    if (type === 'project_based') {
+      if (!projectId) {
+        return res.status(400).json({ message: 'Choose the project: profit share is calculated from that project.' });
+      }
+      if (share <= 0) {
+        return res.status(400).json({ message: 'A project profit share investment needs a profit share percentage.' });
+      }
+    }
+    if (type === 'equity' && (share <= 0 || roi <= 0)) {
+      return res.status(400).json({ message: 'Equity needs both a profit share and a guaranteed floor percentage.' });
+    }
+
+    const invDate = investmentDate || new Date().toISOString().slice(0, 10);
+    if (maturityDate && maturityDate < invDate) {
+      return res.status(400).json({ message: 'Maturity date cannot be before the investment date.' });
+    }
+
+    // Only keep the numbers that belong to the chosen type
+    const storedShare = type === 'fixed_return' ? 0 : share;
+    const storedRoi = type === 'project_based' ? 0 : roi;
+
     const investmentCode = await generateInvestmentCode();
-    const expProfit =
-      Number(expectedProfit) || (amt * (Number(expectedRoiPercent) || 0)) / 100;
+    const expProfit = Number(expectedProfit) || (amt * storedRoi) / 100;
 
     const investment = await Investment.create({
       investmentCode,
       investorId: Number(investorId),
       projectId: projectId ? Number(projectId) : null,
       principalAmount: amt,
-      investmentDate: investmentDate || new Date(),
+      investmentDate: invDate,
       maturityDate: maturityDate ? maturityDate : null,
-      investmentType: investmentType || 'project_based',
-      profitSharePercent: Number(profitSharePercent) || 0,
-      expectedRoiPercent: Number(expectedRoiPercent) || 0,
+      investmentType: type,
+      profitSharePercent: storedShare,
+      expectedRoiPercent: storedRoi,
       expectedProfit: expProfit,
       expectedReturn: amt + expProfit,
       status: 'active',
       notes: notes || null,
       debitAccountId: debitAccountId ? Number(debitAccountId) : null,
     });
+
+    await log(
+      req,
+      investor.id,
+      'Investment Created',
+      `Investment ${investmentCode} of ${bdt(amt)} recorded (${TYPE_LABELS[type]})`,
+      amt
+    );
 
     res.status(201).json(investment);
   } catch (err) {
@@ -320,59 +384,15 @@ router.post('/investments', auth, async (req, res) => {
   }
 });
 
-// 4. PAYMENTS
-router.post('/payments', auth, async (req, res) => {
-  try {
-    const {
-      investmentId,
-      paymentDate,
-      amount,
-      paymentType,
-      paymentMethod,
-      referenceNo,
-      notes,
-    } = req.body;
+// 4. PAYOUTS, RECEIPTS, SPLIT PAYMENTS, INVESTOR BANK ACCOUNTS
+router.use(require('./investorPayments'));
 
-    const totalAmt = Number(amount) || 0;
-    if (!investmentId || totalAmt <= 0) {
-      return res
-        .status(400)
-        .json({ message: 'Valid Investment and Amount (> 0) are required' });
-    }
+// 5. DOCUMENTS / COMMUNICATION / NOTES / ACTIVITY (per investor)
+router.use(require('./investorExtras'));
 
-    const investment = await Investment.findByPk(investmentId);
-    if (!investment) return res.status(404).json({ message: 'Investment not found' });
-
-    const paymentCode = await generatePaymentCode();
-
-    let princPart = 0;
-    let profPart = 0;
-    if (paymentType === 'principal_return') {
-      princPart = totalAmt;
-    } else {
-      profPart = totalAmt;
-    }
-
-    const payment = await InvestorPayment.create({
-      paymentCode,
-      investorId: investment.investorId,
-      investmentId: Number(investmentId),
-      paymentDate: paymentDate || new Date(),
-      amount: totalAmt,
-      paymentType: paymentType || 'profit_distribution',
-      principalPaid: princPart,
-      profitPaid: profPart,
-      paymentMethod: paymentMethod || 'Bank',
-      referenceNo: referenceNo || null,
-      status: 'completed',
-      notes: notes || null,
-    });
-
-    res.status(201).json(payment);
-  } catch (err) {
-    console.error('Create Payment Error:', err);
-    res.status(500).json({ message: err.message });
-  }
-});
+// 4. PAYOUTS, RECEIPTS, SPLIT PAYMENTS, INVESTOR BANK ACCOUNTS
+router.use(require('./investorPayments'));
+router.use(require('./investorPayments'));
+router.use(require('./investorPhoto'));
 
 module.exports = router;
