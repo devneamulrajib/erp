@@ -28,7 +28,6 @@ const ALL_VISIBLE = {
 
 export default function Site() {
   const [rows, setRows] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
   const [projects, setProjects] = useState([]);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
@@ -39,7 +38,6 @@ export default function Site() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formCode, setFormCode] = useState('');
-  const [formProjectTypeName, setFormProjectTypeName] = useState('');
   const [formProjectId, setFormProjectId] = useState('');
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
@@ -49,7 +47,6 @@ export default function Site() {
 
   useEffect(() => {
     loadRows();
-    api.get('/project-types').then((r) => setProjectTypes(r.data)).catch(() => {});
     api.get('/projects').then((r) => setProjects(r.data)).catch(() => {});
   }, []);
 
@@ -65,7 +62,6 @@ export default function Site() {
 
   async function openCreateModal() {
     setEditingId(null);
-    setFormProjectTypeName('');
     setFormProjectId('');
     setFormName('');
     setFormDescription('');
@@ -82,7 +78,6 @@ export default function Site() {
   function openEditModal(row) {
     setEditingId(row.id);
     setFormCode(row.code);
-    setFormProjectTypeName(row.projectTypeName || '');
     setFormProjectId(row.projectId ? String(row.projectId) : '');
     setFormName(row.name);
     setFormDescription(row.description || '');
@@ -94,14 +89,8 @@ export default function Site() {
     setModalOpen(false);
   }
 
-  function handleProjectTypeChange(value) {
-    setFormProjectTypeName(value);
-    setFormProjectId('');
-  }
-
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!formProjectTypeName) return alert('Please select a Project Type.');
     if (!formProjectId) return alert('Please select a Project.');
     if (!formName.trim()) return;
 
@@ -109,7 +98,6 @@ export default function Site() {
 
     const payload = {
       code: formCode,
-      projectTypeName: formProjectTypeName,
       projectId: Number(formProjectId),
       projectName: selectedProject ? selectedProject.name : '',
       name: formName,
@@ -168,10 +156,6 @@ export default function Site() {
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const pagedRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
-
-  const filteredProjects = formProjectTypeName
-    ? projects.filter((p) => p.projectType === formProjectTypeName)
-    : [];
 
   return (
     <div className="min-h-screen w-full bg-slate-50 text-left">
@@ -387,40 +371,20 @@ export default function Site() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">
-                Project Type <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formProjectTypeName}
-                onChange={(e) => handleProjectTypeChange(e.target.value)}
-                required
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
-              >
-                <option value="">Select Project Type</option>
-                {projectTypes.map((pt) => (
-                  <option key={pt.id} value={pt.name}>{pt.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">
                 Project <span className="text-red-500">*</span>
               </label>
               <select
                 value={formProjectId}
                 onChange={(e) => setFormProjectId(e.target.value)}
                 required
-                disabled={!formProjectTypeName}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition disabled:bg-slate-50 disabled:text-slate-400"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               >
                 <option value="">Select Project</option>
-                {filteredProjects.map((p) => (
+                {projects.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">Code</label>
               <input
@@ -429,6 +393,9 @@ export default function Site() {
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-mono bg-slate-50 text-slate-500"
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">Name</label>
               <input
@@ -436,18 +403,6 @@ export default function Site() {
                 onChange={(e) => setFormName(e.target.value)}
                 placeholder="Name"
                 required
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Description</label>
-              <input
-                value={formDescription}
-                onChange={(e) => setFormDescription(e.target.value)}
-                placeholder="Description"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
@@ -460,6 +415,16 @@ export default function Site() {
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
+          </div>
+
+          <div className="mb-5">
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Description</label>
+            <input
+              value={formDescription}
+              onChange={(e) => setFormDescription(e.target.value)}
+              placeholder="Description"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+            />
           </div>
 
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">

@@ -19,8 +19,6 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-// Normalizes API responses that might come back as a bare array,
-// or as a paginated shape like { rows: [...] } / { data: [...] } / { count, rows }.
 function toArray(payload) {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.rows)) return payload.rows;
@@ -39,14 +37,12 @@ export default function MaterialUsagePage() {
   const [items, setItems] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [accounts, setAccounts] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [employee, setEmployee] = useState('');
   const [creditLedger, setCreditLedger] = useState('Closing Stock');
   const [debitLedger, setDebitLedger] = useState('Cost of Goods Sold (COGS)');
   const [code, setCode] = useState('');
-  const [projectType, setProjectType] = useState('');
   const [project, setProject] = useState('');
   const [titleOfWork, setTitleOfWork] = useState('');
   const [task, setTask] = useState('');
@@ -69,12 +65,6 @@ export default function MaterialUsagePage() {
       .then((res) => setSites(toArray(res.data)))
       .catch((err) => { console.error('Failed to load sites', err); setSites([]); });
 
-    api.get('/project-types')
-      .then((res) => setProjectTypes(toArray(res.data)))
-      .catch((err) => { console.error('Failed to load project types', err); setProjectTypes([]); });
-
-    // getCategories() already unwraps res.data internally and resolves
-    // directly to the array itself — do NOT do res.data again here.
     getCategories()
       .then((res) => setCategories(toArray(res)))
       .catch((err) => { console.error('Failed to load categories', err); setCategories([]); });
@@ -107,7 +97,6 @@ export default function MaterialUsagePage() {
       setCreditLedger(u.creditLedger || 'Closing Stock');
       setDebitLedger(u.debitLedger || 'Cost of Goods Sold (COGS)');
       setCode(u.code || '');
-      setProjectType(u.projectType || '');
       setProject(u.project?.id || u.project || '');
       setTitleOfWork(u.titleOfWork || '');
       setTask(u.task || '');
@@ -139,7 +128,7 @@ export default function MaterialUsagePage() {
       unit: it.unit,
       useQty: 0,
       budgetQty: 0,
-      purchaseQty: stockQty, // best-effort: total purchased so far
+      purchaseQty: stockQty,
       stockQty,
       rate: it.purchasePrice || 0,
       amount: 0,
@@ -164,7 +153,7 @@ export default function MaterialUsagePage() {
     setSubmitting(true);
     try {
       const payload = {
-        code, date, employee, creditLedger, debitLedger, projectType, project,
+        code, date, employee, creditLedger, debitLedger, project,
         titleOfWork, task, site, category,
         items: rows.map((r) => ({ ...r, amount: num(r.rate) * num(r.useQty) })),
         attachment: attachmentName,
@@ -230,12 +219,6 @@ export default function MaterialUsagePage() {
           </Field>
           <Field label="Code">
             <input value={code} readOnly className="input bg-gray-50" />
-          </Field>
-          <Field label="Project Type">
-            <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
-              <option value="">Select value</option>
-              {(projectTypes || []).map((pt) => <option key={pt.id} value={pt.name}>{pt.name}</option>)}
-            </select>
           </Field>
           <Field label="Project">
             <select value={project} onChange={(e) => setProject(e.target.value)} className="input">

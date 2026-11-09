@@ -6,14 +6,12 @@ const StockTransfer = sequelize.define('StockTransfer', {
   date: DataTypes.STRING,
   employee: DataTypes.STRING,
 
-  fromProjectType: DataTypes.STRING,
   fromProjectId: DataTypes.INTEGER,
   fromSiteId: DataTypes.INTEGER,
   fromTask: DataTypes.STRING,
 
   categoryId: DataTypes.INTEGER,
 
-  toProjectType: DataTypes.STRING,
   toProjectId: DataTypes.INTEGER,
   toSiteId: DataTypes.INTEGER,
   toTask: DataTypes.STRING,

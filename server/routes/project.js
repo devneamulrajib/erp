@@ -42,9 +42,8 @@ router.get('/options', auth, async (req, res) => {
 
 router.get('/', auth, async (req, res) => {
   try {
-    const { projectType, status, area, search } = req.query;
+    const { status, area, search } = req.query;
     const where = {};
-    if (projectType && projectType !== 'All Types') where.projectType = projectType;
     if (status && status !== 'All Status') where.status = status;
     if (area) where.area = area;
     if (search) {
@@ -64,7 +63,7 @@ router.get('/', auth, async (req, res) => {
 router.post('/', auth, async (req, res) => {
   try {
     const {
-      name, code, projectType, projectManager, description,
+      name, code, projectManager, description,
       budget, location, status, area, assignUser, startDate, endDate, image,
     } = req.body;
 
@@ -75,7 +74,6 @@ router.post('/', auth, async (req, res) => {
     const newProject = await Project.create({
       code: code || generateCode(),
       name: name.trim(),
-      projectType: projectType || '',
       projectManager: projectManager || '',
       description: description || '',
       budget: budget || null,
@@ -110,7 +108,7 @@ router.put('/:id', auth, async (req, res) => {
     if (!item) return res.status(404).json({ message: 'Not found' });
 
     const fields = [
-      'name', 'projectType', 'projectManager', 'description',
+      'name', 'projectManager', 'description',
       'budget', 'location', 'status', 'area', 'assignUser', 'startDate', 'endDate', 'image',
     ];
     fields.forEach((f) => {
@@ -203,7 +201,6 @@ router.get('/reports/project-progress', auth, async (req, res) => {
       const cost = expenseTotals[p.name] || 0;
       return {
         id: p.id,
-        projectType: p.projectType,
         project: p.name,
         totalTask,
         completeTask,

@@ -2,7 +2,6 @@ const { DataTypes } = require('sequelize');
 const sequelize = require('../config/db');
 
 const PaymentVoucher = sequelize.define('PaymentVoucher', {
-  projectType: DataTypes.STRING,
   project: DataTypes.STRING,
   titleOfWork: DataTypes.STRING,
   task: DataTypes.STRING,

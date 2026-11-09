@@ -57,7 +57,7 @@ export default function AdjustmentBillList() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const HEADERS = ['ID', 'Project Type', 'Project', 'Customer Name', 'Code', 'Ref', 'Date',
+  const HEADERS = ['ID', 'Project', 'Customer Name', 'Code', 'Ref', 'Date',
     'Grand Total', 'Added By', 'Attachment', 'Action'];
 
   return (
@@ -150,10 +150,10 @@ export default function AdjustmentBillList() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={11} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
+                  <tr><td colSpan={10} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
                 ) : paged.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="text-center py-16">
+                    <td colSpan={10} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <LayoutGrid size={28} strokeWidth={1.5} />
                         <p className="text-sm">No adjustment bills found. Try adjusting your search, or create one.</p>
@@ -164,7 +164,6 @@ export default function AdjustmentBillList() {
                   paged.map((row, i) => (
                     <tr key={row._id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap align-top">
                       <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">#{(page - 1) * pageSize + i + 1}</td>
-                      <td className="px-5 py-3.5 text-slate-600">{row.projectType || '-'}</td>
                       <td className="px-5 py-3.5 text-slate-600">{row.project?.name || '-'}</td>
                       <td className="px-5 py-3.5 text-slate-700 font-medium">{row.customer?.name || '-'}</td>
                       <td className="px-5 py-3.5">

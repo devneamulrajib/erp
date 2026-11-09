@@ -165,7 +165,6 @@ router.post('/:id/quotations/:quotationId/accept', auth, async (req, res) => {
       code: 'PO-' + Math.floor(100000 + Math.random() * 900000),
       date: new Date().toISOString().slice(0, 10),
       supplierId: quotation.supplierId,
-      projectType: requisition.projectType,
       projectId: requisition.projectId,
       titleOfWork: requisition.titleOfWork,
       task: requisition.task,
@@ -184,8 +183,6 @@ router.post('/:id/quotations/:quotationId/accept', auth, async (req, res) => {
     requisition.convertedToPurchaseOrderId = order.id;
     await requisition.save();
 
-    // Was previously missing entirely — this is why the supplier saw nothing
-    // in the portal after admin accepted their quotation.
     await notifyAdmin.notifySupplier(
       quotation.supplierId,
       'requisition_accepted',
@@ -232,7 +229,7 @@ router.post('/:id/quotations/:quotationId/request-correction', auth, async (req,
 router.post('/', auth, async (req, res) => {
   try {
     const {
-      code, date, demandDate, company, supplier, projectType, project,
+      code, date, demandDate, company, supplier, project,
       titleOfWork, task, site, category, reference, items, attachment, note,
     } = req.body;
 
@@ -245,7 +242,6 @@ router.post('/', auth, async (req, res) => {
       demandDate,
       company,
       supplierId: supplier || null,
-      projectType,
       projectId: project || null,
       titleOfWork,
       task,
@@ -267,7 +263,6 @@ router.post('/', auth, async (req, res) => {
       name: 'Admin', approved: false, materialRequisitionId: requisition.id,
     });
 
-    // New requisition sent to a specific supplier — notify them live too.
     if (requisition.supplierId) {
       await notifyAdmin.notifySupplier(
         requisition.supplierId,
@@ -294,7 +289,7 @@ router.put('/:id', auth, async (req, res) => {
       supplier: 'supplierId', project: 'projectId', site: 'siteId', category: 'categoryId',
     };
     const fields = [
-      'date', 'demandDate', 'company', 'projectType', 'titleOfWork', 'task', 'reference', 'attachment', 'note',
+      'date', 'demandDate', 'company', 'titleOfWork', 'task', 'reference', 'attachment', 'note',
     ];
     fields.forEach((key) => {
       if (req.body[key] !== undefined) requisition[key] = req.body[key];
@@ -362,7 +357,6 @@ router.post('/:id/convert-to-purchase', auth, async (req, res) => {
       date: new Date().toISOString().slice(0, 10),
       supplierId: requisition.supplierId,
       ledger: 'Closing Stock',
-      projectType: requisition.projectType,
       projectId: requisition.projectId,
       titleOfWork: requisition.titleOfWork,
       task: requisition.task,
@@ -418,7 +412,6 @@ router.post('/:id/convert-to-purchase-order', auth, async (req, res) => {
       code: 'PO-' + Math.floor(100000 + Math.random() * 900000),
       date: new Date().toISOString().slice(0, 10),
       supplierId: requisition.supplierId,
-      projectType: requisition.projectType,
       projectId: requisition.projectId,
       titleOfWork: requisition.titleOfWork,
       task: requisition.task,
@@ -438,7 +431,6 @@ router.post('/:id/convert-to-purchase-order', auth, async (req, res) => {
     requisition.convertedToPurchaseOrderId = order.id;
     await requisition.save();
 
-    // Same case as the quotation-accept route above: notify the supplier.
     if (requisition.supplierId) {
       await notifyAdmin.notifySupplier(
         requisition.supplierId,

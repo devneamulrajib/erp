@@ -84,7 +84,6 @@ router.post('/', auth, async (req, res) => {
       code: req.body.code || generateCode(),
       date: req.body.date,
       customerId: customer,
-      projectType: req.body.projectType,
       projectId: req.body.project,
       siteId: req.body.site,
       clientOrderNo: req.body.clientOrderNo,
@@ -110,7 +109,7 @@ router.put('/:id', auth, async (req, res) => {
     if (!order) return res.status(404).json({ message: 'Not found' });
 
     const map = { customer: 'customerId', project: 'projectId', site: 'siteId' };
-    const fields = ['date', 'customer', 'projectType', 'project', 'site', 'clientOrderNo', 'attachment', 'vatIncluded', 'vatPercent', 'aitIncluded', 'aitPercent'];
+    const fields = ['date', 'customer', 'project', 'site', 'clientOrderNo', 'attachment', 'vatIncluded', 'vatPercent', 'aitIncluded', 'aitPercent'];
     fields.forEach((key) => {
       if (req.body[key] !== undefined) order[map[key] || key] = req.body[key];
     });

@@ -8,7 +8,6 @@ const Purchase = sequelize.define('Purchase', {
   supplierId: DataTypes.INTEGER, // reuses Customer table as Supplier
   ledger: { type: DataTypes.STRING, defaultValue: 'Closing Stock' },
 
-  projectType: DataTypes.STRING,
   projectId: DataTypes.INTEGER,
   titleOfWork: DataTypes.STRING,
   task: DataTypes.STRING,

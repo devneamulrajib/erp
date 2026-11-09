@@ -8,9 +8,6 @@ import {
   ClipboardList, Wallet, TrendingUp, CalendarRange, X,
 } from 'lucide-react';
 
-// ---- Palette tokens (ledger / statement inspired) ----
-// forest green as the working accent, warm gold reserved for money figures,
-// a warm paper background instead of a cool grey SaaS surface.
 const C = {
   page: 'bg-[#F6F3EC]',
   surface: 'bg-white',
@@ -122,7 +119,7 @@ export default function WorkorderList() {
           </div>
         )}
 
-        {/* Metrics strip — ledger tabs, each with a colored top rule */}
+        {/* Metrics strip */}
         <div className={`grid grid-cols-1 sm:grid-cols-3 rounded-xl overflow-hidden border ${C.border} mb-6`}>
           <Metric icon={ClipboardList} label="Total Work Orders" value={filtered.length.toLocaleString()} accentBorder="border-t-[#1F5D42]" iconColor={C.forest} valueColor={C.ink} />
           <Metric icon={Wallet} label="Grand Total" value={grandTotal.toLocaleString()} accentBorder="border-t-[#946B1B]" iconColor={C.gold} valueColor={C.gold} />
@@ -215,7 +212,6 @@ export default function WorkorderList() {
                       <td className={`px-4 py-3.5 text-[#9AA098]`}>{(page - 1) * pageSize + i + 1}</td>
                       <td className="px-4 py-3.5">
                         <span className={`inline-block ${C.forestSoft} ${C.forest} text-xs font-semibold px-2.5 py-1 rounded-md font-mono tracking-tight`}>{row.code}</span>
-                        {row.projectType && <div className={`text-[11px] ${C.inkMuted} mt-1`}>Type {row.projectType}</div>}
                       </td>
                       <td className={`px-4 py-3.5 ${C.ink}`}>{row.project?.name || <span className="text-[#C7C1AE]">-</span>}</td>
                       <td className={`px-4 py-3.5 ${C.ink} font-medium`}>{row.customer?.name || <span className="text-[#C7C1AE] font-normal">-</span>}</td>

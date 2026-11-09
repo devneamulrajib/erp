@@ -77,7 +77,7 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', auth, upload.single('attachment'), async (req, res) => {
   try {
     const {
-      projectType, project, titleOfWork, task, site,
+      project, titleOfWork, task, site,
       date, voucherNo, debitAccount, creditAccount, ifCheque, chequeReceiptNo,
       amount, comment, invoiceBill, item, bankAccount, chequeDate,
     } = req.body;
@@ -87,7 +87,6 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
     }
 
     const voucher = await PaymentVoucher.create({
-      projectType: projectType || '',
       project: project || '',
       titleOfWork: titleOfWork || '',
       task: task || '',
@@ -127,7 +126,7 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
     }
 
     const fields = [
-      'projectType', 'project', 'titleOfWork', 'task', 'site', 'date', 'voucherNo',
+      'project', 'titleOfWork', 'task', 'site', 'date', 'voucherNo',
       'debitAccount', 'creditAccount', 'chequeReceiptNo', 'amount', 'comment',
       'invoiceBill', 'item', 'bankAccount', 'chequeDate',
     ];

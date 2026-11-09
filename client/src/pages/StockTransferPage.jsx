@@ -23,12 +23,10 @@ export default function StockTransferPage() {
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [employee, setEmployee] = useState('');
   const [code, setCode] = useState('');
-  const [fromProjectType, setFromProjectType] = useState('');
   const [fromProject, setFromProject] = useState('');
   const [fromSite, setFromSite] = useState('');
   const [fromTask, setFromTask] = useState('');
@@ -37,7 +35,6 @@ export default function StockTransferPage() {
 
   const [rows, setRows] = useState([]);
 
-  const [toProjectType, setToProjectType] = useState('');
   const [toProject, setToProject] = useState('');
   const [toSite, setToSite] = useState('');
   const [toTask, setToTask] = useState('');
@@ -49,7 +46,6 @@ export default function StockTransferPage() {
   useEffect(() => {
     api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
     api.get('/sites').then((res) => setSites(res.data)).catch(() => {});
-    api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
     getCategories().then(setCategories).catch(() => {});
     getEmployees().then((res) => setEmployees(res.data)).catch(() => {});
   }, []);
@@ -69,13 +65,11 @@ export default function StockTransferPage() {
       setDate(t.date || '');
       setEmployee(t.employee || '');
       setCode(t.code || '');
-      setFromProjectType(t.fromProjectType || '');
       setFromProject(t.fromProject?.id || t.fromProject || '');
       setFromSite(t.fromSite?.id || t.fromSite || '');
       setFromTask(t.fromTask || '');
       setCategory(t.category?.id || t.category || '');
       setRows(t.items || []);
-      setToProjectType(t.toProjectType || '');
       setToProject(t.toProject?.id || t.toProject || '');
       setToSite(t.toSite?.id || t.toSite || '');
       setToTask(t.toTask || '');
@@ -121,9 +115,9 @@ export default function StockTransferPage() {
     setSubmitting(true);
     try {
       const payload = {
-        code, date, employee, fromProjectType, fromProject, fromSite, fromTask,
+        code, date, employee, fromProject, fromSite, fromTask,
         category, items: rows,
-        toProjectType, toProject, toSite, toTask, toSubTask,
+        toProject, toSite, toTask, toSubTask,
       };
       if (isEdit) {
         await updateStockTransfer(id, payload);
@@ -162,7 +156,7 @@ export default function StockTransferPage() {
       <form onSubmit={handleSubmit} className="px-4 pb-10">
         {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-4">{error}</div>}
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           <Field label="Date">
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
           </Field>
@@ -174,12 +168,6 @@ export default function StockTransferPage() {
           </Field>
           <Field label="Code">
             <input value={code} readOnly className="input bg-gray-50" />
-          </Field>
-          <Field label="From Project Type">
-            <select value={fromProjectType} onChange={(e) => setFromProjectType(e.target.value)} className="input">
-              <option value="">Select value</option>
-              {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
-            </select>
           </Field>
           <Field label="From Project" required>
             <select value={fromProject} onChange={(e) => setFromProject(e.target.value)} className="input">
@@ -247,13 +235,7 @@ export default function StockTransferPage() {
           </table>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-2">
-          <Field label="To Project Type">
-            <select value={toProjectType} onChange={(e) => setToProjectType(e.target.value)} className="input">
-              <option value="">Select Project Type</option>
-              {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
-            </select>
-          </Field>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-2">
           <Field label="To Project" required>
             <select value={toProject} onChange={(e) => setToProject(e.target.value)} className="input">
               <option value="">Select Project</option>

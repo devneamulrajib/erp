@@ -24,9 +24,7 @@ function asArray(res) {
   if (Array.isArray(body)) return body;
   return body?.rows || body?.data || [];
 }
-// IDs coming from MySQL/Sequelize are numbers; <select> values are always
-// strings. Compare as strings everywhere we match an id picked from a
-// dropdown against an id coming back from the API.
+
 function sameId(a, b) {
   return a !== '' && a != null && b !== '' && b != null && String(a) === String(b);
 }
@@ -41,7 +39,6 @@ export default function LabourWorkerBillPage() {
 
   const [parties, setParties] = useState([]);
   const [ledgers, setLedgers] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
   const [projects, setProjects] = useState([]);
   const [sites, setSites] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -53,7 +50,6 @@ export default function LabourWorkerBillPage() {
   const [party, setParty] = useState('');
   const [ledger, setLedger] = useState('');
   const [code, setCode] = useState('');
-  const [projectType, setProjectType] = useState('');
   const [project, setProject] = useState('');
   const [titleOfWork, setTitleOfWork] = useState('');
   const [site, setSite] = useState('');
@@ -80,7 +76,6 @@ export default function LabourWorkerBillPage() {
     getParties().then((res) => setParties(asArray(res))).catch((err) => console.error('Failed to load parties', err));
     getChartOfAccounts().then((res) => setLedgers(asArray(res))).catch((err) => console.error('Failed to load ledgers', err));
     api.get('/projects').then((res) => setProjects(asArray(res))).catch((err) => console.error('Failed to load projects', err));
-    api.get('/project-types').then((res) => setProjectTypes(asArray(res))).catch((err) => console.error('Failed to load project types', err));
     api.get('/sites').then((res) => setSites(asArray(res))).catch((err) => console.error('Failed to load sites', err));
     getCategories().then((res) => setCategories(asArray(res))).catch((err) => console.error('Failed to load categories', err));
     getBrands().then((res) => setBrands(asArray(res))).catch((err) => console.error('Failed to load brands', err));
@@ -104,7 +99,6 @@ export default function LabourWorkerBillPage() {
       setParty(b.party?.id || b.party || '');
       setLedger(b.ledger?.id || b.ledger || '');
       setCode(b.code || '');
-      setProjectType(b.projectType?.id || b.projectType || '');
       setProject(b.project?.id || b.project || '');
       setTitleOfWork(b.titleOfWork || '');
       setSite(b.site?.id || b.site || '');
@@ -185,7 +179,7 @@ export default function LabourWorkerBillPage() {
     setSubmitting(true);
     try {
       const payload = {
-        code, date, party, ledger, projectType, project, titleOfWork, task,
+        code, date, party, ledger, project, titleOfWork, task,
         site, category, refWoNo,
         items: rows.map((r) => {
           const gross = num(r.rate) * num(r.qtyDays);
@@ -251,9 +245,9 @@ export default function LabourWorkerBillPage() {
             <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>
           )}
 
-          {/* Main details card — condensed into fewer, denser rows */}
+          {/* Main details card */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               <Field label="Date">
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
               </Field>
@@ -271,12 +265,6 @@ export default function LabourWorkerBillPage() {
               </Field>
               <Field label="Code">
                 <input value={code} readOnly className={`${inputReadOnlyCls} font-mono`} />
-              </Field>
-              <Field label="Project Type">
-                <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
-                  <option value="">Select</option>
-                  {projectTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
               </Field>
               <Field label="Project">
                 <select value={project} onChange={(e) => setProject(e.target.value)} className={inputCls}>
@@ -345,8 +333,7 @@ export default function LabourWorkerBillPage() {
             </div>
           </div>
 
-          {/* Items table — tighter row height, smaller font, horizontal
-              scroll on narrow screens rather than squeezing columns unreadably */}
+          {/* Items table */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-4">
             <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
               <h3 className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
@@ -436,7 +423,7 @@ export default function LabourWorkerBillPage() {
             </div>
           </div>
 
-          {/* Totals card — 4-across grid instead of the previous sprawl */}
+          {/* Totals card */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-4">
             <h2 className="text-xs font-semibold text-slate-700 mb-3">Totals</h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -478,7 +465,7 @@ export default function LabourWorkerBillPage() {
                   />
                   {attachmentName && (
                     <p className="text-[11px] text-amber-600 mt-1">
-                      Selected: {attachmentName} — note: this file is not yet uploaded to the server (only its name is saved). Ask if you want this wired up properly.
+                      Selected: {attachmentName}
                     </p>
                   )}
                 </Field>

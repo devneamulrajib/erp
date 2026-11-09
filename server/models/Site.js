@@ -3,7 +3,6 @@ const sequelize = require('../config/db');
 
 const Site = sequelize.define('Site', {
   code: { type: DataTypes.STRING, unique: true },
-  projectTypeName: DataTypes.STRING,
   projectId: DataTypes.INTEGER,
   projectName: DataTypes.STRING,
   name: { type: DataTypes.STRING, allowNull: false },

@@ -5,7 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const {
-  LabourBill, LabourBillItem, LabourBillApproval, Party, ChartOfAccount, Project, ProjectType,
+  LabourBill, LabourBillItem, LabourBillApproval, Party, ChartOfAccount, Project,
 } = require('../models/associations');
 
 const uploadDir = path.join(__dirname, '..', 'uploads', 'labour-bills');
@@ -65,17 +65,6 @@ const includeList = [
   { model: Project, as: 'project', attributes: ['name'] },
 ];
 
-// Project Type is stored as a raw ProjectType id (see the "Project Type"
-// dropdown on the bill form), never as a name — so it has to be resolved
-// to a readable name here before sending bills to the frontend.
-async function attachProjectTypeNames(bills) {
-  const ids = [...new Set(bills.map((b) => b.projectType).filter(Boolean))];
-  if (!ids.length) return bills.map((b) => ({ ...b, projectTypeName: null }));
-  const types = await ProjectType.findAll({ where: { id: { [Op.in]: ids } }, attributes: ['id', 'name'] });
-  const nameById = Object.fromEntries(types.map((t) => [String(t.id), t.name]));
-  return bills.map((b) => ({ ...b, projectTypeName: nameById[String(b.projectType)] || null }));
-}
-
 router.get('/next-code', auth, async (req, res) => {
   res.json({ code: generateCode() });
 });
@@ -94,8 +83,7 @@ router.get('/', auth, async (req, res) => {
       if (to) where.date[Op.lte] = to;
     }
     const bills = await LabourBill.findAll({ where, include: includeList, order: [['createdAt', 'DESC']] });
-    const withNames = await attachProjectTypeNames(bills.map((b) => b.toJSON()));
-    res.json(withNames);
+    res.json(bills);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -112,8 +100,7 @@ router.get('/:id', auth, async (req, res) => {
       ],
     });
     if (!bill) return res.status(404).json({ message: 'Not found' });
-    const [withNames] = await attachProjectTypeNames([bill.toJSON()]);
-    res.json(withNames);
+    res.json(bill);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -133,7 +120,6 @@ router.post('/', auth, async (req, res) => {
       partyId: party,
       ledgerId: req.body.ledger,
       creditLedgerLabel: req.body.creditLedgerLabel,
-      projectType: req.body.projectType,
       projectId: req.body.project,
       titleOfWork: req.body.titleOfWork,
       task: req.body.task,
@@ -151,8 +137,7 @@ router.post('/', auth, async (req, res) => {
     await LabourBillApproval.create({ name: 'Admin', approved: false, labourBillId: bill.id });
 
     const populated = await LabourBill.findByPk(bill.id, { include: includeList });
-    const [withNames] = await attachProjectTypeNames([populated.toJSON()]);
-    res.status(201).json(withNames);
+    res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -164,7 +149,7 @@ router.put('/:id', auth, async (req, res) => {
     if (!bill) return res.status(404).json({ message: 'Not found' });
 
     const map = { party: 'partyId', ledger: 'ledgerId', project: 'projectId', site: 'siteId', category: 'categoryId' };
-    const fields = ['date', 'party', 'ledger', 'creditLedgerLabel', 'projectType', 'project', 'titleOfWork', 'task', 'site', 'category', 'refWoNo', 'vatIncluded', 'vatPercent', 'paymentMethod', 'paid'];
+    const fields = ['date', 'party', 'ledger', 'creditLedgerLabel', 'project', 'titleOfWork', 'task', 'site', 'category', 'refWoNo', 'vatIncluded', 'vatPercent', 'paymentMethod', 'paid'];
     fields.forEach((key) => {
       if (req.body[key] !== undefined) bill[map[key] || key] = req.body[key];
     });
@@ -185,8 +170,7 @@ router.put('/:id', auth, async (req, res) => {
 
     await bill.save();
     const populated = await LabourBill.findByPk(bill.id, { include: includeList });
-    const [withNames] = await attachProjectTypeNames([populated.toJSON()]);
-    res.json(withNames);
+    res.json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -215,8 +199,7 @@ router.patch('/:id/status', auth, async (req, res) => {
 
     await bill.save();
     const populated = await LabourBill.findByPk(bill.id, { include: includeList });
-    const [withNames] = await attachProjectTypeNames([populated.toJSON()]);
-    res.json(withNames);
+    res.json(populated);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

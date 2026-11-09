@@ -20,7 +20,6 @@ function num(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
-// MySQL rows use `id`; some stale data/objects may still carry `_id`. Always prefer id.
 function rid(o) {
   return o?.id ?? o?._id ?? '';
 }
@@ -43,12 +42,10 @@ export default function ContractorWorkorderPage() {
   const [items, setItems] = useState([]);
   const [brands, setBrands] = useState([]);
   const [units, setUnits] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [supplier, setSupplier] = useState('');
   const [code, setCode] = useState('');
-  const [projectType, setProjectType] = useState('');
   const [project, setProject] = useState('');
   const [site, setSite] = useState('');
   const [category, setCategory] = useState('');
@@ -79,7 +76,6 @@ export default function ContractorWorkorderPage() {
     getCategories().then(setCategories).catch(() => {});
     getBrands().then((res) => setBrands(res.data || res)).catch(() => {});
     getUnits().then((res) => setUnits(res.data || res)).catch(() => {});
-    api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -97,7 +93,6 @@ export default function ContractorWorkorderPage() {
       setDate(o.date || '');
       setSupplier(rid(o.supplier));
       setCode(o.code || '');
-      setProjectType(rid(o.projectType) || o.projectType || '');
       setProject(rid(o.project));
       setSite(rid(o.site));
       setCategory(rid(o.category));
@@ -154,7 +149,7 @@ export default function ContractorWorkorderPage() {
     setSubmitting(true);
     try {
       const payload = {
-        code, date, supplier, projectType, project, site, category, contentBody,
+        code, date, supplier, project, site, category, contentBody,
         items: rows.map((r) => ({ ...r, amount: num(r.rate) * num(r.quantity) })),
         vatIncluded, vatPercent, aitIncluded, aitPercent,
       };
@@ -243,12 +238,6 @@ export default function ContractorWorkorderPage() {
               <Field label="Code">
                 <input value={code} readOnly className={`${inputCls} bg-slate-50 text-slate-500 font-mono`} />
               </Field>
-              <Field label="Project Type">
-                <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
-                  <option value="">Select value</option>
-                  {projectTypes.map((pt) => <option key={rid(pt)} value={rid(pt)}>{pt.name}</option>)}
-                </select>
-              </Field>
               <Field label="Project">
                 <select value={project} onChange={(e) => setProject(e.target.value)} className={inputCls}>
                   <option value="">Select Project</option>
@@ -262,25 +251,25 @@ export default function ContractorWorkorderPage() {
                 </select>
               </Field>
               <Field label="Attachment">
-  <label className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white text-slate-500 cursor-pointer hover:bg-slate-50 transition">
-    <Upload size={14} className="text-slate-400" />
-    <span className="truncate">{attachmentName || 'Choose File'}</span>
-    <input
-      type="file"
-      className="hidden"
-      onChange={(e) => {
-        const f = e.target.files ? e.target.files[0] : null;
-        setAttachmentFile(f);
-        setAttachmentName(f ? f.name : '');
-      }}
-    />
-  </label>
-  {(!attachmentName && existingAttachment) ? (
-    <a href={existingAttachment} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline mt-1 inline-block">
-      View current file
-    </a>
-  ) : null}
-</Field>
+                <label className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white text-slate-500 cursor-pointer hover:bg-slate-50 transition">
+                  <Upload size={14} className="text-slate-400" />
+                  <span className="truncate">{attachmentName || 'Choose File'}</span>
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files ? e.target.files[0] : null;
+                      setAttachmentFile(f);
+                      setAttachmentName(f ? f.name : '');
+                    }}
+                  />
+                </label>
+                {(!attachmentName && existingAttachment) ? (
+                  <a href={existingAttachment} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline mt-1 inline-block">
+                    View current file
+                  </a>
+                ) : null}
+              </Field>
               <Field label="Category">
                 <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
                   <option value="">Select Category</option>
@@ -583,7 +572,7 @@ function PartyAddModal({ chartGroups, onClose, onCreated }) {
             <input type="number" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} placeholder="Enter Opening Balance" className={inputCls} />
           </Field>
           <Field label="Credit Limit">
-            <input type="number" value={creditLimit} onChange={(e) => setCreditLimit(e.target.value)} placeholder="Enter Credit Limit" className={inputCls} />
+            <input type="number" min="0" value={creditLimit} onChange={(e) => setCreditLimit(e.target.value)} placeholder="Enter Credit Limit" className={inputCls} />
           </Field>
           <Field label="Due Date">
             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} />

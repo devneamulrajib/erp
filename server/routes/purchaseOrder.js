@@ -90,7 +90,7 @@ router.post('/', auth, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const {
-      code, date, supplier, projectType, project, titleOfWork, task,
+      code, date, supplier, project, titleOfWork, task,
       site, category, reference, boqItems, items, attachment,
     } = req.body;
 
@@ -104,7 +104,7 @@ router.post('/', auth, async (req, res) => {
 
     const order = await PurchaseOrder.create({
       code: code || generateCode(),
-      date, supplierId: supplier, projectType, projectId: project || null,
+      date, supplierId: supplier, projectId: project || null,
       titleOfWork, task, siteId: site || null, categoryId: category || null, reference,
       subtotal,
       grandTotal: subtotal,
@@ -151,7 +151,7 @@ router.put('/:id', auth, async (req, res) => {
 
     const fieldMap = {
       date: 'date', titleOfWork: 'titleOfWork', task: 'task', reference: 'reference',
-      projectType: 'projectType', attachment: 'attachment',
+      attachment: 'attachment',
       supplier: 'supplierId', project: 'projectId', site: 'siteId', category: 'categoryId',
     };
     Object.entries(fieldMap).forEach(([bodyKey, col]) => {
@@ -222,7 +222,6 @@ async function generateBillFromOrder(order, addedByName) {
     code: 'Bill' + Math.floor(1000000 + Math.random() * 9000000),
     date: new Date().toISOString().slice(0, 10),
     customerId: order.supplierId,
-    projectType: order.projectType,
     projectId: order.projectId,
     siteId: order.siteId,
     refWoNo: order.code,

@@ -97,7 +97,6 @@ router.post('/', auth, async (req, res) => {
       code: req.body.code || generateCode(),
       date: req.body.date,
       customerId: customer,
-      projectType: req.body.projectType,
       projectId: req.body.project || null,
       siteId: req.body.site || null,
       attachment: req.body.attachment,
@@ -124,7 +123,7 @@ router.put('/:id', auth, async (req, res) => {
     if (!quote) return res.status(404).json({ message: 'Not found' });
 
     const fkMap = { customer: 'customerId', project: 'projectId', site: 'siteId' };
-    const fields = ['date', 'projectType', 'attachment', 'contentBody', 'contentFooter', 'vatPercent', 'deliveryCharge', 'discountPercent'];
+    const fields = ['date', 'attachment', 'contentBody', 'contentFooter', 'vatPercent', 'deliveryCharge', 'discountPercent'];
     fields.forEach((key) => {
       if (req.body[key] !== undefined) quote[key] = req.body[key];
     });

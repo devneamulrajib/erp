@@ -6,7 +6,6 @@ const Quote = sequelize.define('Quote', {
   date: DataTypes.STRING,
 
   customerId: DataTypes.INTEGER,
-  projectType: DataTypes.STRING,
   projectId: DataTypes.INTEGER,
   siteId: DataTypes.INTEGER,
   attachment: DataTypes.STRING,

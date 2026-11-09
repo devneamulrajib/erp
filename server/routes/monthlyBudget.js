@@ -8,6 +8,7 @@ const { BudgetCategory, MonthlyBudget, OfficeExpense } = require('../models/asso
 const MonthlyBudgetAuditLog = require('../models/MonthlyBudgetAuditLog');
 const MonthlyBudgetCashReceipt = require('../models/MonthlyBudgetCashReceipt');
 const logActivity = require('../utils/activityLog');
+const { notifyAdmin } = require('../utils/notify');
 
 // -------------------------------------------------------------
 // Summary & Audit Logs
@@ -251,6 +252,23 @@ router.post('/request', auth, async (req, res) => {
       relatedId: budget.id,
       performedBy,
     });
+
+    // Let the admin know a request is waiting in the Approval Center.
+    // Wrapped so a notification problem can never fail the request itself.
+    try {
+      const isAdminUser = ['superadmin', 'admin'].includes(req.user?.role);
+      if (!isAdminUser) {
+        const category = await BudgetCategory.findByPk(budgetCategoryId);
+        await notifyAdmin(
+          'BudgetRequest',
+          `New budget request from ${performedBy}: ${category?.name || 'Budget'} ${month}/${year} (৳${Number(requestedAmount).toLocaleString()})`,
+          'MonthlyBudget',
+          budget.id
+        );
+      }
+    } catch (notifyErr) {
+      console.error('Budget request notify error:', notifyErr.message);
+    }
 
     res.status(201).json(budget);
   } catch (err) {

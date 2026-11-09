@@ -7,7 +7,6 @@ const Sale = sequelize.define('Sale', {
   customerId: DataTypes.INTEGER,
   ledger: { type: DataTypes.STRING, defaultValue: 'Flat Sales' },
 
-  projectType: DataTypes.STRING,
   projectId: DataTypes.INTEGER,
   titleOfWork: DataTypes.STRING,
   siteId: DataTypes.INTEGER,

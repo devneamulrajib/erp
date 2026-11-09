@@ -6,43 +6,34 @@ const http = require('http');
 const path = require('path');
 const sequelize = require('./config/db');
 const createSuperAdmin = require('./seed/createSuperAdmin');
+const removeProjectTypeMigration = require('./utils/removeProjectTypeMigration');
 const { init: initSocket } = require('./utils/socket');
 
 const app = express();
 
-// ==========================================
-// Middleware Configuration
-// ==========================================
+// Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-// Static Assets
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// ==========================================
-// HTTP Server & Socket.IO Setup
-// ==========================================
+// HTTP server & Socket.IO
 const server = http.createServer(app);
 initSocket(server);
 
-// ==========================================
-// Database Connection & Initialization
-// ==========================================
+// Database
 sequelize.authenticate()
   .then(async () => {
     console.log('MySQL connected successfully.');
-    // Verifies models match the DB structure without dropping tables
-    await sequelize.sync(); 
+    await sequelize.sync();
+    await removeProjectTypeMigration();
     await createSuperAdmin();
   })
   .catch((err) => {
     console.error('MySQL connection error:', err);
   });
 
-// ==========================================
-// Core & Authentication Routes
-// ==========================================
+// Core & authentication
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/dashboard', require('./routes/dashboard'));
@@ -50,10 +41,7 @@ app.use('/api/activity-log', require('./routes/activityLog'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/approvals', require('./routes/approvals'));
 
-// ==========================================
-// Project, Real Estate & CRM Routes
-// ==========================================
-app.use('/api/project-types', require('./routes/projectType'));
+// Project, real estate & CRM
 app.use('/api/projects', require('./routes/project'));
 app.use('/api/project-managers', require('./routes/projectManager'));
 app.use('/api/sites', require('./routes/site'));
@@ -73,9 +61,7 @@ app.use('/api/communication-status', require('./routes/communicationStatus'));
 app.use('/api/profession', require('./routes/profession'));
 app.use('/api/area', require('./routes/area'));
 
-// ==========================================
-// Inventory, Items & Procurement Routes
-// ==========================================
+// Inventory, items & procurement
 app.use('/api/category', require('./routes/category'));
 app.use('/api/brand', require('./routes/brand'));
 app.use('/api/unit', require('./routes/unit'));
@@ -92,9 +78,7 @@ app.use('/api/material-requisitions', require('./routes/materialRequisition'));
 app.use('/api/service-requisitions', require('./routes/serviceRequisition'));
 app.use('/api/fund-requisitions', require('./routes/fundRequisition'));
 
-// ==========================================
-// Billing, Contracting & Accounting Routes
-// ==========================================
+// Billing, contracting & accounting
 app.use('/api/party', require('./routes/party'));
 app.use('/api/party-list', require('./routes/partyList'));
 app.use('/api/bill', require('./routes/bill'));
@@ -118,24 +102,17 @@ app.use('/api/contra-vouchers', require('./routes/contraVoucher'));
 app.use('/api/accounting-reports', require('./routes/accountingReports'));
 app.use('/api/support-tickets', require('./routes/supportTicket'));
 
-// ==========================================
-// HR, Payroll & Investor Management Routes
-// ==========================================
+// HR, payroll & investor management
 app.use('/api/employee', require('./routes/employee'));
 app.use('/api/payslip', require('./routes/paySlip'));
 app.use('/api/attendance-corrections', require('./routes/attendanceCorrection'));
 app.use('/api/assign-share', require('./routes/assignShare'));
 app.use('/api/investor-management', require('./routes/investor'));
 
-// ==========================================
-// Client / Partner / Employee Portal Routes
-// ==========================================
-// Authentication & Administration
+// Portal
 app.use('/api/portal/auth', require('./routes/portalAuth'));
-app.use('/api/portalAuth', require('./routes/portalAuth')); // Alias compatibility
+app.use('/api/portalAuth', require('./routes/portalAuth')); // alias
 app.use('/api/portal-admin', require('./routes/portalAdmin'));
-
-// Portal Feature Modules
 app.use('/api/portal/dashboard', require('./routes/portalDashboard'));
 app.use('/api/portal/bills', require('./routes/portalBills'));
 app.use('/api/portal/quotes', require('./routes/portalQuotes'));
@@ -146,9 +123,7 @@ app.use('/api/portal/employee', require('./routes/portalEmployee'));
 app.use('/api/portal/investor', require('./routes/portalInvestor'));
 app.use('/api/portal/notifications', require('./routes/portalNotifications'));
 
-// ==========================================
-// 404 & Global Error Handling
-// ==========================================
+// 404 & global error handling
 app.use((req, res, next) => {
   res.status(404).json({ message: `Route not found: ${req.originalUrl}` });
 });
@@ -157,13 +132,11 @@ app.use((err, req, res, next) => {
   console.error('Unhandled Application Error:', err);
   res.status(err.status || 500).json({
     message: err.message || 'Internal Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 });
 
-// ==========================================
-// Start Server
-// ==========================================
+// Start server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);

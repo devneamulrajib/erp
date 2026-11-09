@@ -4,7 +4,6 @@ const sequelize = require('../config/db');
 const JournalVoucher = sequelize.define('JournalVoucher', {
   voucherNo: DataTypes.STRING,
   date: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
-  projectType: DataTypes.STRING,
   project: DataTypes.STRING,
   titleOfWork: DataTypes.STRING,
   site: DataTypes.STRING,

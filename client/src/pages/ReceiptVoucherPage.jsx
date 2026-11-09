@@ -5,7 +5,7 @@ import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
 import {
   Pencil, Trash2, Eye, Printer, Mail, Search, FileText, FileSpreadsheet, Plus,
-  Receipt, Landmark, SlidersHorizontal, ChevronDown, ChevronUp, Paperclip, CheckCircle2, XCircle,
+  Receipt, Landmark, SlidersHorizontal, ChevronDown, ChevronUp, Paperclip, XCircle,
 } from 'lucide-react';
 import {
   getVouchers, getVoucher, getNextVoucherCode, createVoucher, updateVoucher, deleteVoucher,
@@ -21,7 +21,6 @@ const PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'Cheque', 'Card', 'Mobile Bank
 
 export default function ReceiptVoucherPage() {
   const [projects, setProjects] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
   const [sites, setSites] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [banks, setBanks] = useState([]);
@@ -31,7 +30,6 @@ export default function ReceiptVoucherPage() {
 
   // form state
   const [editingId, setEditingId] = useState(null);
-  const [projectType, setProjectType] = useState('');
   const [project, setProject] = useState('');
   const [titleOfWork, setTitleOfWork] = useState('');
   const [task, setTask] = useState('');
@@ -101,7 +99,6 @@ export default function ReceiptVoucherPage() {
 
   useEffect(() => {
     api.get('/projects').then((res) => setProjects(res.data ?? [])).catch(() => {});
-    api.get('/project-types').then((res) => setProjectTypes(res.data ?? [])).catch(() => {});
     api.get('/sites').then((res) => setSites(res.data ?? [])).catch(() => {});
     reloadAccounts();
     reloadBanks();
@@ -113,7 +110,7 @@ export default function ReceiptVoucherPage() {
 
   function resetFormForCreate() {
     setEditingId(null);
-    setProjectType(''); setProject(''); setTitleOfWork(''); setTask(''); setSite('');
+    setProject(''); setTitleOfWork(''); setTask(''); setSite('');
     setDate(new Date().toISOString().slice(0, 10));
     setCreditAccount(''); setDebitAccount(''); setBank(''); setPaymentMethod('');
     setIfCheque(false); setChequeReceiptNo('');
@@ -138,7 +135,6 @@ export default function ReceiptVoucherPage() {
       const creditEntry = entries.find((e) => Number(e.credit) > 0);
 
       setEditingId(v.id);
-      setProjectType(v.projectType || '');
       setProject(v.projectId ?? '');
       setTitleOfWork(v.titleOfWork || '');
       setTask(v.task || '');
@@ -201,7 +197,7 @@ export default function ReceiptVoucherPage() {
         ],
         narration: comment,
         reference: invoiceBill,
-        projectType, titleOfWork, task, site,
+        titleOfWork, task, site,
         paymentMethod, paymentType, installment,
         ifCheque, chequeReceiptNo,
         attachmentFile,
@@ -329,13 +325,7 @@ export default function ReceiptVoucherPage() {
           </div>
 
           <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
-              <Field label="Project Type">
-                <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputClass}>
-                  <option value="">Select Project Type</option>
-                  {projectTypes.map((pt) => <option key={pt.id} value={pt.name}>{pt.name}</option>)}
-                </select>
-              </Field>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
               <Field label="Project">
                 <select value={project} onChange={(e) => setProject(e.target.value)} className={inputClass}>
                   <option value="">Select Project</option>

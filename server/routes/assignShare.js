@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
-const { AssignShare, Project, ProjectType, Site, Flat, ChartOfAccount } = require('../models/associations');
+const { AssignShare, Project, Site, Flat, ChartOfAccount } = require('../models/associations');
 
 function generateShareCode() {
   return 'SHR-' + Math.floor(100000 + Math.random() * 900000);
@@ -9,7 +9,6 @@ function generateShareCode() {
 
 const includes = [
   { model: Project, as: 'project', attributes: ['id', 'name'] },
-  { model: ProjectType, as: 'projectType', attributes: ['id', 'name'] },
   { model: Site, as: 'site', attributes: ['id', 'name'] },
   { model: Flat, as: 'flat', attributes: ['id', 'flatLandNo'] },
   { model: ChartOfAccount, as: 'customer', attributes: ['id', 'name', 'code'] },
@@ -21,7 +20,6 @@ function serialize(row) {
     id: j.id,
     project: j.project ? j.project.name : '',
     projectId: j.projectId,
-    projectType: j.projectTypeId,
     code: j.customer ? j.customer.code : '',
     shareCode: j.shareCode,
     name: j.customer ? j.customer.name : '',
@@ -92,7 +90,7 @@ router.get('/report', auth, async (req, res) => {
 router.post('/', auth, async (req, res) => {
   try {
     const {
-      projectType, project, shareCode, site, flatLandNo, customer,
+      project, shareCode, site, flatLandNo, customer,
       noOfShare, note, shareAmount, paidAmount,
     } = req.body;
 
@@ -101,7 +99,6 @@ router.post('/', auth, async (req, res) => {
 
     const row = await AssignShare.create({
       projectId: project,
-      projectTypeId: projectType || null,
       siteId: site || null,
       flatId: flatLandNo || null,
       customerId: customer,
@@ -125,7 +122,7 @@ router.put('/:id', auth, async (req, res) => {
     if (!row) return res.status(404).json({ message: 'Not found' });
 
     const map = {
-      projectType: 'projectTypeId', project: 'projectId', site: 'siteId',
+      project: 'projectId', site: 'siteId',
       flatLandNo: 'flatId', customer: 'customerId', shareCode: 'shareCode',
       noOfShare: 'noOfShare', note: 'note', shareAmount: 'shareAmount', paidAmount: 'paidAmount',
     };

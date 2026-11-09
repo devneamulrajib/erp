@@ -4,15 +4,14 @@ import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
 import {
-  getBoqTitles, createBoqTitle, updateBoqTitle, deleteBoqTitle, getProjectTypeOptions,
+  getBoqTitles, createBoqTitle, updateBoqTitle, deleteBoqTitle,
 } from '../api/boqTitle';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
-const EMPTY_FORM = { projectType: '', title: '' };
+const EMPTY_FORM = { title: '' };
 
 export default function BoqTitlePage() {
   const [titles, setTitles] = useState([]);
-  const [projectTypeOptions, setProjectTypeOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
@@ -41,12 +40,6 @@ export default function BoqTitlePage() {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    getProjectTypeOptions()
-      .then((data) => setProjectTypeOptions(Array.isArray(data) ? data : (data?.rows || data?.projectTypes || [])))
-      .catch(console.error);
-  }, []);
-
   const filtered = titles.filter((t) => {
     if (search && !t.title?.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
@@ -69,7 +62,6 @@ export default function BoqTitlePage() {
     setEditingId(item._id || item.id);
     setViewOnly(false);
     setForm({
-      projectType: item.projectType?._id || item.projectType?.id || item.projectType || '',
       title: item.title || '',
     });
     setError('');
@@ -80,7 +72,6 @@ export default function BoqTitlePage() {
     setEditingId(item._id || item.id);
     setViewOnly(true);
     setForm({
-      projectType: item.projectType?._id || item.projectType?.id || item.projectType || '',
       title: item.title || '',
     });
     setError('');
@@ -92,7 +83,7 @@ export default function BoqTitlePage() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (viewOnly) return;
-    if (!form.projectType || !form.title) return;
+    if (!form.title) return;
     setSaving(true);
     setError('');
     try {
@@ -139,7 +130,7 @@ export default function BoqTitlePage() {
               ]}
             />
             <h1 className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">BOQ Titles</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Manage Bill of Quantities titles by project type</p>
+            <p className="text-sm text-slate-500 mt-0.5">Manage Bill of Quantities titles</p>
           </div>
           <button
             onClick={openAddModal}
@@ -197,7 +188,6 @@ export default function BoqTitlePage() {
               <thead>
                 <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
                   <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">SL</th>
-                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Project Type</th>
                   <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Title</th>
                   <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Action</th>
                 </tr>
@@ -205,11 +195,11 @@ export default function BoqTitlePage() {
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={4} className="text-center py-16 text-slate-400 text-sm">Loading...</td>
+                    <td colSpan={3} className="text-center py-16 text-slate-400 text-sm">Loading...</td>
                   </tr>
                 ) : pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="text-center py-16">
+                    <td colSpan={3} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <LayoutGrid size={28} strokeWidth={1.5} />
                         <p className="text-sm">No titles found. Try adjusting your search, or add one.</p>
@@ -220,13 +210,6 @@ export default function BoqTitlePage() {
                   pageRows.map((item, i) => (
                     <tr key={item._id || item.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
                       <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">{(page - 1) * pageSize + i + 1}</td>
-                      <td className="px-5 py-3.5">
-                        {item.projectType?.name ? (
-                          <span className="inline-flex items-center rounded-full bg-slate-100 text-slate-600 px-2.5 py-1 text-xs font-medium">
-                            {item.projectType.name}
-                          </span>
-                        ) : '—'}
-                      </td>
                       <td className="px-5 py-3.5">
                         <button
                           onClick={() => openViewModal(item)}
@@ -318,21 +301,6 @@ export default function BoqTitlePage() {
             </div>
           )}
           <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Project Type *</label>
-              <select
-                required
-                disabled={viewOnly}
-                value={form.projectType}
-                onChange={(e) => setForm((f) => ({ ...f, projectType: e.target.value }))}
-                className={fieldClass}
-              >
-                <option value="">Select Project Type</option>
-                {projectTypeOptions.map((pt) => (
-                  <option key={pt._id || pt.id} value={pt._id || pt.id}>{pt.name}</option>
-                ))}
-              </select>
-            </div>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">BOQ Title *</label>
               <input

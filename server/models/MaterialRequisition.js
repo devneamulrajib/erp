@@ -9,7 +9,6 @@ const MaterialRequisition = sequelize.define('MaterialRequisition', {
   company: DataTypes.STRING,
   supplierId: DataTypes.INTEGER,
 
-  projectType: DataTypes.STRING,
   projectId: DataTypes.INTEGER,
   titleOfWork: DataTypes.STRING,
   task: DataTypes.STRING,

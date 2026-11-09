@@ -95,7 +95,7 @@ export default function SaleList() {
           <table className="min-w-full text-sm">
             <thead>
               <tr className="bg-indigo-500 text-white whitespace-nowrap">
-                {['ID', 'Project Type', 'Project', 'Title/Name of Work', 'Customer Name', 'Code',
+                {['ID', 'Project', 'Title/Name of Work', 'Customer Name', 'Code',
                   'Ref', 'Date', 'Grand Total', 'Added By', 'Attachment', 'Approve', 'Action'].map((h) => (
                   <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
                 ))}
@@ -103,14 +103,13 @@ export default function SaleList() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={13} className="text-center py-8 text-gray-400">Loading…</td></tr>
+                <tr><td colSpan={12} className="text-center py-8 text-gray-400">Loading…</td></tr>
               ) : paged.length === 0 ? (
-                <tr><td colSpan={13} className="text-center py-8 text-gray-400">No entries found</td></tr>
+                <tr><td colSpan={12} className="text-center py-8 text-gray-400">No entries found</td></tr>
               ) : (
                 paged.map((row, i) => (
                   <tr key={row._id} className="border-t border-gray-100 whitespace-nowrap align-top">
                     <td className="px-3 py-2">{row.code?.replace(/\D/g, '').slice(-3) || (page - 1) * pageSize + i + 1}</td>
-                    <td className="px-3 py-2">{row.projectType || '-'}</td>
                     <td className="px-3 py-2">{row.project?.name || '-'}</td>
                     <td className="px-3 py-2">{row.titleOfWork || '-'}</td>
                     <td className="px-3 py-2">{row.customer?.name || '-'}</td>

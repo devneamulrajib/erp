@@ -243,7 +243,6 @@ function RequisitionOverviewModal({ requisitionId, initialRow, onClose, onEdit }
               <OverviewField label="Demand Date" value={fmtDate(data?.demandDate)} />
               <OverviewField label="Company" value={data?.company || '-'} />
               <OverviewField label="Reference" value={data?.reference || '-'} />
-              <OverviewField label="Project Type" value={data?.projectType?.name || '-'} />
               <OverviewField label="Project" value={data?.project?.name || '-'} />
               <OverviewField label="Supplier" value={data?.supplier?.name || '-'} />
               <OverviewField label="Site" value={data?.site?.name || '-'} />
@@ -462,7 +461,6 @@ export default function MaterialRequisitionList() {
   const [rows, setRows] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState([]);
@@ -512,7 +510,6 @@ export default function MaterialRequisitionList() {
   useEffect(() => {
     api.get('/customers').then((res) => setSuppliers(asArray(res))).catch(() => {});
     api.get('/projects').then((res) => setProjects(asArray(res))).catch(() => {});
-    api.get('/project-types').then((res) => setProjectTypes(asArray(res))).catch(() => {});
   }, []);
 
   useEffect(() => { setPage(1); }, [search, pageSize]);
@@ -545,11 +542,6 @@ export default function MaterialRequisitionList() {
         .catch(() => {});
     }
   }, [searchParams, rows, loading, setSearchParams]);
-
-  function projectTypeName(id) {
-    if (!id) return '-';
-    return projectTypes.find((pt) => String(pt.id) === String(id))?.name || id;
-  }
 
   async function handleDelete(row) {
     if (!window.confirm('Delete this requisition?')) return;
@@ -761,7 +753,6 @@ export default function MaterialRequisitionList() {
                     <input type="checkbox" onChange={(e) => toggleSelectAll(e.target.checked)} checked={selected.length > 0 && selected.length === paged.length} className="rounded border-slate-300" />
                   </th>
                   <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">ID</th>
-                  <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">Type</th>
                   <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">Project</th>
                   <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">Title</th>
                   <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">Code</th>
@@ -777,10 +768,10 @@ export default function MaterialRequisitionList() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={14} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
+                  <tr><td colSpan={13} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
                 ) : paged.length === 0 ? (
                   <tr>
-                    <td colSpan={14} className="text-center py-16">
+                    <td colSpan={13} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <ClipboardList size={28} strokeWidth={1.5} />
                         <p className="text-sm">No entries found. Try adjusting your filters, or add a new requisition.</p>
@@ -801,7 +792,6 @@ export default function MaterialRequisitionList() {
                           <input type="checkbox" checked={selected.includes(row.id)} onChange={(e) => toggleSelectOne(row.id, e.target.checked)} className="rounded border-slate-300" />
                         </td>
                         <td className="px-2 py-2.5 text-slate-400 font-mono">{(page - 1) * pageSize + i + 1}</td>
-                        <td className="px-2 py-2.5 text-slate-600">{projectTypeName(row.projectType)}</td>
                         <td className="px-2 py-2.5 text-slate-600">{row.project?.name || '-'}</td>
                         <td className="px-2 py-2.5 font-medium text-slate-700 max-w-[140px] truncate">{row.titleOfWork || '-'}</td>
                         <td className="px-2 py-2.5 text-slate-600 font-mono">{row.code}</td>

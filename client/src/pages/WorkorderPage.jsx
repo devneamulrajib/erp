@@ -33,7 +33,6 @@ export default function WorkorderPage() {
 
   const [customers, setCustomers] = useState([]);
   const [chartGroups, setChartGroups] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
   const [projects, setProjects] = useState([]);
   const [sites, setSites] = useState([]);
   const [itemCatalog, setItemCatalog] = useState([]);
@@ -41,7 +40,6 @@ export default function WorkorderPage() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [customer, setCustomer] = useState('');
   const [code, setCode] = useState('');
-  const [projectType, setProjectType] = useState('');
   const [project, setProject] = useState('');
   const [site, setSite] = useState('');
   const [clientOrderNo, setClientOrderNo] = useState('');
@@ -63,7 +61,6 @@ export default function WorkorderPage() {
     getCustomers().then((res) => setCustomers(asArray(res))).catch((err) => console.error('Failed to load customers', err));
     getChartOfGroups().then((res) => setChartGroups(asArray(res))).catch((err) => console.error('Failed to load chart groups', err));
     api.get('/projects').then((res) => setProjects(asArray(res))).catch((err) => console.error('Failed to load projects', err));
-    api.get('/project-types').then((res) => setProjectTypes(asArray(res))).catch((err) => console.error('Failed to load project types', err));
     api.get('/sites').then((res) => setSites(asArray(res))).catch((err) => console.error('Failed to load sites', err));
     getItems().then((res) => setItemCatalog(asArray(res))).catch((err) => console.error('Failed to load items', err));
   }, []);
@@ -79,7 +76,6 @@ export default function WorkorderPage() {
       setDate(o.date || '');
       setCustomer(o.customer?.id || o.customer || '');
       setCode(o.code || '');
-      setProjectType(o.projectType?.id || o.projectType || '');
       setProject(o.project?.id || o.project || '');
       setSite(o.site?.id || o.site || '');
       setClientOrderNo(o.clientOrderNo || '');
@@ -143,7 +139,7 @@ export default function WorkorderPage() {
     setSubmitting(true);
     try {
       const payload = {
-        code, date, customer, projectType, project, site, clientOrderNo,
+        code, date, customer, project, site, clientOrderNo,
         items: rows.map((r) => ({ ...r, amount: num(r.rate) * num(r.quantity) })),
         attachment: attachmentName,
         vatIncluded, vatPercent, aitIncluded, aitPercent,
@@ -182,41 +178,41 @@ export default function WorkorderPage() {
             <p className="text-sm text-slate-500 mt-0.5">Create a work order with items, VAT and AIT</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-  <button
-    type="button"
-    onClick={addRow}
-    className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors"
-  >
-    <Plus size={16} strokeWidth={2.5} />
-    Add Item
-  </button>
-  <button
-    type="button"
-    onClick={() => setShowCustomerModal(true)}
-    className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors"
-  >
-    <UserPlus size={16} strokeWidth={2.5} />
-    Add Contact
-  </button>
-  {isEdit && (
-    <button
-      type="button"
-      onClick={() => navigate(`/billing/workorder/${id}/invoice`)}
-      className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors"
-    >
-      <FileText size={16} />
-      Invoice
-    </button>
-  )}
-  <button
-    type="button"
-    onClick={() => navigate('/billing/workorder_list')}
-    className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 transition-colors"
-  >
-    <List size={16} />
-    Work Order List
-  </button>
-</div>
+            <button
+              type="button"
+              onClick={addRow}
+              className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors"
+            >
+              <Plus size={16} strokeWidth={2.5} />
+              Add Item
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCustomerModal(true)}
+              className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors"
+            >
+              <UserPlus size={16} strokeWidth={2.5} />
+              Add Contact
+            </button>
+            {isEdit && (
+              <button
+                type="button"
+                onClick={() => navigate(`/billing/workorder/${id}/invoice`)}
+                className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors"
+              >
+                <FileText size={16} />
+                Invoice
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => navigate('/billing/workorder_list')}
+              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-sm shadow-indigo-600/20 transition-colors"
+            >
+              <List size={16} />
+              Work Order List
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -227,7 +223,7 @@ export default function WorkorderPage() {
           {/* Main details card */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-5">
             <h2 className="text-sm font-semibold text-slate-800 mb-4">Work Order Details</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <Field label="Date">
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
               </Field>
@@ -242,12 +238,6 @@ export default function WorkorderPage() {
               </Field>
               <Field label="Code">
                 <input value={code} readOnly className={`${inputReadOnlyCls} font-mono`} />
-              </Field>
-              <Field label="Project Type">
-                <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
-                  <option value="">Select value</option>
-                  {projectTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
               </Field>
               <Field label="Project">
                 <select value={project} onChange={(e) => setProject(e.target.value)} className={inputCls}>
@@ -264,14 +254,16 @@ export default function WorkorderPage() {
               <Field label="Client Order No.">
                 <input value={clientOrderNo} onChange={(e) => setClientOrderNo(e.target.value)} className={inputCls} placeholder="PO No." />
               </Field>
-              <Field label="Attachment">
-                <input
-                  type="file"
-                  onChange={(e) => setAttachmentName(e.target.files?.[0]?.name || '')}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:bg-slate-100 file:text-slate-600 file:text-xs file:font-medium hover:file:bg-slate-200 transition"
-                />
-                {attachmentName && <p className="text-xs text-slate-500 mt-1.5 truncate">Selected: {attachmentName}</p>}
-              </Field>
+              <div className="sm:col-span-2 lg:col-span-3">
+                <Field label="Attachment">
+                  <input
+                    type="file"
+                    onChange={(e) => setAttachmentName(e.target.files?.[0]?.name || '')}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:bg-slate-100 file:text-slate-600 file:text-xs file:font-medium hover:file:bg-slate-200 transition"
+                  />
+                  {attachmentName && <p className="text-xs text-slate-500 mt-1.5 truncate">Selected: {attachmentName}</p>}
+                </Field>
+              </div>
             </div>
           </div>
 

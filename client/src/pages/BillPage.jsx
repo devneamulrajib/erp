@@ -40,13 +40,11 @@ export default function BillPage() {
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [units, setUnits] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [customer, setCustomer] = useState('');
   const [ledger, setLedger] = useState('');
   const [code, setCode] = useState('');
-  const [projectType, setProjectType] = useState('');
   const [project, setProject] = useState('');
   const [site, setSite] = useState('');
   const [refWoNo, setRefWoNo] = useState('');
@@ -90,7 +88,6 @@ export default function BillPage() {
       .catch(() => {});
     api.get('/projects').then((res) => setProjects(Array.isArray(res.data) ? res.data : [])).catch(() => {});
     api.get('/sites').then((res) => setSites(Array.isArray(res.data) ? res.data : [])).catch(() => {});
-    api.get('/project-types').then((res) => setProjectTypes(Array.isArray(res.data) ? res.data : [])).catch(() => {});
     getCategories().then((data) => setCategories(Array.isArray(data) ? data : [])).catch(() => {});
     getBrands().then((data) => setBrands(Array.isArray(data) ? data : [])).catch(() => {});
     getUnits().then((data) => setUnits(Array.isArray(data) ? data : [])).catch(() => {});
@@ -108,7 +105,6 @@ export default function BillPage() {
       setCustomer(b.customerId || getId(b.Customer) || getId(b.customer) || '');
       setLedger(b.ledgerId || getId(b.Ledger) || getId(b.ledger) || '');
       setCode(b.code || '');
-      setProjectType(b.projectType || '');
       setProject(b.projectId || getId(b.Project) || getId(b.project) || '');
       setSite(b.siteId || getId(b.Site) || getId(b.site) || '');
       setRefWoNo(b.refWoNo || '');
@@ -212,7 +208,7 @@ export default function BillPage() {
     setSubmitting(true);
     try {
       const payload = {
-        code, date, customer, ledger, projectType, project, site, refWoNo, contentBody,
+        code, date, customer, ledger, project, site, refWoNo, contentBody,
         items: rows.map((r) => ({ ...r, amount: num(r.rate) * num(r.quantity) })),
         attachment: attachmentUrl, status, vatIncluded, vatPercent, aitIncluded, aitPercent,
         interestRate, payments,
@@ -322,14 +318,6 @@ export default function BillPage() {
               <Field label="Status">
                 <select value={status} onChange={(e) => setStatus(e.target.value)} className="input">
                   {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </Field>
-              <Field label="Project Type">
-                <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
-                  <option value="">Select Project Type</option>
-                  {projectTypes.map((pt) => (
-                    <option key={getId(pt)} value={pt.name}>{pt.name}</option>
-                  ))}
                 </select>
               </Field>
               <Field label="Project">
@@ -496,7 +484,6 @@ export default function BillPage() {
 
           {/* Payments */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Payment history */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-slate-700">Payment History</h2>
@@ -538,7 +525,6 @@ export default function BillPage() {
               </div>
             </div>
 
-            {/* Add payment */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-5 no-print">
               <h2 className="text-sm font-semibold text-slate-700 mb-4">Add Payment</h2>
               <div className="grid grid-cols-2 gap-4 mb-4">

@@ -166,7 +166,6 @@ export default function ProjectProgressReport() {
               <thead>
                 <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
                   <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">ID</th>
-                  <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Project Type</th>
                   <th className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wide">Project</th>
                   <th className="px-4 py-3 text-right font-medium text-xs uppercase tracking-wide">Total Task</th>
                   <th className="px-4 py-3 text-right font-medium text-xs uppercase tracking-wide">Complete Task</th>
@@ -178,10 +177,10 @@ export default function ProjectProgressReport() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={9} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
+                  <tr><td colSpan={8} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
                 ) : pagedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="text-center py-16">
+                    <td colSpan={8} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <LayoutGrid size={28} strokeWidth={1.5} />
                         <p className="text-sm">No data available in table.</p>
@@ -192,7 +191,6 @@ export default function ProjectProgressReport() {
                   pagedRows.map((r) => (
                     <tr key={r.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
                       <td className="px-4 py-3.5 text-slate-400 font-mono text-xs">{r.id}</td>
-                      <td className="px-4 py-3.5 text-slate-600">{r.projectType}</td>
                       <td className="px-4 py-3.5">
                         <Link to={`/project-module/projects/${r.id}`} className="text-indigo-600 hover:text-indigo-700 font-medium hover:underline underline-offset-2">
                           {r.project}

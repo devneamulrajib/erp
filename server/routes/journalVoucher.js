@@ -18,6 +18,8 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+const isAdminUser = (user) => ['superadmin', 'admin'].includes(user?.role);
+
 async function generateVoucherNo() {
   const count = await JournalVoucher.count();
   return `J${String(100 + count + 1)}`;
@@ -98,7 +100,6 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
     const voucher = await JournalVoucher.create({
       voucherNo: body.voucherNo || await generateVoucherNo(),
       date: body.date || Date.now(),
-      projectType: body.projectType || '',
       project: body.project || '',
       titleOfWork: body.titleOfWork || '',
       site: body.site || '',
@@ -108,6 +109,8 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
       comment: body.comment || '',
       addedBy: req.user?.name || 'Admin',
       attachment: req.file ? `/uploads/journal-vouchers/${req.file.filename}` : '',
+      // New vouchers always start pending; only the Approval Center (admin) can approve.
+      status: 'pending',
     });
 
     for (const l of lines) {
@@ -126,6 +129,12 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
     const voucher = await JournalVoucher.findByPk(req.params.id);
     if (!voucher) return res.status(404).json({ message: 'Not found' });
 
+    // RESTRICTION: Non-admin cannot edit approved vouchers
+    const isNonAdmin = !isAdminUser(req.user);
+    if (isNonAdmin && String(voucher.status).toLowerCase() === 'approved') {
+      return res.status(403).json({ message: 'Approved journal vouchers cannot be edited by an Accountant. Contact Admin.' });
+    }
+
     const body = req.body;
     if (body.lines !== undefined) {
       const lines = JSON.parse(body.lines);
@@ -141,12 +150,18 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
       voucher.totalCredit = totalCredit;
     }
 
-    const plainFields = ['date', 'projectType', 'project', 'titleOfWork', 'site', 'task', 'comment', 'status'];
+    const plainFields = ['date', 'project', 'titleOfWork', 'site', 'task', 'comment'];
+    if (!isNonAdmin) plainFields.push('status'); // Only Admin can change status directly
     plainFields.forEach((key) => {
       if (body[key] !== undefined) voucher[key] = body[key];
     });
     if (req.file) voucher.attachment = `/uploads/journal-vouchers/${req.file.filename}`;
     voucher.editedBy = req.user?.name || voucher.editedBy;
+
+    // If an Accountant edits a rejected voucher, send it back for approval
+    if (isNonAdmin && String(voucher.status).toLowerCase() === 'rejected') {
+      voucher.status = 'pending';
+    }
 
     await voucher.save();
     const populated = await JournalVoucher.findByPk(voucher.id, { include: includeAll });
@@ -158,8 +173,16 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await JournalVoucher.destroy({ where: { id: req.params.id } });
-    if (!deleted) return res.status(404).json({ message: 'Not found' });
+    const voucher = await JournalVoucher.findByPk(req.params.id);
+    if (!voucher) return res.status(404).json({ message: 'Not found' });
+
+    // RESTRICTION: Non-admin cannot delete approved vouchers
+    const isNonAdmin = !isAdminUser(req.user);
+    if (isNonAdmin && String(voucher.status).toLowerCase() === 'approved') {
+      return res.status(403).json({ message: 'Approved journal vouchers cannot be deleted by an Accountant. Contact Admin.' });
+    }
+
+    await voucher.destroy();
     res.json({ deleted: true });
   } catch (err) {
     res.status(500).json({ message: err.message });

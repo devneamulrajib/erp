@@ -3,7 +3,7 @@ import api from '../api/axios';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
-import { Pencil, Trash2, Eye, Copy, Printer, Mail } from 'lucide-react';
+import { Pencil, Trash2, Eye, Printer, Mail } from 'lucide-react';
 import {
   getVouchers, getVoucher, getNextVoucherCode,
   createVoucher, updateVoucher, deleteVoucher,
@@ -14,7 +14,6 @@ import { getBankAccounts } from '../api/bankAccount';
 
 export default function PaymentVoucherPage() {
   const [projects, setProjects] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
   const [sites, setSites] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [banks, setBanks] = useState([]);
@@ -24,7 +23,6 @@ export default function PaymentVoucherPage() {
 
   // form state
   const [editingId, setEditingId] = useState(null);
-  const [projectType, setProjectType] = useState('');
   const [project, setProject] = useState('');
   const [titleOfWork, setTitleOfWork] = useState('');
   const [task, setTask] = useState('');
@@ -91,7 +89,6 @@ export default function PaymentVoucherPage() {
 
   useEffect(() => {
     api.get('/projects').then((res) => setProjects(res.data ?? [])).catch(() => setProjects([]));
-    api.get('/project-types').then((res) => setProjectTypes(res.data ?? [])).catch(() => setProjectTypes([]));
     api.get('/sites').then((res) => setSites(res.data ?? [])).catch(() => setSites([]));
     reloadAccounts();
     reloadBanks();
@@ -101,7 +98,7 @@ export default function PaymentVoucherPage() {
 
   function resetFormForCreate() {
     setEditingId(null);
-    setProjectType(''); setProject(''); setTitleOfWork(''); setTask(''); setSite('');
+    setProject(''); setTitleOfWork(''); setTask(''); setSite('');
     setDate(new Date().toISOString().slice(0, 10));
     setDebitAccount(''); setCreditAccount(''); setBank('');
     setIfCheque(false); setChequeReceiptNo('');
@@ -118,7 +115,6 @@ export default function PaymentVoucherPage() {
       const creditEntry = entries.find((e) => Number(e.credit) > 0);
 
       setEditingId(v.id);
-      setProjectType(v.projectType || '');
       setProject(v.projectId ?? '');
       setTitleOfWork(v.titleOfWork || '');
       setTask(v.task || '');
@@ -180,7 +176,7 @@ export default function PaymentVoucherPage() {
         ],
         narration: comment,
         reference: invoiceBill,
-        projectType, titleOfWork, task, site, item,
+        titleOfWork, task, site, item,
         ifCheque, chequeReceiptNo,
         attachmentFile,
       };
@@ -274,13 +270,7 @@ export default function PaymentVoucherPage() {
         {formError && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-4">{formError}</div>}
 
         <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-md p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            <Field label="Project Type">
-              <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
-                <option value="">Select Project Type</option>
-                {(projectTypes || []).map((pt) => <option key={pt._id ?? pt.id} value={pt.name}>{pt.name}</option>)}
-              </select>
-            </Field>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <Field label="Project">
               <select value={project} onChange={(e) => setProject(e.target.value)} className="input">
                 <option value="">Select Project</option>

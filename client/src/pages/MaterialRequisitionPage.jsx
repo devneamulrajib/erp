@@ -23,7 +23,6 @@ export default function MaterialRequisitionPage() {
   const isEdit = !!id;
 
   const [suppliers, setSuppliers] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
   const [projects, setProjects] = useState([]);
   const [sites, setSites] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -34,7 +33,6 @@ export default function MaterialRequisitionPage() {
   const [company, setCompany] = useState('');
   const [supplier, setSupplier] = useState('');
   const [code, setCode] = useState('');
-  const [projectType, setProjectType] = useState('');
   const [project, setProject] = useState('');
   const [titleOfWork, setTitleOfWork] = useState('');
   const [task, setTask] = useState('');
@@ -53,7 +51,6 @@ export default function MaterialRequisitionPage() {
 
   useEffect(() => {
     getContacts('Supplier').then((res) => setSuppliers(res.data)).catch(() => {});
-    api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
     api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
     api.get('/sites').then((res) => setSites(res.data)).catch(() => {});
     getCategories().then(setCategories).catch(() => {});
@@ -76,7 +73,6 @@ export default function MaterialRequisitionPage() {
       setCompany(r.company || '');
       setSupplier(r.supplier?.id || r.supplierId || r.supplier || '');
       setCode(r.code || '');
-      setProjectType(r.projectType?.id || r.projectTypeId || r.projectType || '');
       setProject(r.project?.id || r.projectId || r.project || '');
       setTitleOfWork(r.titleOfWork || '');
       setTask(r.task || '');
@@ -124,7 +120,7 @@ export default function MaterialRequisitionPage() {
     setSubmitting(true);
     try {
       const payload = {
-        code, date, demandDate, company, supplier, projectType, project, titleOfWork, task,
+        code, date, demandDate, company, supplier, project, titleOfWork, task,
         site, category, reference,
         items: rows,
         note,
@@ -200,12 +196,6 @@ export default function MaterialRequisitionPage() {
               </Field>
               <Field label="Reference">
                 <input value={reference} onChange={(e) => setReference(e.target.value)} className={inputCls} placeholder="Reference" />
-              </Field>
-              <Field label="Project Type">
-                <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
-                  <option value="">Select Project Type</option>
-                  {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
-                </select>
               </Field>
               <Field label="Project">
                 <select value={project} onChange={(e) => setProject(e.target.value)} className={inputCls}>

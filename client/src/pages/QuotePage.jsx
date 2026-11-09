@@ -1,4 +1,3 @@
-// client/src/pages/QuotePage.jsx
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
@@ -19,7 +18,7 @@ function num(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
-// MySQL rows use `id`; fall back to `_id` only if present. Never falls back to name/text.
+
 function rid(o) {
   return o?.id ?? o?._id ?? '';
 }
@@ -41,13 +40,11 @@ export default function QuotePage() {
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [units, setUnits] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
   const [catalogItems, setCatalogItems] = useState([]);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [customer, setCustomer] = useState('');
   const [code, setCode] = useState('');
-  const [projectType, setProjectType] = useState('');
   const [project, setProject] = useState('');
   const [site, setSite] = useState('');
   const [attachmentName, setAttachmentName] = useState('');
@@ -67,8 +64,6 @@ export default function QuotePage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // Customers live in the Chart Of Accounts table (contactType: 'Customer'),
-    // same table backing the Customer Accounts page — not the old Customer model.
     api.get('/chart-of-accounts', { params: { contactType: 'Customer' } })
       .then((res) => setCustomers(res.data))
       .catch(() => {});
@@ -78,7 +73,6 @@ export default function QuotePage() {
     getCategories().then(setCategories).catch(() => {});
     getBrands().then((res) => setBrands(res.data || res)).catch(() => {});
     getUnits().then((res) => setUnits(res.data || res)).catch(() => {});
-    api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
     getItems().then(setCatalogItems).catch(() => {});
   }, []);
 
@@ -93,7 +87,6 @@ export default function QuotePage() {
       setDate(q.date || '');
       setCustomer(rid(q.customer));
       setCode(q.code || '');
-      setProjectType(rid(q.projectType) || q.projectType || '');
       setProject(rid(q.project));
       setSite(rid(q.site));
       setContentBody(q.contentBody || '');
@@ -124,8 +117,7 @@ export default function QuotePage() {
   function updateRow(i, key, value) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
   }
-  // Called when the Item Name dropdown selects a catalog item — pulls that
-  // item's unit and sale price in as a starting point (still editable after).
+
   function selectRowItem(i, itemId) {
     const found = catalogItems.find((it) => String(it.id) === String(itemId));
     setRows((prev) => prev.map((r, idx) => {
@@ -154,7 +146,7 @@ export default function QuotePage() {
     setSubmitting(true);
     try {
       const payload = {
-        code, date, customer, projectType: projectType || null,
+        code, date, customer,
         project: project || null, site: site || null,
         contentBody, contentFooter,
         items: rows.map((r) => ({ ...r, amount: num(r.rate) * num(r.quantity) })),
@@ -229,7 +221,7 @@ export default function QuotePage() {
 
           {/* Details panel */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 mb-5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <Field label="Date">
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
               </Field>
@@ -241,12 +233,6 @@ export default function QuotePage() {
               </Field>
               <Field label="Code">
                 <input value={code} readOnly className={`${inputCls} bg-slate-50 text-slate-500 font-mono`} />
-              </Field>
-              <Field label="Project Type">
-                <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
-                  <option value="">Select value</option>
-                  {projectTypes.map((pt) => <option key={rid(pt)} value={rid(pt)}>{pt.name}</option>)}
-                </select>
               </Field>
               <Field label="Project">
                 <select value={project} onChange={(e) => setProject(e.target.value)} className={inputCls}>
@@ -525,7 +511,6 @@ function CustomerAddModal({ chartGroups, onClose, onCreated }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // Chart Of Accounts codes are scoped by contactType (CUS/SUP/INV prefixes).
     api.get('/chart-of-accounts/next-code', { params: { contactType: 'Customer' } })
       .then((res) => setCode(res.data.code))
       .catch(() => {});
@@ -544,9 +529,6 @@ function CustomerAddModal({ chartGroups, onClose, onCreated }) {
     }
     setSaving(true);
     try {
-      // This modal writes into the Chart Of Accounts table (contactType: 'Customer'),
-      // the same table the Customer Accounts page reads from/writes to. Keeping this
-      // in sync is what makes newly-added customers show up in the dropdown above.
       const fd = new FormData();
       fd.append('code', code);
       fd.append('name', name.trim());

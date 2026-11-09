@@ -4,7 +4,6 @@ const sequelize = require('../config/db');
 const Project = sequelize.define('Project', {
   code: { type: DataTypes.STRING, unique: true },
   name: { type: DataTypes.STRING, allowNull: false },
-  projectType: DataTypes.STRING,
   projectManager: DataTypes.STRING,
   description: DataTypes.TEXT,
   budget: DataTypes.FLOAT,

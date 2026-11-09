@@ -3,9 +3,6 @@ const sequelize = require('../config/db');
 
 const FundRequisition = sequelize.define('FundRequisition', {
   date: DataTypes.STRING,
-  // Legacy columns (projectType / task / subTask) are kept so old rows stay intact,
-  // but the new form no longer sends them.
-  projectType: DataTypes.STRING,
   projectId: DataTypes.INTEGER,
   task: DataTypes.STRING,
   subTask: DataTypes.STRING,
