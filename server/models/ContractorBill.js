@@ -8,7 +8,6 @@ const ContractorBill = sequelize.define('ContractorBill', {
   partyId: DataTypes.INTEGER,
   ledgerId: DataTypes.INTEGER,
 
-  projectType: DataTypes.STRING,
   projectId: DataTypes.INTEGER,
   titleOfWork: DataTypes.STRING,
   task: DataTypes.STRING,

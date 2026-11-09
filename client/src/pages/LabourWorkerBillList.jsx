@@ -187,7 +187,7 @@ export default function LabourWorkerBillList() {
             <table className="min-w-full text-xs">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
-                  {['ID', 'Type', 'Project', 'Title', 'Worker', 'DR Ledger',
+                  {['ID', 'Project', 'Title', 'Worker', 'DR Ledger',
                     'CR Ledger', 'Code', 'Date', 'Grand Total', 'Paid', 'Due', 'Status', 'By', 'File', 'Action'].map((h) => (
                     <th key={h} className="px-3 py-2.5 text-left font-medium uppercase tracking-wide">{h}</th>
                   ))}
@@ -195,14 +195,13 @@ export default function LabourWorkerBillList() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={16} className="text-center py-8 text-slate-400 text-sm">Loading…</td></tr>
+                  <tr><td colSpan={15} className="text-center py-8 text-slate-400 text-sm">Loading…</td></tr>
                 ) : paged.length === 0 ? (
-                  <tr><td colSpan={16} className="text-center py-8 text-slate-400 text-sm">No data available in table</td></tr>
+                  <tr><td colSpan={15} className="text-center py-8 text-slate-400 text-sm">No data available in table</td></tr>
                 ) : (
                   paged.map((row, i) => (
                     <tr key={row.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap align-top">
                       <td className="px-3 py-2.5 text-slate-500">{(page - 1) * pageSize + i + 1}</td>
-                      <td className="px-3 py-2.5 text-slate-700">{row.projectTypeName || row.projectType || '-'}</td>
                       <td className="px-3 py-2.5 text-slate-700">{row.project?.name || '-'}</td>
                       <td className="px-3 py-2.5 text-slate-700 max-w-[140px] truncate">{row.titleOfWork || '-'}</td>
                       <td className="px-3 py-2.5 text-slate-700">{row.party?.name || '-'}</td>
@@ -264,7 +263,7 @@ export default function LabourWorkerBillList() {
               {filtered.length > 0 && (
                 <tfoot>
                   <tr className="border-t border-slate-200 font-medium bg-slate-50/50">
-                    <td colSpan={9} className="px-3 py-2.5 text-right text-slate-700">TOTAL:</td>
+                    <td colSpan={8} className="px-3 py-2.5 text-right text-slate-700">TOTAL:</td>
                     <td className="px-3 py-2.5 text-slate-900">{totals.grandTotal.toLocaleString()}</td>
                     <td className="px-3 py-2.5 text-slate-900">{totals.paid.toLocaleString()}</td>
                     <td className="px-3 py-2.5 text-slate-900">{totals.due.toLocaleString()}</td>

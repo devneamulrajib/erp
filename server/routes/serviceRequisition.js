@@ -130,12 +130,9 @@ router.post('/', auth, async (req, res) => {
 
     const totals = computeTotals(computeSubtotal(reqItems), discount, vatPercent);
 
-    // Project type always follows the chosen project on the form, so we keep
-    // whatever the form sent (it is read-only there) instead of trusting a free-typed value.
     const requisition = await ServiceRequisition.create({
       code: code || generateCode(),
       date,
-      projectType: req.body.projectType,
       projectId: project || null,
       titleOfWork,
       task,
@@ -185,7 +182,7 @@ router.put('/:id', auth, async (req, res) => {
       supplier: 'supplierId',
       budgetCategory: 'budgetCategoryId',
     };
-    const fields = ['date', 'projectType', 'titleOfWork', 'task', 'requiredByDate', 'remarks'];
+    const fields = ['date', 'titleOfWork', 'task', 'requiredByDate', 'remarks'];
     fields.forEach((key) => {
       if (req.body[key] !== undefined) requisition[key] = req.body[key] || null;
     });

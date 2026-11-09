@@ -20,7 +20,6 @@ const Campaign = require('./Campaign');
 const LeadSource = require('./LeadSource');
 
 const BoqTitle = require('./BoqTitle');
-const ProjectType = require('./ProjectType');
 
 const Item = require('./Item');
 const Category = require('./Category');
@@ -209,9 +208,6 @@ PaySlip.belongsTo(Voucher, { foreignKey: 'voucherId' });
 Project.hasMany(AssignShare, { foreignKey: 'projectId' });
 AssignShare.belongsTo(Project, { as: 'project', foreignKey: 'projectId' });
 
-ProjectType.hasMany(AssignShare, { foreignKey: 'projectTypeId' });
-AssignShare.belongsTo(ProjectType, { as: 'projectType', foreignKey: 'projectTypeId' });
-
 Site.hasMany(AssignShare, { foreignKey: 'siteId' });
 AssignShare.belongsTo(Site, { as: 'site', foreignKey: 'siteId' });
 
@@ -333,10 +329,6 @@ ChartOfAccount.belongsTo(ChartOfGroup, { as: 'chartOfGroup', foreignKey: 'chartO
 // ---- Campaign <-> LeadSource ----
 Campaign.belongsTo(LeadSource, { foreignKey: 'leadSourceId' });
 LeadSource.hasMany(Campaign, { foreignKey: 'leadSourceId' });
-
-// ---- BoqTitle <-> ProjectType ----
-BoqTitle.belongsTo(ProjectType, { foreignKey: 'projectTypeId' });
-ProjectType.hasMany(BoqTitle, { foreignKey: 'projectTypeId' });
 
 // ---- Item <-> Category / Brand ----
 Category.hasMany(Item, { foreignKey: 'categoryId' });
@@ -781,7 +773,6 @@ module.exports = {
   Campaign,
   LeadSource,
   BoqTitle,
-  ProjectType,
   Item,
   Category,
   Brand,

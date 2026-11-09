@@ -6,7 +6,6 @@ const ContractorWorkorder = sequelize.define('ContractorWorkorder', {
   date: DataTypes.STRING,
 
   supplierId: DataTypes.INTEGER,
-  projectType: DataTypes.STRING,
   projectId: DataTypes.INTEGER,
   siteId: DataTypes.INTEGER,
   categoryId: DataTypes.INTEGER,

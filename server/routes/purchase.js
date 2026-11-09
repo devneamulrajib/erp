@@ -131,7 +131,7 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', auth, async (req, res) => {
   try {
     const {
-      code, date, supplier, ledger, projectType, project, titleOfWork, task,
+      code, date, supplier, ledger, project, titleOfWork, task,
       site, category, reference, items, discount, deliveryCharge, paid,
       note, attachment, payments,
     } = req.body;
@@ -149,7 +149,6 @@ router.post('/', auth, async (req, res) => {
       date,
       supplierId: supplier,
       ledger,
-      projectType,
       projectId: project,
       titleOfWork,
       task,
@@ -189,7 +188,7 @@ router.put('/:id', auth, async (req, res) => {
     const purchase = await Purchase.findByPk(req.params.id);
     if (!purchase) return res.status(404).json({ message: 'Not found' });
 
-    const fields = ['date', 'projectType', 'titleOfWork', 'task', 'reference', 'note', 'attachment'];
+    const fields = ['date', 'titleOfWork', 'task', 'reference', 'note', 'attachment'];
     fields.forEach((key) => {
       if (req.body[key] !== undefined) purchase[key] = req.body[key];
     });

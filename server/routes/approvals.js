@@ -8,13 +8,77 @@ const {
   OfficeExpense,
   Expense,
   PaymentVoucher,
+  ReceiptVoucher,
+  JournalVoucher,
+  ContraVoucher,
   MonthlyBudget,
   BudgetCategory,
   PaySlip,
   Employee,
 } = require('../models/associations');
 const logActivity = require('../utils/activityLog');
-const { notifyAdmin, notifyAccountant } = require('../utils/notify');
+const { notifyAccountant } = require('../utils/notify');
+
+// Voucher-style modules that share the same approval behaviour.
+// `amount` picks the right amount field per model; `details` feeds the drawer.
+const VOUCHER_MODULES = {
+  PaymentVoucher: {
+    Model: PaymentVoucher,
+    label: 'Payment Voucher',
+    prefix: 'PV',
+    fallbackTitle: 'Payment Voucher',
+    fallbackCategory: 'Project Payment',
+    amount: (v) => v.amount,
+    title: (v) => v.titleOfWork || v.item,
+    details: (v) => ({ debitAccount: v.debitAccount, creditAccount: v.creditAccount, comment: v.comment }),
+  },
+  ReceiptVoucher: {
+    Model: ReceiptVoucher,
+    label: 'Receipt Voucher',
+    prefix: 'RV',
+    fallbackTitle: 'Receipt Voucher',
+    fallbackCategory: 'Project Receipt',
+    amount: (v) => v.amount,
+    title: (v) => v.titleOfWork || v.paymentType,
+    details: (v) => ({ debitAccount: v.debitAccount, creditAccount: v.creditAccount, comment: v.comment }),
+  },
+  JournalVoucher: {
+    Model: JournalVoucher,
+    label: 'Journal Voucher',
+    prefix: 'JV',
+    fallbackTitle: 'Journal Voucher',
+    fallbackCategory: 'Journal Entry',
+    amount: (v) => v.totalDebit,
+    title: (v) => v.titleOfWork,
+    details: (v) => ({ comment: v.comment }),
+  },
+  ContraVoucher: {
+    Model: ContraVoucher,
+    label: 'Contra Voucher',
+    prefix: 'CV',
+    fallbackTitle: 'Contra Voucher',
+    fallbackCategory: 'Contra Entry',
+    amount: (v) => v.totalDebit,
+    title: (v) => v.titleOfWork,
+    details: (v) => ({ comment: v.comment }),
+  },
+};
+
+// Notifications / activity log must never block an approval decision.
+async function safeNotify(...args) {
+  try {
+    await notifyAccountant(...args);
+  } catch (err) {
+    console.error('Approvals notify error:', err.message);
+  }
+}
+async function safeLog(payload) {
+  try {
+    await logActivity(payload);
+  } catch (err) {
+    console.error('Approvals activity-log error:', err.message);
+  }
+}
 
 // GET /api/approvals — Fetch financial requests across all modules
 router.get('/', auth, async (req, res) => {
@@ -91,35 +155,33 @@ router.get('/', auth, async (req, res) => {
       }
     }
 
-    // 3. Module: Payment Vouchers
-    if (!type || type === 'PaymentVoucher') {
+    // 3. Voucher modules: Payment / Receipt / Journal / Contra
+    for (const [requestType, cfg] of Object.entries(VOUCHER_MODULES)) {
+      if (type && type !== requestType) continue;
       try {
-        const paymentVouchers = await PaymentVoucher.findAll({ order: [['createdAt', 'DESC']] });
-        paymentVouchers.forEach((pv) => {
-          const itemStatus = (pv.status || 'pending').toLowerCase();
+        if (!cfg.Model) continue;
+        const vouchers = await cfg.Model.findAll({ order: [['createdAt', 'DESC']] });
+        vouchers.forEach((v) => {
+          const itemStatus = (v.status || 'pending').toLowerCase();
           if (targetStatus === 'all' || itemStatus === targetStatus) {
             results.push({
-              id: pv.id,
-              requestType: 'PaymentVoucher',
-              typeLabel: 'Payment Voucher',
-              reference: pv.voucherNo || `PV-${pv.id}`,
-              title: pv.titleOfWork || pv.item || 'Payment Voucher',
-              category: pv.project || 'Project Payment',
-              amount: Number(pv.amount || 0),
-              requestedBy: pv.addedBy || 'Accountant',
-              date: pv.date || pv.createdAt,
+              id: v.id,
+              requestType,
+              typeLabel: cfg.label,
+              reference: v.voucherNo || `${cfg.prefix}-${v.id}`,
+              title: cfg.title(v) || cfg.fallbackTitle,
+              category: v.project || cfg.fallbackCategory,
+              amount: Number(cfg.amount(v) || 0),
+              requestedBy: v.addedBy || 'Accountant',
+              date: v.date || v.createdAt,
               status: itemStatus,
-              attachment: pv.attachment,
-              details: {
-                debitAccount: pv.debitAccount,
-                creditAccount: pv.creditAccount,
-                comment: pv.comment,
-              },
+              attachment: v.attachment,
+              details: cfg.details(v),
             });
           }
         });
       } catch (err) {
-        console.error('Approvals fetch error (PaymentVoucher):', err.message);
+        console.error(`Approvals fetch error (${requestType}):`, err.message);
       }
     }
 
@@ -223,7 +285,7 @@ router.post('/action', auth, requireAdmin, async (req, res) => {
       expense.status = action;
       await expense.save();
 
-      await logActivity({
+      await safeLog({
         module: 'Expense',
         action: action === 'approved' ? 'Approved' : 'Rejected',
         message: `${action.toUpperCase()} office expense "${expense.title || expense.reference}"${remarks ? ` - Reason: ${remarks}` : ''}`,
@@ -239,7 +301,7 @@ router.post('/action', auth, requireAdmin, async (req, res) => {
         ? `Your Office Expense "${expense.title || expense.reference}" (৳${Number(expense.amount).toLocaleString()}) was approved by Admin.`
         : `Your Office Expense "${expense.title || expense.reference}" was rejected by Admin. Reason: ${remarks || 'Not specified'}`;
 
-      await notifyAccountant(null, notifType, notifMsg, 'OfficeExpense', expense.id);
+      await safeNotify(null, notifType, notifMsg, 'OfficeExpense', expense.id);
       return res.json({ success: true, message: `Office expense ${action}` });
     }
 
@@ -251,7 +313,7 @@ router.post('/action', auth, requireAdmin, async (req, res) => {
       exp.status = action;
       await exp.save();
 
-      await logActivity({
+      await safeLog({
         module: 'Expense',
         action: action === 'approved' ? 'Approved' : 'Rejected',
         message: `${action.toUpperCase()} expense "${exp.reference}"${remarks ? ` - Reason: ${remarks}` : ''}`,
@@ -266,36 +328,40 @@ router.post('/action', auth, requireAdmin, async (req, res) => {
         ? `Your Expense "${exp.reference}" (৳${Number(exp.amount).toLocaleString()}) was approved by Admin.`
         : `Your Expense "${exp.reference}" was rejected by Admin. Reason: ${remarks || 'Not specified'}`;
 
-      await notifyAccountant(null, notifType, notifMsg, 'Expense', exp.id);
+      await safeNotify(null, notifType, notifMsg, 'Expense', exp.id);
       return res.json({ success: true, message: `Expense ${action}` });
     }
 
-    // 3. Payment Voucher
-    if (requestType === 'PaymentVoucher') {
-      const pv = await PaymentVoucher.findByPk(id);
-      if (!pv) return res.status(404).json({ message: 'Record not found' });
+    // 3. Vouchers: Payment / Receipt / Journal / Contra
+    if (VOUCHER_MODULES[requestType]) {
+      const cfg = VOUCHER_MODULES[requestType];
+      const voucher = await cfg.Model.findByPk(id);
+      if (!voucher) return res.status(404).json({ message: 'Record not found' });
 
-      pv.status = action;
-      if (remarks) pv.comment = `${pv.comment ? `${pv.comment} | ` : ''}Admin: ${remarks}`;
-      await pv.save();
+      voucher.status = action;
+      if (remarks) voucher.comment = `${voucher.comment ? `${voucher.comment} | ` : ''}Admin: ${remarks}`;
+      await voucher.save();
 
-      await logActivity({
+      const amount = cfg.amount(voucher);
+      const ref = voucher.voucherNo || `${cfg.prefix}-${voucher.id}`;
+
+      await safeLog({
         module: 'Voucher',
         action: action === 'approved' ? 'Approved' : 'Rejected',
-        message: `${action.toUpperCase()} payment voucher "${pv.voucherNo}"${remarks ? ` - Note: ${remarks}` : ''}`,
-        amount: pv.amount,
-        relatedType: 'PaymentVoucher',
-        relatedId: pv.id,
+        message: `${action.toUpperCase()} ${cfg.label.toLowerCase()} "${ref}"${remarks ? ` - Note: ${remarks}` : ''}`,
+        amount,
+        relatedType: requestType,
+        relatedId: voucher.id,
         performedBy: adminName,
       });
 
-      const notifType = action === 'approved' ? 'PaymentVoucherApproved' : 'PaymentVoucherRejected';
+      const notifType = `${requestType}${action === 'approved' ? 'Approved' : 'Rejected'}`;
       const notifMsg = action === 'approved'
-        ? `Your Payment Voucher "${pv.voucherNo}" (৳${Number(pv.amount).toLocaleString()}) was approved by Admin.`
-        : `Your Payment Voucher "${pv.voucherNo}" was rejected by Admin. Reason: ${remarks || 'Not specified'}`;
+        ? `Your ${cfg.label} "${ref}" (৳${Number(amount || 0).toLocaleString()}) was approved by Admin.`
+        : `Your ${cfg.label} "${ref}" was rejected by Admin. Reason: ${remarks || 'Not specified'}`;
 
-      await notifyAccountant(null, notifType, notifMsg, 'PaymentVoucher', pv.id);
-      return res.json({ success: true, message: `Payment voucher ${action}` });
+      await safeNotify(null, notifType, notifMsg, requestType, voucher.id);
+      return res.json({ success: true, message: `${cfg.label} ${action}` });
     }
 
     // 4. Monthly Budget
@@ -316,7 +382,7 @@ router.post('/action', auth, requireAdmin, async (req, res) => {
       }
       await budget.save();
 
-      await logActivity({
+      await safeLog({
         module: 'Budget',
         action: action === 'approved' ? 'Approved' : 'Rejected',
         message: `${action.toUpperCase()} budget request for ${budget.month}/${budget.year}${remarks ? ` - Note: ${remarks}` : ''}`,
@@ -332,8 +398,12 @@ router.post('/action', auth, requireAdmin, async (req, res) => {
         ? `Budget request for ${budget.month}/${budget.year} (৳${Number(budget.requestedAmount).toLocaleString()}) was approved by Admin.`
         : `Budget request for ${budget.month}/${budget.year} was rejected by Admin. Reason: ${remarks || 'Not specified'}`;
 
-      await notifyAccountant(null, notifType, notifMsg, 'MonthlyBudget', budget.id);
+      await safeNotify(null, notifType, notifMsg, 'MonthlyBudget', budget.id);
       return res.json({ success: true, message: `Budget request ${action}` });
+    }
+
+    if (requestType === 'PaySlip') {
+      return res.status(400).json({ message: 'Salary disbursements are approved from the Payroll (PaySlip) page, not here.' });
     }
 
     res.status(400).json({ message: 'Unsupported request type' });
@@ -379,10 +449,13 @@ router.get('/accountant-metrics', auth, async (req, res) => {
       }
     } catch {}
 
-    try {
-      const paymentVouchers = await PaymentVoucher.findAll();
-      tally(paymentVouchers, (pv) => pv.amount);
-    } catch {}
+    for (const cfg of Object.values(VOUCHER_MODULES)) {
+      try {
+        if (!cfg.Model) continue;
+        const rows = await cfg.Model.findAll();
+        tally(rows, cfg.amount);
+      } catch {}
+    }
 
     try {
       const budgets = await MonthlyBudget.findAll({ where: { requestedAmount: { [Op.gt]: 0 } } });

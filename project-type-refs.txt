@@ -1,0 +1,391 @@
+﻿client\src\api\boqTitle.js:7: export const getProjectTypeOptions = () => api.get('/project-types').then((res) => res.data);
+client\src\api\projectType.js:3: export const getProjectTypes = () => api.get('/project-types').then((res) => res.data);
+client\src\api\projectType.js:4: export const getNextProjectTypeCode = () => api.get('/project-types/next-code').then((res) => res.data.code);
+client\src\api\projectType.js:5: export const createProjectType = (data) => api.post('/project-types', data).then((res) => res.data);
+client\src\api\projectType.js:6: export const updateProjectType = (id, data) => api.put(`/project-types/${id}`, data).then((res) => res.data);
+client\src\api\projectType.js:7: export const deleteProjectType = (id) => api.delete(`/project-types/${id}`).then((res) => res.data);
+client\src\components\navConfig.js:115: { key: 'project-type', label: 'Project Type', route: '/project-module/project-type' },
+client\src\components\ProjectSubNav.jsx:10: 'project-type': Building2,
+client\src\components\ProjectSubNav.jsx:32: { key: 'project-type', label: 'Project Type', route: '/project-module/project-type' },
+client\src\pages\AdjustmentBillList.jsx:167: <td className="px-5 py-3.5 text-slate-600">{row.projectType || '-'}</td>
+client\src\pages\AdjustmentBillPage.jsx:52: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\AdjustmentBillPage.jsx:58: const [projectType, setProjectType] = useState('');
+client\src\pages\AdjustmentBillPage.jsx:100: api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
+client\src\pages\AdjustmentBillPage.jsx:115: setProjectType(rid(b.projectType) || b.projectType || '');
+client\src\pages\AdjustmentBillPage.jsx:215: code, date, customer, ledger: ledger || null, projectType: projectType || null,
+client\src\pages\AdjustmentBillPage.jsx:312: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
+client\src\pages\AdjustmentBillPage.jsx:314: {projectTypes.map((pt) => <option key={rid(pt)} value={rid(pt)}>{pt.name}</option>)}
+client\src\pages\AssignShare.jsx:19: projectType: '',
+client\src\pages\AssignShare.jsx:56: const [projectTypeOptions, setProjectTypeOptions] = useState([]);
+client\src\pages\AssignShare.jsx:82: const [projectTypesRes, projectsRes, customers, sitesRes, flatsData] = await Promise.all([
+client\src\pages\AssignShare.jsx:83: api.get('/project-types'),
+client\src\pages\AssignShare.jsx:92: setProjectTypeOptions(projectTypesRes.data.map((t) => ({ value: t.id, label: t.name })));
+client\src\pages\AssignShare.jsx:214: projectType: row.projectType || '',
+client\src\pages\AssignShare.jsx:473: options={projectTypeOptions}
+client\src\pages\AssignShare.jsx:474: value={addForm.projectType}
+client\src\pages\AssignShare.jsx:475: onChange={(v) => handleAddChange('projectType', v)}
+client\src\pages\BillPage.jsx:43: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\BillPage.jsx:49: const [projectType, setProjectType] = useState('');
+client\src\pages\BillPage.jsx:93: api.get('/project-types').then((res) => setProjectTypes(Array.isArray(res.data) ? res.data : [])).catch(() => {});
+client\src\pages\BillPage.jsx:111: setProjectType(b.projectType || '');
+client\src\pages\BillPage.jsx:215: code, date, customer, ledger, projectType, project, site, refWoNo, contentBody,
+client\src\pages\BillPage.jsx:328: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
+client\src\pages\BillPage.jsx:330: {projectTypes.map((pt) => (
+client\src\pages\BoqTitlePage.jsx:7: getBoqTitles, createBoqTitle, updateBoqTitle, deleteBoqTitle, getProjectTypeOptions,
+client\src\pages\BoqTitlePage.jsx:11: const EMPTY_FORM = { projectType: '', title: '' };
+client\src\pages\BoqTitlePage.jsx:15: const [projectTypeOptions, setProjectTypeOptions] = useState([]);
+client\src\pages\BoqTitlePage.jsx:45: getProjectTypeOptions()
+client\src\pages\BoqTitlePage.jsx:46: .then((data) => setProjectTypeOptions(Array.isArray(data) ? data : (data?.rows || data?.projectTypes || [])))
+client\src\pages\BoqTitlePage.jsx:72: projectType: item.projectType?._id || item.projectType?.id || item.projectType || '',
+client\src\pages\BoqTitlePage.jsx:83: projectType: item.projectType?._id || item.projectType?.id || item.projectType || '',
+client\src\pages\BoqTitlePage.jsx:95: if (!form.projectType || !form.title) return;
+client\src\pages\BoqTitlePage.jsx:224: {item.projectType?.name ? (
+client\src\pages\BoqTitlePage.jsx:226: {item.projectType.name}
+client\src\pages\BoqTitlePage.jsx:326: value={form.projectType}
+client\src\pages\BoqTitlePage.jsx:327: onChange={(e) => setForm((f) => ({ ...f, projectType: e.target.value }))}
+client\src\pages\BoqTitlePage.jsx:331: {projectTypeOptions.map((pt) => (
+client\src\pages\ContractorBillList.jsx:334: <td className="px-5 py-3.5 text-slate-700">{row.projectType || '-'}</td>
+client\src\pages\ContractorBillList.jsx:478: <ViewField label="Project Type" value={viewing.projectType} />
+client\src\pages\ContractorBillPage.jsx:63: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\ContractorBillPage.jsx:74: const [projectType, setProjectType] = useState('');
+client\src\pages\ContractorBillPage.jsx:113: // app.use('/api/project-types', ...) — all plural, /api prefix handled by axios baseURL.
+client\src\pages\ContractorBillPage.jsx:115: api.get('/project-types').then((res) => setProjectTypes(asArray(res))).catch((err) => console.error('Failed to load project types', err));
+client\src\pages\ContractorBillPage.jsx:142: setProjectType(b.projectType || '');
+client\src\pages\ContractorBillPage.jsx:284: code, date, party: resolvedPartyId, ledger, projectType, project, titleOfWork, task,
+client\src\pages\ContractorBillPage.jsx:407: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
+client\src\pages\ContractorBillPage.jsx:409: {projectTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+client\src\pages\ContractorWorkorderPage.jsx:46: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\ContractorWorkorderPage.jsx:51: const [projectType, setProjectType] = useState('');
+client\src\pages\ContractorWorkorderPage.jsx:82: api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
+client\src\pages\ContractorWorkorderPage.jsx:100: setProjectType(rid(o.projectType) || o.projectType || '');
+client\src\pages\ContractorWorkorderPage.jsx:157: code, date, supplier, projectType, project, site, category, contentBody,
+client\src\pages\ContractorWorkorderPage.jsx:247: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
+client\src\pages\ContractorWorkorderPage.jsx:249: {projectTypes.map((pt) => <option key={rid(pt)} value={rid(pt)}>{pt.name}</option>)}
+client\src\pages\ContraVoucherPage.jsx:13: import { getProjectTypes } from '../api/projectType';
+client\src\pages\ContraVoucherPage.jsx:31: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\ContraVoucherPage.jsx:35: const [projectType, setProjectType] = useState('');
+client\src\pages\ContraVoucherPage.jsx:65: getProjectTypes().then((data) => setProjectTypes(data)).catch(() => {});
+client\src\pages\ContraVoucherPage.jsx:78: setProjectType(v.projectType || '');
+client\src\pages\ContraVoucherPage.jsx:147: voucherNo, date, projectType, project, titleOfWork, site, task,
+client\src\pages\ContraVoucherPage.jsx:209: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
+client\src\pages\ContraVoucherPage.jsx:211: {projectTypes.map((pt) => <option key={pt.id} value={pt.name}>{pt.name}</option>)}
+client\src\pages\FlatSaleForm.jsx:37: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\FlatSaleForm.jsx:50: const [projectType, setProjectType] = useState('');
+client\src\pages\FlatSaleForm.jsx:74: api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
+client\src\pages\FlatSaleForm.jsx:115: setProjectType(sale.projectType?.id || sale.projectType || '');
+client\src\pages\FlatSaleForm.jsx:189: projectType, collectionOfficer, salesBy, ledger, attachment: attachmentName,
+client\src\pages\FlatSaleForm.jsx:316: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputClass}>
+client\src\pages\FlatSaleForm.jsx:318: {projectTypes.map((pt) => (
+client\src\pages\JournalVoucherListPage.jsx:27: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\JournalVoucherListPage.jsx:34: const [projectType, setProjectType] = useState('');
+client\src\pages\JournalVoucherListPage.jsx:61: api.get('/project-types').then((res) => setProjectTypes(res.data ?? [])).catch(() => setProjectTypes([]));
+client\src\pages\JournalVoucherListPage.jsx:77: setProjectType(v.projectType || '');
+client\src\pages\JournalVoucherListPage.jsx:147: voucherNo, date, projectType, project, titleOfWork, site, task,
+client\src\pages\JournalVoucherListPage.jsx:208: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
+client\src\pages\JournalVoucherListPage.jsx:210: {(projectTypes || []).map((pt) => <option key={pt._id ?? pt.id} value={pt.name}>{pt.name}</option>)}
+client\src\pages\JournalVoucherPage.jsx:33: const [projectType, setProjectType] = useState('');
+client\src\pages\JournalVoucherPage.jsx:75: setProjectType(v.projectType || '');
+client\src\pages\JournalVoucherPage.jsx:144: voucherNo, date, projectType, project, titleOfWork, site, task,
+client\src\pages\JournalVoucherPage.jsx:206: <input value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input" placeholder="Select Project Type" />
+client\src\pages\LabourWorkerBillList.jsx:205: <td className="px-3 py-2.5 text-slate-700">{row.projectTypeName || row.projectType || '-'}</td>
+client\src\pages\LabourWorkerBillPage.jsx:44: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\LabourWorkerBillPage.jsx:56: const [projectType, setProjectType] = useState('');
+client\src\pages\LabourWorkerBillPage.jsx:83: api.get('/project-types').then((res) => setProjectTypes(asArray(res))).catch((err) => console.error('Failed to load project types', err));
+client\src\pages\LabourWorkerBillPage.jsx:107: setProjectType(b.projectType?.id || b.projectType || '');
+client\src\pages\LabourWorkerBillPage.jsx:188: code, date, party, ledger, projectType, project, titleOfWork, task,
+client\src\pages\LabourWorkerBillPage.jsx:276: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
+client\src\pages\LabourWorkerBillPage.jsx:278: {projectTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+client\src\pages\MaterialRequisitionList.jsx:246: <OverviewField label="Project Type" value={data?.projectType?.name || '-'} />
+client\src\pages\MaterialRequisitionList.jsx:465: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\MaterialRequisitionList.jsx:515: api.get('/project-types').then((res) => setProjectTypes(asArray(res))).catch(() => {});
+client\src\pages\MaterialRequisitionList.jsx:549: function projectTypeName(id) {
+client\src\pages\MaterialRequisitionList.jsx:551: return projectTypes.find((pt) => String(pt.id) === String(id))?.name || id;
+client\src\pages\MaterialRequisitionList.jsx:804: <td className="px-2 py-2.5 text-slate-600">{projectTypeName(row.projectType)}</td>
+client\src\pages\MaterialRequisitionPage.jsx:26: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\MaterialRequisitionPage.jsx:37: const [projectType, setProjectType] = useState('');
+client\src\pages\MaterialRequisitionPage.jsx:56: api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
+client\src\pages\MaterialRequisitionPage.jsx:79: setProjectType(r.projectType?.id || r.projectTypeId || r.projectType || '');
+client\src\pages\MaterialRequisitionPage.jsx:127: code, date, demandDate, company, supplier, projectType, project, titleOfWork, task,
+client\src\pages\MaterialRequisitionPage.jsx:205: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
+client\src\pages\MaterialRequisitionPage.jsx:207: {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+client\src\pages\MaterialUsageList.jsx:175: <td className="px-3 py-2">{row.projectType || '-'}</td>
+client\src\pages\MaterialUsagePage.jsx:42: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\MaterialUsagePage.jsx:49: const [projectType, setProjectType] = useState('');
+client\src\pages\MaterialUsagePage.jsx:72: api.get('/project-types')
+client\src\pages\MaterialUsagePage.jsx:73: .then((res) => setProjectTypes(toArray(res.data)))
+client\src\pages\MaterialUsagePage.jsx:74: .catch((err) => { console.error('Failed to load project types', err); setProjectTypes([]); });
+client\src\pages\MaterialUsagePage.jsx:110: setProjectType(u.projectType || '');
+client\src\pages\MaterialUsagePage.jsx:167: code, date, employee, creditLedger, debitLedger, projectType, project,
+client\src\pages\MaterialUsagePage.jsx:235: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
+client\src\pages\MaterialUsagePage.jsx:237: {(projectTypes || []).map((pt) => <option key={pt.id} value={pt.name}>{pt.name}</option>)}
+client\src\pages\PaymentVoucherPage.jsx:17: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\PaymentVoucherPage.jsx:27: const [projectType, setProjectType] = useState('');
+client\src\pages\PaymentVoucherPage.jsx:94: api.get('/project-types').then((res) => setProjectTypes(res.data ?? [])).catch(() => setProjectTypes([]));
+client\src\pages\PaymentVoucherPage.jsx:104: setProjectType(''); setProject(''); setTitleOfWork(''); setTask(''); setSite('');
+client\src\pages\PaymentVoucherPage.jsx:121: setProjectType(v.projectType || '');
+client\src\pages\PaymentVoucherPage.jsx:183: projectType, titleOfWork, task, site, item,
+client\src\pages\PaymentVoucherPage.jsx:279: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
+client\src\pages\PaymentVoucherPage.jsx:281: {(projectTypes || []).map((pt) => <option key={pt._id ?? pt.id} value={pt.name}>{pt.name}</option>)}
+client\src\pages\Project.jsx:17: { key: 'projectType', label: 'Project Type' },
+client\src\pages\Project.jsx:30: projectType: '', projectManager: '', code: '', name: '', description: '',
+client\src\pages\Project.jsx:93: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\Project.jsx:130: api.get('/project-types'),
+client\src\pages\Project.jsx:133: setProjectTypes(ptRes.data);
+client\src\pages\Project.jsx:148: if (filterType !== 'All Types') params.projectType = filterType;
+client\src\pages\Project.jsx:179: projectType: row.projectType || '', projectManager: row.projectManager || '',
+client\src\pages\Project.jsx:295: const text = rows.map((r) => `${r.code}\t${r.name}\t${r.projectType}`).join('\n');
+client\src\pages\Project.jsx:302: [r.code, r.name, r.projectType, r.projectManager, r.budget, r.location].join(',')
+client\src\pages\Project.jsx:371: {projectTypes.map((pt) => <option key={pt.id} value={pt.name}>{pt.name}</option>)}
+client\src\pages\Project.jsx:429: {visibleColumns.projectType && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Type</th>}
+client\src\pages\Project.jsx:471: {visibleColumns.projectType && (
+client\src\pages\Project.jsx:473: {row.projectType
+client\src\pages\Project.jsx:474: ? <span className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-600 px-2.5 py-1 text-xs font-medium ring-1 ring-inset ring-indigo-600/10">{row.projectType}</span>
+client\src\pages\Project.jsx:619: <select value={form.projectType} onChange={(e) => updateField('projectType', e.target.value)} className={inputClass}>
+client\src\pages\Project.jsx:621: {projectTypes.map((pt) => <option key={pt.id} value={pt.name}>{pt.name}</option>)}
+client\src\pages\ProjectProgressReport.jsx:195: <td className="px-4 py-3.5 text-slate-600">{r.projectType}</td>
+client\src\pages\ProjectType.jsx:18: export default function ProjectType() {
+client\src\pages\ProjectType.jsx:39: const res = await api.get('/project-types');
+client\src\pages\ProjectType.jsx:52: const res = await api.get('/project-types/next-code');
+client\src\pages\ProjectType.jsx:76: const res = await api.put(`/project-types/${editingId}`, { name: formName });
+client\src\pages\ProjectType.jsx:79: const res = await api.post('/project-types', { code: formCode, name: formName });
+client\src\pages\ProjectType.jsx:95: await api.delete(`/project-types/${row.id}`);
+client\src\pages\PurchaseList.jsx:151: <td className="px-3 py-2">{row.projectType || '-'}</td>
+client\src\pages\PurchaseOrderList.jsx:161: <OverviewField label="Project Type" value={data?.projectType || '-'} />
+client\src\pages\PurchaseOrderList.jsx:467: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\PurchaseOrderList.jsx:510: api.get('/project-types').then((res) => setProjectTypes(asArray(res))).catch(() => {});
+client\src\pages\PurchaseOrderList.jsx:537: function projectTypeName(id) {
+client\src\pages\PurchaseOrderList.jsx:539: return projectTypes.find((pt) => String(pt.id) === String(id))?.name || id;
+client\src\pages\PurchaseOrderList.jsx:752: <td className="px-2 py-2.5 text-slate-600">{projectTypeName(row.projectType)}</td>
+client\src\pages\PurchaseOrderPage.jsx:67: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\PurchaseOrderPage.jsx:75: const [projectType, setProjectType] = useState('');
+client\src\pages\PurchaseOrderPage.jsx:101: api.get('/project-types')
+client\src\pages\PurchaseOrderPage.jsx:102: .then((res) => setProjectTypes(asArray(res)))
+client\src\pages\PurchaseOrderPage.jsx:103: .catch(() => setProjectTypes([]));
+client\src\pages\PurchaseOrderPage.jsx:133: setProjectType(o.projectType?.id || o.projectTypeId || o.projectType || '');
+client\src\pages\PurchaseOrderPage.jsx:156: function projectTypeName(pid) {
+client\src\pages\PurchaseOrderPage.jsx:158: return projectTypes.find((pt) => String(pt.id) === String(pid))?.name || pid;
+client\src\pages\PurchaseOrderPage.jsx:214: code, date, supplier, projectType, project, titleOfWork, task,
+client\src\pages\PurchaseOrderPage.jsx:323: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
+client\src\pages\PurchaseOrderPage.jsx:325: {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+client\src\pages\PurchasePage.jsx:38: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\PurchasePage.jsx:48: const [projectType, setProjectType] = useState('');
+client\src\pages\PurchasePage.jsx:79: // NOTE: assumed route '/project-types' — update this one line if your
+client\src\pages\PurchasePage.jsx:80: // backend uses a different path (e.g. '/projectTypes').
+client\src\pages\PurchasePage.jsx:81: api.get('/project-types')
+client\src\pages\PurchasePage.jsx:82: .then((res) => setProjectTypes(unwrap(res)))
+client\src\pages\PurchasePage.jsx:83: .catch(() => setProjectTypes([]));
+client\src\pages\PurchasePage.jsx:113: setProjectType(p.projectType?.id || p.projectTypeId || p.projectType || '');
+client\src\pages\PurchasePage.jsx:200: code, date, supplier, ledger, projectType, project, titleOfWork, task,
+client\src\pages\PurchasePage.jsx:271: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
+client\src\pages\PurchasePage.jsx:273: {projectTypes.map((pt) => (
+client\src\pages\QuoteList.jsx:188: <td className="px-5 py-3.5 text-slate-600">{row.projectType || '-'}</td>
+client\src\pages\QuotePage.jsx:44: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\QuotePage.jsx:50: const [projectType, setProjectType] = useState('');
+client\src\pages\QuotePage.jsx:81: api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
+client\src\pages\QuotePage.jsx:96: setProjectType(rid(q.projectType) || q.projectType || '');
+client\src\pages\QuotePage.jsx:157: code, date, customer, projectType: projectType || null,
+client\src\pages\QuotePage.jsx:246: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
+client\src\pages\QuotePage.jsx:248: {projectTypes.map((pt) => <option key={rid(pt)} value={rid(pt)}>{pt.name}</option>)}
+client\src\pages\ReceiptVoucherPage.jsx:24: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\ReceiptVoucherPage.jsx:34: const [projectType, setProjectType] = useState('');
+client\src\pages\ReceiptVoucherPage.jsx:104: api.get('/project-types').then((res) => setProjectTypes(res.data ?? [])).catch(() => {});
+client\src\pages\ReceiptVoucherPage.jsx:116: setProjectType(''); setProject(''); setTitleOfWork(''); setTask(''); setSite('');
+client\src\pages\ReceiptVoucherPage.jsx:141: setProjectType(v.projectType || '');
+client\src\pages\ReceiptVoucherPage.jsx:204: projectType, titleOfWork, task, site,
+client\src\pages\ReceiptVoucherPage.jsx:334: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputClass}>
+client\src\pages\ReceiptVoucherPage.jsx:336: {projectTypes.map((pt) => <option key={pt.id} value={pt.name}>{pt.name}</option>)}
+client\src\pages\SaleList.jsx:113: <td className="px-3 py-2">{row.projectType || '-'}</td>
+client\src\pages\SalePage.jsx:30: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\SalePage.jsx:36: const [projectType, setProjectType] = useState('');
+client\src\pages\SalePage.jsx:69: api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
+client\src\pages\SalePage.jsx:85: setProjectType(s.projectType || '');
+client\src\pages\SalePage.jsx:161: code, date, customer, ledger, projectType, project, titleOfWork, site, refWoNo, content,
+client\src\pages\SalePage.jsx:231: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
+client\src\pages\SalePage.jsx:233: {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+client\src\pages\ServiceRequisitionList.jsx:212: {row.projectType && <div className="text-xs text-slate-400">{row.projectType}</div>}
+client\src\pages\ServiceRequisitionList.jsx:356: <InfoField label="Project Type" value={data.projectType} />
+client\src\pages\ServiceRequisitionPage.jsx:70: const [projectType, setProjectType] = useState('');
+client\src\pages\ServiceRequisitionPage.jsx:108: setProjectType(r.projectType || '');
+client\src\pages\ServiceRequisitionPage.jsx:138: const type = p?.projectType?.name || p?.projectType || p?.projectTypeName || '';
+client\src\pages\ServiceRequisitionPage.jsx:139: setProjectType(typeof type === 'string' ? type : '');
+client\src\pages\ServiceRequisitionPage.jsx:218: projectType,
+client\src\pages\ServiceRequisitionPage.jsx:334: value={projectType}
+client\src\pages\Site.jsx:31: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\Site.jsx:42: const [formProjectTypeName, setFormProjectTypeName] = useState('');
+client\src\pages\Site.jsx:52: api.get('/project-types').then((r) => setProjectTypes(r.data)).catch(() => {});
+client\src\pages\Site.jsx:68: setFormProjectTypeName('');
+client\src\pages\Site.jsx:85: setFormProjectTypeName(row.projectTypeName || '');
+client\src\pages\Site.jsx:97: function handleProjectTypeChange(value) {
+client\src\pages\Site.jsx:98: setFormProjectTypeName(value);
+client\src\pages\Site.jsx:104: if (!formProjectTypeName) return alert('Please select a Project Type.');
+client\src\pages\Site.jsx:112: projectTypeName: formProjectTypeName,
+client\src\pages\Site.jsx:172: const filteredProjects = formProjectTypeName
+client\src\pages\Site.jsx:173: ? projects.filter((p) => p.projectType === formProjectTypeName)
+client\src\pages\Site.jsx:393: value={formProjectTypeName}
+client\src\pages\Site.jsx:394: onChange={(e) => handleProjectTypeChange(e.target.value)}
+client\src\pages\Site.jsx:399: {projectTypes.map((pt) => (
+client\src\pages\Site.jsx:412: disabled={!formProjectTypeName}
+client\src\pages\StockTransferPage.jsx:26: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\StockTransferPage.jsx:31: const [fromProjectType, setFromProjectType] = useState('');
+client\src\pages\StockTransferPage.jsx:40: const [toProjectType, setToProjectType] = useState('');
+client\src\pages\StockTransferPage.jsx:52: api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
+client\src\pages\StockTransferPage.jsx:72: setFromProjectType(t.fromProjectType || '');
+client\src\pages\StockTransferPage.jsx:78: setToProjectType(t.toProjectType || '');
+client\src\pages\StockTransferPage.jsx:124: code, date, employee, fromProjectType, fromProject, fromSite, fromTask,
+client\src\pages\StockTransferPage.jsx:126: toProjectType, toProject, toSite, toTask, toSubTask,
+client\src\pages\StockTransferPage.jsx:179: <select value={fromProjectType} onChange={(e) => setFromProjectType(e.target.value)} className="input">
+client\src\pages\StockTransferPage.jsx:181: {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+client\src\pages\StockTransferPage.jsx:252: <select value={toProjectType} onChange={(e) => setToProjectType(e.target.value)} className="input">
+client\src\pages\StockTransferPage.jsx:254: {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+client\src\pages\WorkorderList.jsx:218: {row.projectType && <div className={`text-[11px] ${C.inkMuted} mt-1`}>Type {row.projectType}</div>}
+client\src\pages\WorkorderPage.jsx:36: const [projectTypes, setProjectTypes] = useState([]);
+client\src\pages\WorkorderPage.jsx:44: const [projectType, setProjectType] = useState('');
+client\src\pages\WorkorderPage.jsx:66: api.get('/project-types').then((res) => setProjectTypes(asArray(res))).catch((err) => console.error('Failed to load project types', err));
+client\src\pages\WorkorderPage.jsx:82: setProjectType(o.projectType?.id || o.projectType || '');
+client\src\pages\WorkorderPage.jsx:146: code, date, customer, projectType, project, site, clientOrderNo,
+client\src\pages\WorkorderPage.jsx:247: <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
+client\src\pages\WorkorderPage.jsx:249: {projectTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+client\src\App.jsx:8: import ProjectType from './pages/ProjectType'
+client\src\App.jsx:255: <Route path="/project-module/project-type" element={<ProtectedRoute><ProjectType /></ProtectedRoute>} />
+server\models\AdjustmentBill.js:11: projectType: DataTypes.STRING,
+server\models\AssignShare.js:6: projectTypeId: DataTypes.INTEGER,
+server\models\associations.js:23: const ProjectType = require('./ProjectType');
+server\models\associations.js:212: ProjectType.hasMany(AssignShare, { foreignKey: 'projectTypeId' });
+server\models\associations.js:213: AssignShare.belongsTo(ProjectType, { as: 'projectType', foreignKey: 'projectTypeId' });
+server\models\associations.js:337: // ---- BoqTitle <-> ProjectType ----
+server\models\associations.js:338: BoqTitle.belongsTo(ProjectType, { foreignKey: 'projectTypeId' });
+server\models\associations.js:339: ProjectType.hasMany(BoqTitle, { foreignKey: 'projectTypeId' });
+server\models\associations.js:784: ProjectType,
+server\models\Bill.js:11: projectType: DataTypes.STRING,
+server\models\BoqTitle.js:10: // NOTE: no FK constraint yet — ProjectType has no Sequelize model/table
+server\models\BoqTitle.js:11: // (projectType.js route currently has no matching model, likely in-memory
+server\models\BoqTitle.js:12: // like Site.js was). Revisit once ProjectType is confirmed/converted.
+server\models\BoqTitle.js:13: projectTypeId: {
+server\models\ContractorBill.js:11: projectType: DataTypes.STRING,
+server\models\ContractorWorkorder.js:9: projectType: DataTypes.STRING,
+server\models\ContraVoucher.js:7: projectType: DataTypes.STRING,
+server\models\FlatSale.js:14: projectType: DataTypes.STRING,
+server\models\FundRequisition.js:6: // Legacy columns (projectType / task / subTask) are kept so old rows stay intact,
+server\models\FundRequisition.js:8: projectType: DataTypes.STRING,
+server\models\JournalVoucher.js:7: projectType: DataTypes.STRING,
+server\models\LabourBill.js:10: projectType: DataTypes.STRING,
+server\models\MaterialRequisition.js:12: projectType: DataTypes.STRING,
+server\models\MaterialUsage.js:12: projectType: DataTypes.STRING,
+server\models\PaymentVoucher.js:5: projectType: DataTypes.STRING,
+server\models\Project.js:7: projectType: DataTypes.STRING,
+server\models\ProjectType.js:4: const ProjectType = sequelize.define('ProjectType', {
+server\models\ProjectType.js:19: tableName: 'project_types',
+server\models\ProjectType.js:23: module.exports = ProjectType;
+server\models\Purchase.js:11: projectType: DataTypes.STRING,
+server\models\PurchaseOrder.js:10: projectType: DataTypes.STRING,
+server\models\Quote.js:9: projectType: DataTypes.STRING,
+server\models\ReceiptVoucher.js:5: projectType: DataTypes.STRING,
+server\models\Sale.js:10: projectType: DataTypes.STRING,
+server\models\ServiceRequisition.js:12: projectType: DataTypes.STRING,
+server\models\Site.js:6: projectTypeName: DataTypes.STRING,
+server\models\StockTransfer.js:9: fromProjectType: DataTypes.STRING,
+server\models\StockTransfer.js:16: toProjectType: DataTypes.STRING,
+server\models\Voucher.js:30: projectType: DataTypes.STRING,
+server\models\Workorder.js:8: projectType: DataTypes.STRING,
+server\routes\adjustmentBill.js:105: projectType: req.body.projectType,
+server\routes\adjustmentBill.js:146: projectType: req.body.projectType,
+server\routes\assignShare.js:4: const { AssignShare, Project, ProjectType, Site, Flat, ChartOfAccount } = require('../models/associations');
+server\routes\assignShare.js:12: { model: ProjectType, as: 'projectType', attributes: ['id', 'name'] },
+server\routes\assignShare.js:24: projectType: j.projectTypeId,
+server\routes\assignShare.js:95: projectType, project, shareCode, site, flatLandNo, customer,
+server\routes\assignShare.js:104: projectTypeId: projectType || null,
+server\routes\assignShare.js:128: projectType: 'projectTypeId', project: 'projectId', site: 'siteId',
+server\routes\bill.js:254: projectType: req.body.projectType,
+server\routes\bill.js:295: projectType: req.body.projectType,
+server\routes\boqTitle.js:4: const ProjectType = require('../models/ProjectType');
+server\routes\boqTitle.js:9: include: [{ model: ProjectType, attributes: ['name'] }],
+server\routes\boqTitle.js:20: const { projectType, title } = req.body;
+server\routes\boqTitle.js:21: if (!projectType || !title) {
+server\routes\boqTitle.js:24: const boqTitle = await BoqTitle.create({ projectTypeId: projectType, title });
+server\routes\boqTitle.js:36: const { projectType, title } = req.body;
+server\routes\boqTitle.js:37: if (projectType !== undefined) boqTitle.projectTypeId = projectType;
+server\routes\contractorBill.js:122: ['Project Type', bill.projectType || '—', 'Ref W/O No.', bill.refWoNo || '—'],
+server\routes\contractorBill.js:290: projectType: req.body.projectType,
+server\routes\contractorBill.js:327: projectType: req.body.projectType,
+server\routes\contractorWorkorder.js:107: projectType: req.body.projectType,
+server\routes\contractorWorkorder.js:139: projectType: req.body.projectType,
+server\routes\contraVoucher.js:106: projectType: body.projectType || '',
+server\routes\contraVoucher.js:159: const plainFields = ['date', 'projectType', 'project', 'titleOfWork', 'site', 'task', 'comment', 'bankAccount', 'chequeDate'];
+server\routes\flatSale.js:153: code, date, bookingNo, project, site, flat, customer, projectType,
+server\routes\flatSale.js:184: projectType,
+server\routes\flatSale.js:225: 'date', 'bookingNo', 'project', 'site', 'flat', 'customer', 'projectType',
+server\routes\journalVoucher.js:103: projectType: body.projectType || '',
+server\routes\journalVoucher.js:154: const plainFields = ['date', 'projectType', 'project', 'titleOfWork', 'site', 'task', 'comment'];
+server\routes\labourBill.js:8: LabourBill, LabourBillItem, LabourBillApproval, Party, ChartOfAccount, Project, ProjectType,
+server\routes\labourBill.js:68: // Project Type is stored as a raw ProjectType id (see the "Project Type"
+server\routes\labourBill.js:71: async function attachProjectTypeNames(bills) {
+server\routes\labourBill.js:72: const ids = [...new Set(bills.map((b) => b.projectType).filter(Boolean))];
+server\routes\labourBill.js:73: if (!ids.length) return bills.map((b) => ({ ...b, projectTypeName: null }));
+server\routes\labourBill.js:74: const types = await ProjectType.findAll({ where: { id: { [Op.in]: ids } }, attributes: ['id', 'name'] });
+server\routes\labourBill.js:76: return bills.map((b) => ({ ...b, projectTypeName: nameById[String(b.projectType)] || null }));
+server\routes\labourBill.js:97: const withNames = await attachProjectTypeNames(bills.map((b) => b.toJSON()));
+server\routes\labourBill.js:115: const [withNames] = await attachProjectTypeNames([bill.toJSON()]);
+server\routes\labourBill.js:136: projectType: req.body.projectType,
+server\routes\labourBill.js:154: const [withNames] = await attachProjectTypeNames([populated.toJSON()]);
+server\routes\labourBill.js:167: const fields = ['date', 'party', 'ledger', 'creditLedgerLabel', 'projectType', 'project', 'titleOfWork', 'task', 'site', 'category', 'refWoNo', 'vatIncluded', 'vatPercent', 'paymentMethod', 'paid'];
+server\routes\labourBill.js:188: const [withNames] = await attachProjectTypeNames([populated.toJSON()]);
+server\routes\labourBill.js:218: const [withNames] = await attachProjectTypeNames([populated.toJSON()]);
+server\routes\materialRequisition.js:168: projectType: requisition.projectType,
+server\routes\materialRequisition.js:235: code, date, demandDate, company, supplier, projectType, project,
+server\routes\materialRequisition.js:248: projectType,
+server\routes\materialRequisition.js:297: 'date', 'demandDate', 'company', 'projectType', 'titleOfWork', 'task', 'reference', 'attachment', 'note',
+server\routes\materialRequisition.js:365: projectType: requisition.projectType,
+server\routes\materialRequisition.js:421: projectType: requisition.projectType,
+server\routes\materialUsage.js:83: code, date, employee, creditLedger, debitLedger, projectType, project,
+server\routes\materialUsage.js:96: date, employee, creditLedger, debitLedger, projectType,
+server\routes\materialUsage.js:125: const fields = ['date', 'employee', 'creditLedger', 'debitLedger', 'projectType', 'titleOfWork', 'task', 'purchaseRef', 'attachment'];
+server\routes\paymentVoucher.js:80: projectType, project, titleOfWork, task, site,
+server\routes\paymentVoucher.js:90: projectType: projectType || '',
+server\routes\paymentVoucher.js:130: 'projectType', 'project', 'titleOfWork', 'task', 'site', 'date', 'voucherNo',
+server\routes\project.js:45: const { projectType, status, area, search } = req.query;
+server\routes\project.js:47: if (projectType && projectType !== 'All Types') where.projectType = projectType;
+server\routes\project.js:67: name, code, projectType, projectManager, description,
+server\routes\project.js:78: projectType: projectType || '',
+server\routes\project.js:113: 'name', 'projectType', 'projectManager', 'description',
+server\routes\project.js:206: projectType: p.projectType,
+server\routes\projectType.js:3: const ProjectType = require('../models/ProjectType');
+server\routes\projectType.js:15: const projectTypes = await ProjectType.findAll({ order: [['createdAt', 'ASC']] });
+server\routes\projectType.js:16: res.json(projectTypes);
+server\routes\projectType.js:28: const newType = await ProjectType.create({
+server\routes\projectType.js:41: const item = await ProjectType.findByPk(req.params.id);
+server\routes\projectType.js:53: const deleted = await ProjectType.destroy({ where: { id: req.params.id } });
+server\routes\purchase.js:134: code, date, supplier, ledger, projectType, project, titleOfWork, task,
+server\routes\purchase.js:152: projectType,
+server\routes\purchase.js:192: const fields = ['date', 'projectType', 'titleOfWork', 'task', 'reference', 'note', 'attachment'];
+server\routes\purchaseOrder.js:93: code, date, supplier, projectType, project, titleOfWork, task,
+server\routes\purchaseOrder.js:107: date, supplierId: supplier, projectType, projectId: project || null,
+server\routes\purchaseOrder.js:154: projectType: 'projectType', attachment: 'attachment',
+server\routes\purchaseOrder.js:225: projectType: order.projectType,
+server\routes\quote.js:100: projectType: req.body.projectType,
+server\routes\quote.js:127: const fields = ['date', 'projectType', 'attachment', 'contentBody', 'contentFooter', 'vatPercent', 'deliveryCharge', 'discountPercent'];
+server\routes\receiptVoucher.js:78: projectType, project, titleOfWork, task, site,
+server\routes\receiptVoucher.js:88: projectType: projectType || '',
+server\routes\receiptVoucher.js:130: 'projectType', 'project', 'titleOfWork', 'task', 'site', 'date', 'voucherNo',
+server\routes\sale.js:71: projectType: payload.projectType,
+server\routes\sale.js:122: 'date', 'ledger', 'projectType', 'titleOfWork', 'refWoNo', 'content',
+server\routes\serviceRequisition.js:138: projectType: req.body.projectType,
+server\routes\serviceRequisition.js:188: const fields = ['date', 'projectType', 'titleOfWork', 'task', 'requiredByDate', 'remarks'];
+server\routes\site.js:35: const { name, code, projectTypeName, projectId, projectName, description, location } = req.body;
+server\routes\site.js:37: if (!projectTypeName) return res.status(400).json({ message: 'Project Type is required' });
+server\routes\site.js:43: projectTypeName,
+server\routes\site.js:63: const fields = ['projectTypeName', 'projectId', 'projectName', 'name', 'description', 'location'];
+server\routes\stockTransfer.js:76: code, date, employee, fromProjectType, fromProject, fromSite, fromTask,
+server\routes\stockTransfer.js:77: category, items, toProjectType, toProject, toSite, toTask, toSubTask, contact,
+server\routes\stockTransfer.js:87: date, employee, fromProjectType, fromProjectId: fromProject, fromSiteId: fromSite || null, fromTask,
+server\routes\stockTransfer.js:89: toProjectType, toProjectId: toProject, toSiteId: toSite || null, toTask, toSubTask, contact,
+server\routes\stockTransfer.js:120: date: 'date', employee: 'employee', fromProjectType: 'fromProjectType', fromTask: 'fromTask',
+server\routes\stockTransfer.js:121: toProjectType: 'toProjectType', toTask: 'toTask', toSubTask: 'toSubTask', contact: 'contact',
+server\routes\voucher.js:130: projectType, titleOfWork, task, site, item, ifCheque, chequeReceiptNo,
+server\routes\voucher.js:160: projectType: projectType || '',
+server\routes\voucher.js:199: projectType, titleOfWork, task, site, ifCheque, chequeReceiptNo,
+server\routes\voucher.js:240: if (projectType !== undefined) item.projectType = projectType;
+server\routes\workorder.js:87: projectType: req.body.projectType,
+server\routes\workorder.js:113: const fields = ['date', 'customer', 'projectType', 'project', 'site', 'clientOrderNo', 'attachment', 'vatIncluded', 'vatPercent', 'aitIncluded', 'aitPercent'];
+server\index.js:56: app.use('/api/project-types', require('./routes/projectType'));
+server\seed.js:1: const ProjectType = require('./models/ProjectType');
+server\seed.js:13: ProjectType.bulkCreate(seed).then(() => console.log('Seeded ProjectType')).catch(console.error);

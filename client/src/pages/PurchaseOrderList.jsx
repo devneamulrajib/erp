@@ -158,7 +158,6 @@ function PurchaseOrderOverviewModal({ orderId, initialRow, onClose, onEdit }) {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
               <OverviewField label="Date" value={data?.date || '-'} />
               <OverviewField label="Supplier" value={data?.supplier?.name || '-'} />
-              <OverviewField label="Project Type" value={data?.projectType || '-'} />
               <OverviewField label="Project" value={data?.project?.name || '-'} />
               <OverviewField label="Site" value={data?.site?.name || '-'} />
               <OverviewField label="Task" value={data?.task || '-'} />
@@ -464,7 +463,6 @@ export default function PurchaseOrderList() {
   const [rows, setRows] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [creatingBillId, setCreatingBillId] = useState(null);
@@ -507,7 +505,6 @@ export default function PurchaseOrderList() {
   useEffect(() => {
     api.get('/customers').then((res) => setSuppliers(asArray(res))).catch(() => {});
     api.get('/projects').then((res) => setProjects(asArray(res))).catch(() => {});
-    api.get('/project-types').then((res) => setProjectTypes(asArray(res))).catch(() => {});
   }, []);
 
   useEffect(() => { setPage(1); }, [search, pageSize]);
@@ -533,11 +530,6 @@ export default function PurchaseOrderList() {
         .catch(() => {});
     }
   }, [searchParams, rows, loading, setSearchParams]);
-
-  function projectTypeName(id) {
-    if (!id) return '-';
-    return projectTypes.find((pt) => String(pt.id) === String(id))?.name || id;
-  }
 
   async function handleDelete(row) {
     if (!window.confirm('Delete this purchase order?')) return;
@@ -724,7 +716,7 @@ export default function PurchaseOrderList() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
-                  {['ID', 'Type', 'Project', 'Title', 'Supplier', 'Code', 'Ref', 'Date', 'Sub Total',
+                  {['ID', 'Project', 'Title', 'Supplier', 'Code', 'Ref', 'Date', 'Sub Total',
                     'Grand Total', 'Status', 'Delivery', 'Payment', 'Invoice', 'By'].map((h) => (
                     <th key={h} className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">{h}</th>
                   ))}
@@ -733,10 +725,10 @@ export default function PurchaseOrderList() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={16} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
+                  <tr><td colSpan={15} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
                 ) : paged.length === 0 ? (
                   <tr>
-                    <td colSpan={16} className="text-center py-16">
+                    <td colSpan={15} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <ClipboardList size={28} strokeWidth={1.5} />
                         <p className="text-sm">No entries found. Try adjusting your filters, or create a new order.</p>
@@ -749,7 +741,6 @@ export default function PurchaseOrderList() {
                     return (
                       <tr key={row.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap align-top text-xs">
                         <td className="px-2 py-2.5 text-slate-400 font-mono">{(page - 1) * pageSize + i + 1}</td>
-                        <td className="px-2 py-2.5 text-slate-600">{projectTypeName(row.projectType)}</td>
                         <td className="px-2 py-2.5 text-slate-600">{row.project?.name || '-'}</td>
                         <td className="px-2 py-2.5 font-medium text-slate-700 max-w-[140px] truncate">{row.titleOfWork || '-'}</td>
                         <td className="px-2 py-2.5 text-slate-600">{row.supplier?.name || '-'}</td>

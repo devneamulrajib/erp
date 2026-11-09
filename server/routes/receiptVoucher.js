@@ -18,6 +18,8 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+const isAdminUser = (user) => ['superadmin', 'admin'].includes(user?.role);
+
 async function generateVoucherNo() {
   const count = await ReceiptVoucher.count();
   return `R${String(count + 1).padStart(5, '0')}`;
@@ -73,7 +75,7 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', auth, upload.single('attachment'), async (req, res) => {
   try {
     const {
-      projectType, project, titleOfWork, task, site,
+      project, titleOfWork, task, site,
       date, voucherNo, creditAccount, debitAccount, ifCheque, chequeReceiptNo,
       amount, comment, invoiceBill, paymentType, installment, bankAccount, chequeDate,
     } = req.body;
@@ -83,7 +85,6 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
     }
 
     const voucher = await ReceiptVoucher.create({
-      projectType: projectType || '',
       project: project || '',
       titleOfWork: titleOfWork || '',
       task: task || '',
@@ -103,6 +104,8 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
       installment: installment || '',
       addedBy: req.user?.name || 'Admin',
       attachment: req.file ? `/uploads/receipt-vouchers/${req.file.filename}` : '',
+      // New vouchers always start pending; only the Approval Center (admin) can approve.
+      status: 'pending',
     });
 
     res.status(201).json(voucher);
@@ -116,11 +119,19 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
     const voucher = await ReceiptVoucher.findByPk(req.params.id);
     if (!voucher) return res.status(404).json({ message: 'Not found' });
 
+    // RESTRICTION: Non-admin cannot edit approved vouchers
+    const isNonAdmin = !isAdminUser(req.user);
+    if (isNonAdmin && String(voucher.status).toLowerCase() === 'approved') {
+      return res.status(403).json({ message: 'Approved receipt vouchers cannot be edited by an Accountant. Contact Admin.' });
+    }
+
     const fields = [
-      'projectType', 'project', 'titleOfWork', 'task', 'site', 'date', 'voucherNo',
+      'project', 'titleOfWork', 'task', 'site', 'date', 'voucherNo',
       'creditAccount', 'debitAccount', 'chequeReceiptNo', 'amount', 'comment',
-      'invoiceBill', 'paymentType', 'installment', 'status', 'bankAccount', 'chequeDate',
+      'invoiceBill', 'paymentType', 'installment', 'bankAccount', 'chequeDate',
     ];
+    if (!isNonAdmin) fields.push('status'); // Only Admin can change status directly
+
     fields.forEach((key) => {
       if (req.body[key] !== undefined) voucher[key] = req.body[key];
     });
@@ -129,6 +140,11 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
     }
     if (req.file) voucher.attachment = `/uploads/receipt-vouchers/${req.file.filename}`;
     voucher.editedBy = req.user?.name || voucher.editedBy;
+
+    // If an Accountant edits a rejected voucher, send it back for approval
+    if (isNonAdmin && String(voucher.status).toLowerCase() === 'rejected') {
+      voucher.status = 'pending';
+    }
 
     await voucher.save();
     res.json(voucher);
@@ -139,8 +155,16 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await ReceiptVoucher.destroy({ where: { id: req.params.id } });
-    if (!deleted) return res.status(404).json({ message: 'Not found' });
+    const voucher = await ReceiptVoucher.findByPk(req.params.id);
+    if (!voucher) return res.status(404).json({ message: 'Not found' });
+
+    // RESTRICTION: Non-admin cannot delete approved vouchers
+    const isNonAdmin = !isAdminUser(req.user);
+    if (isNonAdmin && String(voucher.status).toLowerCase() === 'approved') {
+      return res.status(403).json({ message: 'Approved receipt vouchers cannot be deleted by an Accountant. Contact Admin.' });
+    }
+
+    await voucher.destroy();
     res.json({ deleted: true });
   } catch (err) {
     res.status(500).json({ message: err.message });

@@ -18,9 +18,6 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-// Normalizes an API response into a plain array, regardless of whether the
-// underlying api/*.js function returns the raw axios response ({ data: [...] })
-// or already-unwrapped data ([...]). Falls back to [] so `.map()` never crashes.
 function unwrap(res) {
   if (Array.isArray(res)) return res;
   if (res && Array.isArray(res.data)) return res.data;
@@ -30,12 +27,10 @@ function unwrap(res) {
 export default function PurchasePage() {
   const navigate = useNavigate();
   const { id } = useParams();
-  // "add" is used as the "new purchase" URL segment, not a real ID — don't treat it as one
   const isEdit = !!id && id !== 'add';
 
   const [suppliers, setSuppliers] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
   const [ledgers, setLedgers] = useState([]);
   const [sites, setSites] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -45,7 +40,6 @@ export default function PurchasePage() {
   const [supplier, setSupplier] = useState('');
   const [ledger, setLedger] = useState('');
   const [code, setCode] = useState('');
-  const [projectType, setProjectType] = useState('');
   const [project, setProject] = useState('');
   const [titleOfWork, setTitleOfWork] = useState('');
   const [task, setTask] = useState('');
@@ -76,11 +70,6 @@ export default function PurchasePage() {
     api.get('/projects')
       .then((res) => setProjects(unwrap(res)))
       .catch(() => setProjects([]));
-    // NOTE: assumed route '/project-types' — update this one line if your
-    // backend uses a different path (e.g. '/projectTypes').
-    api.get('/project-types')
-      .then((res) => setProjectTypes(unwrap(res)))
-      .catch(() => setProjectTypes([]));
     api.get('/sites')
       .then((res) => setSites(unwrap(res)))
       .catch(() => setSites([]));
@@ -110,7 +99,6 @@ export default function PurchasePage() {
       setSupplier(p.supplier?.id || p.supplierId || '');
       setLedger(p.ledger?.id || p.ledgerId || p.ledger || '');
       setCode(p.code || '');
-      setProjectType(p.projectType?.id || p.projectTypeId || p.projectType || '');
       setProject(p.project?.id || p.projectId || '');
       setTitleOfWork(p.titleOfWork || '');
       setTask(p.task || '');
@@ -128,9 +116,6 @@ export default function PurchasePage() {
     });
   }, [id, isEdit]);
 
-  // Subtotal is DERIVED from the item rows below (Rate x Purchase Qty per row) —
-  // it is intentionally read-only. It stays at 0 until at least one item row
-  // exists (via "Select Item" + the "+" button) and has a Rate and Purchase Qty.
   const subtotal = useMemo(
     () => rows.reduce((sum, r) => sum + num(r.rate) * num(r.purchaseQty), 0),
     [rows]
@@ -197,7 +182,7 @@ export default function PurchasePage() {
     setSubmitting(true);
     try {
       const payload = {
-        code, date, supplier, ledger, projectType, project, titleOfWork, task,
+        code, date, supplier, ledger, project, titleOfWork, task,
         site, category,
         items: rows.map((r) => ({ ...r, amount: num(r.rate) * num(r.purchaseQty) })),
         discount: num(discount),
@@ -266,14 +251,6 @@ export default function PurchasePage() {
           </Field>
           <Field label="Code">
             <input value={code} readOnly className="input bg-gray-50" />
-          </Field>
-          <Field label="Project Type">
-            <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
-              <option value="">Select Project Type</option>
-              {projectTypes.map((pt) => (
-                <option key={pt.id} value={pt.id}>{pt.name}</option>
-              ))}
-            </select>
           </Field>
           <Field label="Project">
             <select value={project} onChange={(e) => setProject(e.target.value)} className="input">

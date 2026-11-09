@@ -119,7 +119,7 @@ function generateContractorBillPdf(bill, res) {
   sectionTitle(doc, 'Bill Reference', pageWidth, marginLeft);
   const refRows = [
     ['Project', bill.Project?.name || '—', 'Ledger', bill.ChartOfAccount?.name || '—'],
-    ['Project Type', bill.projectType || '—', 'Ref W/O No.', bill.refWoNo || '—'],
+    ['Ref W/O No.', bill.refWoNo || '—', '', ''],
   ];
   doc.fontSize(9).font('Helvetica');
   const half = pageWidth / 2;
@@ -287,7 +287,6 @@ router.post('/', auth, async (req, res) => {
       date: req.body.date,
       partyId: req.body.party,
       ledgerId: req.body.ledger,
-      projectType: req.body.projectType,
       projectId: req.body.project,
       titleOfWork: req.body.titleOfWork,
       task: req.body.task,
@@ -324,7 +323,6 @@ router.put('/:id', auth, async (req, res) => {
       date: req.body.date,
       partyId: req.body.party,
       ledgerId: req.body.ledger,
-      projectType: req.body.projectType,
       projectId: req.body.project,
       titleOfWork: req.body.titleOfWork,
       task: req.body.task,

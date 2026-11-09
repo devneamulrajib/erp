@@ -30,7 +30,6 @@ export default function JournalVoucherPage() {
 
   const [voucherNo, setVoucherNo] = useState('');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [projectType, setProjectType] = useState('');
   const [titleOfWork, setTitleOfWork] = useState('');
   const [project, setProject] = useState('');
   const [site, setSite] = useState('');
@@ -52,14 +51,14 @@ export default function JournalVoucherPage() {
   const [error, setError] = useState('');
 
   function reloadAccounts() {
-    getChartOfAccounts().then((res) => setAccounts(res.data)).catch(() => {});
+    getChartOfAccounts().then((res) => setAccounts(res?.data ?? res ?? [])).catch(() => setAccounts([]));
   }
 
   useEffect(() => {
-    api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
-    api.get('/sites').then((res) => setSites(res.data)).catch(() => {});
+    api.get('/projects').then((res) => setProjects(res.data ?? [])).catch(() => setProjects([]));
+    api.get('/sites').then((res) => setSites(res.data ?? [])).catch(() => setSites([]));
     reloadAccounts();
-    getChartOfGroupOptions().then((res) => setGroupOptions(res.data)).catch(() => {});
+    getChartOfGroupOptions().then((res) => setGroupOptions(res?.data ?? res ?? [])).catch(() => setGroupOptions([]));
   }, []);
 
   useEffect(() => {
@@ -72,7 +71,6 @@ export default function JournalVoucherPage() {
     getJournalVoucher(id).then((v) => {
       setVoucherNo(v.voucherNo || '');
       setDate(v.date ? new Date(v.date).toISOString().slice(0, 10) : '');
-      setProjectType(v.projectType || '');
       setTitleOfWork(v.titleOfWork || '');
       setProject(v.project || '');
       setSite(v.site || '');
@@ -85,13 +83,13 @@ export default function JournalVoucherPage() {
     });
   }, [id, isEdit]);
 
-  const totalDebit = useMemo(() => lines.reduce((sum, l) => sum + num(l.debit), 0), [lines]);
-  const totalCredit = useMemo(() => lines.reduce((sum, l) => sum + num(l.credit), 0), [lines]);
+  const totalDebit = useMemo(() => (lines || []).reduce((sum, l) => sum + num(l.debit), 0), [lines]);
+  const totalCredit = useMemo(() => (lines || []).reduce((sum, l) => sum + num(l.credit), 0), [lines]);
   const balanced = Math.abs(totalDebit - totalCredit) < 0.01;
 
   function addLine() {
     if (!rowType || !rowAccount || num(rowAmount) <= 0) return;
-    setLines((prev) => [...prev, {
+    setLines((prev) => [...(prev || []), {
       account: rowAccount,
       debit: rowType === 'Debit' ? num(rowAmount) : 0,
       credit: rowType === 'Credit' ? num(rowAmount) : 0,
@@ -104,10 +102,10 @@ export default function JournalVoucherPage() {
   }
 
   function updateLine(i, key, value) {
-    setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, [key]: value } : l)));
+    setLines((prev) => (prev || []).map((l, idx) => (idx === i ? { ...l, [key]: value } : l)));
   }
   function removeLine(i) {
-    setLines((prev) => prev.filter((_, idx) => idx !== i));
+    setLines((prev) => (prev || []).filter((_, idx) => idx !== i));
   }
 
   async function handleQuickAddSubmit(e) {
@@ -115,7 +113,8 @@ export default function JournalVoucherPage() {
     if (!quickAddForm.chartOfGroup || !quickAddForm.name) return;
     setQuickAddSaving(true);
     try {
-      const { data } = await createChartOfAccount(quickAddForm);
+      const res = await createChartOfAccount(quickAddForm);
+      const data = res?.data ?? res;
       reloadAccounts();
       setRowAccount(data.name);
       setQuickAddOpen(false);
@@ -130,7 +129,7 @@ export default function JournalVoucherPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
-    if (lines.length < 2) {
+    if ((lines || []).length < 2) {
       setError('Add at least two account lines (one Debit, one Credit)');
       return;
     }
@@ -141,7 +140,7 @@ export default function JournalVoucherPage() {
     setSubmitting(true);
     try {
       const payload = {
-        voucherNo, date, projectType, project, titleOfWork, site, task,
+        voucherNo, date, project, titleOfWork, site, task,
         lines, comment, attachmentFile,
       };
       if (isEdit) {
@@ -151,7 +150,6 @@ export default function JournalVoucherPage() {
       }
       navigate('/accounts-module/journal_list');
     } catch (err) {
-      console.error('Failed to save journal voucher', err);
       setError(err.response?.data?.message || err.message || 'Failed to save journal voucher');
     } finally {
       setSubmitting(false);
@@ -190,7 +188,7 @@ export default function JournalVoucherPage() {
             <Field label="Project">
               <select value={project} onChange={(e) => setProject(e.target.value)} className="input">
                 <option value="">Select Project</option>
-                {projects.map((p) => <option key={p._id} value={p.name}>{p.name}</option>)}
+                {(projects || []).map((p) => <option key={p._id ?? p.id} value={p.name}>{p.name}</option>)}
               </select>
             </Field>
             <Field label="Date">
@@ -199,11 +197,8 @@ export default function JournalVoucherPage() {
             <Field label="Site">
               <select value={site} onChange={(e) => setSite(e.target.value)} className="input">
                 <option value="">Select Site</option>
-                {sites.map((s) => <option key={s._id} value={s.name}>{s.name}</option>)}
+                {(sites || []).map((s) => <option key={s._id ?? s.id} value={s.name}>{s.name}</option>)}
               </select>
-            </Field>
-            <Field label="Project Type">
-              <input value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input" placeholder="Select Project Type" />
             </Field>
             <Field label="If Task">
               <input value={task} onChange={(e) => setTask(e.target.value)} className="input" placeholder="Select Task" />
@@ -224,7 +219,7 @@ export default function JournalVoucherPage() {
               <div className="flex gap-2">
                 <select value={rowAccount} onChange={(e) => setRowAccount(e.target.value)} className="input flex-1">
                   <option value="">Select Chart Of Account</option>
-                  {accounts.map((a) => <option key={a._id} value={a.name}>{a.name}</option>)}
+                  {(accounts || []).map((a) => <option key={a._id ?? a.id} value={a.name}>{a.name}</option>)}
                 </select>
                 <button type="button" onClick={() => setQuickAddOpen(true)} className="px-3 rounded-md bg-emerald-500 hover:bg-emerald-600 text-white font-bold">+</button>
               </div>
@@ -252,10 +247,10 @@ export default function JournalVoucherPage() {
               </tr>
             </thead>
             <tbody>
-              {lines.length === 0 ? (
+              {(lines || []).length === 0 ? (
                 <tr><td colSpan={6} className="text-center py-4 text-gray-400">No accounts added</td></tr>
               ) : (
-                lines.map((l, i) => (
+                (lines || []).map((l, i) => (
                   <tr key={i} className="border-t border-gray-100">
                     <td className="px-3 py-1.5 text-indigo-600">{l.account}</td>
                     <td className="px-3 py-1.5">{num(l.debit).toFixed(2)}</td>
@@ -274,7 +269,7 @@ export default function JournalVoucherPage() {
                   </tr>
                 ))
               )}
-              {lines.length > 0 && (
+              {(lines || []).length > 0 && (
                 <tr className="border-t border-gray-200 font-medium">
                   <td className="px-3 py-1.5">Total</td>
                   <td className="px-3 py-1.5">{totalDebit.toFixed(2)}</td>
@@ -321,7 +316,7 @@ export default function JournalVoucherPage() {
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
               >
                 <option value="">Select value</option>
-                {groupOptions.map((g) => <option key={g._id} value={g._id}>{g.name}</option>)}
+                {(groupOptions || []).map((g) => <option key={g._id ?? g.id} value={g._id ?? g.id}>{g.name}</option>)}
               </select>
             </div>
             <div>

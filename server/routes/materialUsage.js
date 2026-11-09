@@ -80,7 +80,7 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', auth, async (req, res) => {
   try {
     const {
-      code, date, employee, creditLedger, debitLedger, projectType, project,
+      code, date, employee, creditLedger, debitLedger, project,
       titleOfWork, task, site, category, purchaseRef, items, attachment,
     } = req.body;
 
@@ -93,7 +93,7 @@ router.post('/', auth, async (req, res) => {
 
     const usage = await MaterialUsage.create({
       code: code || generateCode(),
-      date, employee, creditLedger, debitLedger, projectType,
+      date, employee, creditLedger, debitLedger,
       projectId: project,
       titleOfWork, task,
       siteId: site,
@@ -122,7 +122,7 @@ router.put('/:id', auth, async (req, res) => {
     const usage = await MaterialUsage.findByPk(req.params.id);
     if (!usage) return res.status(404).json({ message: 'Not found' });
 
-    const fields = ['date', 'employee', 'creditLedger', 'debitLedger', 'projectType', 'titleOfWork', 'task', 'purchaseRef', 'attachment'];
+    const fields = ['date', 'employee', 'creditLedger', 'debitLedger', 'titleOfWork', 'task', 'purchaseRef', 'attachment'];
     fields.forEach((key) => {
       if (req.body[key] !== undefined) usage[key] = req.body[key];
     });

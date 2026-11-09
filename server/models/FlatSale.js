@@ -11,7 +11,6 @@ const FlatSale = sequelize.define('FlatSale', {
   flatId: DataTypes.INTEGER,
   customerId: DataTypes.INTEGER,
 
-  projectType: DataTypes.STRING,
   collectionOfficer: DataTypes.STRING,
   salesBy: DataTypes.STRING,
   ledger: { type: DataTypes.STRING, defaultValue: 'Flat Sales' },

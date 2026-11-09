@@ -5,18 +5,34 @@ const path = require('path');
 const fs = require('fs');
 const { Op } = require('sequelize');
 
+const sequelize = require('../config/db');
 const auth = require('../middleware/auth');
 const { requireAdmin } = require('../middleware/permissions');
 const {
   OfficeExpense,
-  Voucher,
-  VoucherEntry,
-  ChartOfAccount,
   BudgetCategory,
   MonthlyBudget,
 } = require('../models/associations');
+const MonthlyBudgetCashReceipt = require('../models/MonthlyBudgetCashReceipt');
 const logActivity = require('../utils/activityLog');
 const { notifyAdmin, notifyAccountant } = require('../utils/notify');
+const {
+  cleanText,
+  cleanMethod,
+  fail,
+  applyAccountDefaults,
+  resolveAccountIds,
+  unpostExpense,
+  syncLedger,
+} = require('../utils/officeExpensePosting');
+
+// Ledger rule:
+//   approved  -> journal entry is on the ledger
+//   pending / rejected -> nothing on the ledger
+// When true, an expense saved by an admin is approved (and therefore posted)
+// immediately. Set to false to make admins' entries wait for approval too.
+const AUTO_APPROVE_ADMIN = true;
+const isAdminRole = (user) => ['superadmin', 'admin'].includes(user?.role);
 
 const uploadDir = path.join(__dirname, '..', 'uploads', 'office-expenses');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -30,60 +46,31 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-const PAYMENT_METHODS = ['Cash', 'Bank', 'Cheque'];
-const cleanMethod = (v) => (PAYMENT_METHODS.includes(v) ? v : '');
-const cleanText = (v) => String(v ?? '').trim();
+// Activity log / notifications must never fail or block a save.
+async function safely(fn) {
+  try {
+    await fn();
+  } catch (err) {
+    console.error('OfficeExpense side-effect error:', err.message);
+  }
+}
+
+// Runs `work(t)` in one transaction: commit when it returns, roll back when it throws.
+async function inTransaction(work) {
+  const t = await sequelize.transaction();
+  try {
+    const result = await work(t);
+    await t.commit();
+    return result;
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
+}
 
 async function generateReference() {
   const count = await OfficeExpense.count();
   return `OEXP${String(count + 1).padStart(5, '0')}`;
-}
-
-async function generateVoucherNo() {
-  const d = new Date();
-  const yy = String(d.getFullYear()).slice(-2);
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const fullPrefix = `OE${yy}${mm}${dd}`;
-  const count = await Voucher.count({ where: { voucherNo: { [Op.like]: `${fullPrefix}%` } } });
-  return `${fullPrefix}-${String(count + 1).padStart(4, '0')}`;
-}
-
-async function resolveAccountId(name) {
-  if (!name) return null;
-  const acc = await ChartOfAccount.findOne({ where: { name } });
-  return acc ? acc.id : null;
-}
-
-async function syncOfficeExpenseVoucher(officeExpense, req) {
-  const drAccountId = await resolveAccountId(officeExpense.drAccount);
-  const crAccountId = await resolveAccountId(officeExpense.crAccount);
-  if (!drAccountId || !crAccountId) {
-    throw new Error('Debit/Credit account not found in Chart of Accounts — please re-select from the dropdown');
-  }
-
-  let voucher = officeExpense.voucherId ? await Voucher.findByPk(officeExpense.voucherId) : null;
-  if (!voucher) {
-    voucher = await Voucher.create({
-      voucherNo: await generateVoucherNo(),
-      type: 'Office Expense',
-      addedBy: req.user?.name || 'Admin',
-    });
-    officeExpense.voucherId = voucher.id;
-  }
-
-  voucher.date = officeExpense.date;
-  voucher.narration = officeExpense.title || '';
-  voucher.reference = officeExpense.reference;
-  voucher.amount = Number(officeExpense.amount);
-  voucher.attachment = officeExpense.attachment || '';
-  await voucher.save();
-
-  await VoucherEntry.destroy({ where: { voucherId: voucher.id } });
-  await VoucherEntry.create({ accountId: drAccountId, debit: Number(officeExpense.amount), credit: 0, voucherId: voucher.id });
-  await VoucherEntry.create({ accountId: crAccountId, debit: 0, credit: Number(officeExpense.amount), voucherId: voucher.id });
-
-  return voucher;
 }
 
 async function checkBudgetWarning(officeExpense) {
@@ -188,6 +175,38 @@ router.get('/budget-status', auth, async (req, res) => {
   }
 });
 
+// Quick-summary tiles on the Daily Expense Entry page. Rejected expenses are
+// left out of the totals; pending is everything still waiting for approval.
+// Must stay above '/:id'.
+router.get('/summary', auth, async (req, res) => {
+  try {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(req.query.date || ''));
+    const base = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date();
+    const dayStart = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    const dayEnd = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 1);
+    const monthStart = new Date(base.getFullYear(), base.getMonth(), 1);
+    const monthEnd = new Date(base.getFullYear(), base.getMonth() + 1, 1);
+    const notRejected = { status: { [Op.ne]: 'rejected' } };
+
+    const [todayTotal, todayCount, monthTotal, pendingTotal, pendingCount] = await Promise.all([
+      OfficeExpense.sum('amount', { where: { ...notRejected, date: { [Op.gte]: dayStart, [Op.lt]: dayEnd } } }),
+      OfficeExpense.count({ where: { ...notRejected, date: { [Op.gte]: dayStart, [Op.lt]: dayEnd } } }),
+      OfficeExpense.sum('amount', { where: { ...notRejected, date: { [Op.gte]: monthStart, [Op.lt]: monthEnd } } }),
+      OfficeExpense.sum('amount', { where: { status: 'pending' } }),
+      OfficeExpense.count({ where: { status: 'pending' } }),
+    ]);
+
+    res.json({
+      today: { total: Number(todayTotal) || 0, count: todayCount },
+      month: { total: Number(monthTotal) || 0 },
+      pending: { total: Number(pendingTotal) || 0, count: pendingCount },
+      autoApproveAdmin: AUTO_APPROVE_ADMIN,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.get('/report', auth, async (req, res) => {
   try {
     const year = Number(req.query.year) || new Date().getFullYear();
@@ -210,6 +229,12 @@ router.get('/report', auth, async (req, res) => {
     const allExpenses = await OfficeExpense.findAll({
       where: { date: { [Op.gte]: yearStart, [Op.lt]: yearEnd } },
       attributes: ['id', 'amount', 'date', 'status', 'budgetCategoryId'],
+    });
+
+    // Cash deposits / fund receipts recorded against the monthly budget
+    const cashReceipts = await MonthlyBudgetCashReceipt.findAll({
+      where: { year },
+      order: [['receivedDate', 'ASC'], ['createdAt', 'ASC']],
     });
 
     const spentByCategory = {};
@@ -285,6 +310,7 @@ router.get('/report', auth, async (req, res) => {
       categories,
       topSpenders,
       entryCount: allExpenses.length,
+      cashReceipts: cashReceipts.map((r) => r.toJSON()),
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -318,13 +344,16 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-// Create new expense request
+// Create new expense request.
+// The expense and its journal entry are saved in one transaction. If the
+// ledger step fails, nothing is saved and the error is returned.
 router.post('/', auth, upload.single('attachment'), async (req, res) => {
   try {
     const {
-      title, budgetCategory, drAccount, crAccount, amount, reference, date,
+      title, budgetCategory, amount, reference, date,
       paidTo, billNo, paymentMethod, paymentRef,
     } = req.body;
+    const { drAccount, crAccount } = await applyAccountDefaults(req.body);
 
     if (!budgetCategory) {
       return res.status(400).json({ message: 'Office Budget Category is required' });
@@ -340,23 +369,32 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
     }
 
     const isAccountant = req.user?.role === 'accountant';
-    const initialStatus = 'pending';
+    const initialStatus = AUTO_APPROVE_ADMIN && isAdminRole(req.user) ? 'approved' : 'pending';
+    const finalReference = reference || await generateReference();
 
-    const officeExpense = await OfficeExpense.create({
-      title: title || '',
-      budgetCategoryId: budgetCategory,
-      drAccount,
-      crAccount,
-      amount: Number(amount),
-      reference: reference || await generateReference(),
-      date: date || Date.now(),
-      status: initialStatus,
-      addedBy: req.user?.name || (isAccountant ? 'Accountant' : 'Admin'),
-      attachment: req.file ? `/uploads/office-expenses/${req.file.filename}` : '',
-      paidTo: cleanText(paidTo),
-      billNo: cleanText(billNo),
-      paymentMethod: cleanMethod(paymentMethod),
-      paymentRef: cleanText(paymentRef),
+    const officeExpense = await inTransaction(async (t) => {
+      const row = await OfficeExpense.create({
+        title: title || '',
+        budgetCategoryId: budgetCategory,
+        drAccount,
+        crAccount,
+        amount: Number(amount),
+        reference: finalReference,
+        date: date || Date.now(),
+        status: initialStatus,
+        addedBy: req.user?.name || (isAccountant ? 'Accountant' : 'Admin'),
+        attachment: req.file ? `/uploads/office-expenses/${req.file.filename}` : '',
+        paidTo: cleanText(paidTo),
+        billNo: cleanText(billNo),
+        paymentMethod: cleanMethod(paymentMethod),
+        paymentRef: cleanText(paymentRef),
+      }, { transaction: t });
+
+      // Check both accounts exist even while pending, so approval cannot fail later.
+      await resolveAccountIds(row.drAccount, row.crAccount, t);
+      await syncLedger(row, req.user, t);
+      await row.save({ transaction: t });
+      return row;
     });
 
     let budgetWarning = null;
@@ -364,14 +402,7 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
       budgetWarning = await checkBudgetWarning(officeExpense);
     } catch { /* non-critical */ }
 
-    try {
-      await syncOfficeExpenseVoucher(officeExpense, req);
-      await officeExpense.save();
-    } catch (voucherErr) {
-      return res.status(201).json({ ...officeExpense.toJSON(), ledgerWarning: voucherErr.message, budgetWarning });
-    }
-
-    await logActivity({
+    await safely(() => logActivity({
       module: 'Expense',
       action: isAccountant ? 'Submitted' : 'Created',
       message: `${isAccountant ? 'Submitted expense request' : 'Added expense'} "${officeExpense.title || officeExpense.reference}" (${officeExpense.reference})`,
@@ -380,25 +411,27 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
       relatedType: 'OfficeExpense',
       relatedId: officeExpense.id,
       performedBy: req.user?.name || 'User',
-    });
+    }));
 
     // Notify Admin when an Accountant submits a request
     if (isAccountant) {
-      await notifyAdmin(
+      await safely(() => notifyAdmin(
         'OfficeExpenseRequest',
         `New Office Expense request submitted by ${req.user.name || 'Accountant'}: "${officeExpense.title || officeExpense.reference}" (৳${Number(officeExpense.amount).toLocaleString()})`,
         'OfficeExpense',
         officeExpense.id
-      );
+      ));
     }
 
     res.status(201).json({ ...officeExpense.toJSON(), budgetWarning });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message });
   }
 });
 
-// Update status (Approve / Reject / Pending) — ADMIN ONLY
+// Update status (Approve / Reject / Pending) — ADMIN ONLY.
+// Approving posts the journal entry; rejecting or moving back to pending
+// removes it. The status and the ledger change together.
 router.patch('/:id/status', auth, requireAdmin, async (req, res) => {
   try {
     const { status, remarks } = req.body;
@@ -407,13 +440,16 @@ router.patch('/:id/status', auth, requireAdmin, async (req, res) => {
       return res.status(400).json({ message: 'Status must be approved, pending, or rejected' });
     }
 
-    const officeExpense = await OfficeExpense.findByPk(req.params.id, { include: listInclude });
-    if (!officeExpense) return res.status(404).json({ message: 'Expense record not found' });
+    const officeExpense = await inTransaction(async (t) => {
+      const row = await OfficeExpense.findByPk(req.params.id, { include: listInclude, transaction: t });
+      if (!row) throw fail('Expense record not found', 404);
+      row.status = normalizedStatus;
+      await syncLedger(row, req.user, t);
+      await row.save({ transaction: t });
+      return row;
+    });
 
-    officeExpense.status = normalizedStatus;
-    await officeExpense.save();
-
-    await logActivity({
+    await safely(() => logActivity({
       module: 'Expense',
       action: normalizedStatus === 'approved' ? 'Approved' : normalizedStatus === 'rejected' ? 'Rejected' : 'Updated',
       message: `${normalizedStatus.toUpperCase()} expense "${officeExpense.title || officeExpense.reference}" (${officeExpense.reference})${remarks ? ` - Note: ${remarks}` : ''}`,
@@ -422,7 +458,7 @@ router.patch('/:id/status', auth, requireAdmin, async (req, res) => {
       relatedType: 'OfficeExpense',
       relatedId: officeExpense.id,
       performedBy: req.user?.name || 'Admin',
-    });
+    }));
 
     // Notify Accountant about approval / rejection
     if (['approved', 'rejected'].includes(normalizedStatus)) {
@@ -431,81 +467,78 @@ router.patch('/:id/status', auth, requireAdmin, async (req, res) => {
         ? `Your Office Expense "${officeExpense.title || officeExpense.reference}" (৳${Number(officeExpense.amount).toLocaleString()}) was approved by Admin.`
         : `Your Office Expense "${officeExpense.title || officeExpense.reference}" was rejected by Admin. Reason: ${remarks || 'Not specified'}`;
 
-      await notifyAccountant(null, notifType, notifMsg, 'OfficeExpense', officeExpense.id);
+      await safely(() => notifyAccountant(null, notifType, notifMsg, 'OfficeExpense', officeExpense.id));
     }
 
     res.json(officeExpense);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message });
   }
 });
 
-// Edit expense record
+// Edit expense record. An approved expense gets its journal entry rebuilt
+// from the new values in the same transaction.
 router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
   try {
-    const officeExpense = await OfficeExpense.findByPk(req.params.id);
-    if (!officeExpense) return res.status(404).json({ message: 'Not found' });
+    const isNonAdmin = !isAdminRole(req.user);
+    let previousAmount = 0;
 
-    const isNonAdmin = !['superadmin', 'admin'].includes(req.user?.role);
-    if (isNonAdmin && officeExpense.status === 'approved') {
-      return res.status(403).json({ message: 'Approved expenses cannot be modified by Accountant. Contact Admin.' });
-    }
+    const officeExpense = await inTransaction(async (t) => {
+      const row = await OfficeExpense.findByPk(req.params.id, { transaction: t });
+      if (!row) throw fail('Not found', 404);
 
-    const previousAmount = Number(officeExpense.amount);
-    const fields = [
-      'title', 'drAccount', 'crAccount', 'amount', 'reference', 'date',
-      'paidTo', 'billNo', 'paymentRef',
-    ];
-
-    // Only Admin can manually update status through PUT
-    if (!isNonAdmin && req.body.status !== undefined) {
-      fields.push('status');
-    }
-
-    fields.forEach((key) => {
-      if (req.body[key] !== undefined) officeExpense[key] = req.body[key];
-    });
-
-    if (req.body.paymentMethod !== undefined) {
-      officeExpense.paymentMethod = cleanMethod(req.body.paymentMethod);
-    }
-
-    if (req.body.budgetCategory !== undefined) {
-      if (!req.body.budgetCategory) {
-        return res.status(400).json({ message: 'Office Budget Category is required' });
+      if (isNonAdmin && String(row.status).toLowerCase() === 'approved') {
+        throw fail('Approved expenses cannot be modified by Accountant. Contact Admin.', 403);
       }
-      officeExpense.budgetCategoryId = req.body.budgetCategory;
-    }
 
-    if (!(Number(officeExpense.amount) > 0)) {
-      return res.status(400).json({ message: 'Amount must be greater than 0' });
-    }
-    if (officeExpense.drAccount && officeExpense.drAccount === officeExpense.crAccount) {
-      return res.status(400).json({ message: 'Debit and Credit accounts must be different' });
-    }
+      previousAmount = Number(row.amount);
+      const fields = [
+        'title', 'drAccount', 'crAccount', 'amount', 'reference', 'date',
+        'paidTo', 'billNo', 'paymentRef',
+      ];
 
-    if (req.file) officeExpense.attachment = `/uploads/office-expenses/${req.file.filename}`;
+      // Only Admin can manually update status through PUT
+      if (!isNonAdmin && req.body.status !== undefined) {
+        fields.push('status');
+      }
 
-    // If an Accountant edits a previously rejected item, move it back to 'pending'
-    if (isNonAdmin && officeExpense.status === 'rejected') {
-      officeExpense.status = 'pending';
-    }
+      fields.forEach((key) => {
+        if (req.body[key] !== undefined) row[key] = req.body[key];
+      });
 
-    await officeExpense.save();
+      if (req.body.paymentMethod !== undefined) {
+        row.paymentMethod = cleanMethod(req.body.paymentMethod);
+      }
+
+      if (req.body.budgetCategory !== undefined) {
+        if (!req.body.budgetCategory) throw fail('Office Budget Category is required');
+        row.budgetCategoryId = req.body.budgetCategory;
+      }
+
+      if (!(Number(row.amount) > 0)) throw fail('Amount must be greater than 0');
+      if (row.drAccount && row.drAccount === row.crAccount) {
+        throw fail('Debit and Credit accounts must be different');
+      }
+
+      if (req.file) row.attachment = `/uploads/office-expenses/${req.file.filename}`;
+
+      // If an Accountant edits a previously rejected item, move it back to 'pending'
+      if (isNonAdmin && String(row.status).toLowerCase() === 'rejected') {
+        row.status = 'pending';
+      }
+
+      await resolveAccountIds(row.drAccount, row.crAccount, t);
+      await syncLedger(row, req.user, t);
+      await row.save({ transaction: t });
+      return row;
+    });
 
     let budgetWarning = null;
     try {
       budgetWarning = await checkBudgetWarning(officeExpense);
     } catch { /* non-critical */ }
 
-    try {
-      await syncOfficeExpenseVoucher(officeExpense, req);
-      await officeExpense.save();
-    } catch (voucherErr) {
-      return res.json({ ...officeExpense.toJSON(), ledgerWarning: voucherErr.message, budgetWarning });
-    }
-
-    await logActivity({
+    await safely(() => logActivity({
       module: 'Expense',
       action: 'Updated',
       message: `Updated expense "${officeExpense.title || officeExpense.reference}" (${officeExpense.reference}) — ৳${previousAmount.toLocaleString()} → ৳${Number(officeExpense.amount).toLocaleString()}`,
@@ -514,54 +547,57 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
       relatedType: 'OfficeExpense',
       relatedId: officeExpense.id,
       performedBy: req.user?.name || 'User',
-    });
+    }));
 
     // Notify Admin if an Accountant re-submitted an edited request
     if (isNonAdmin) {
-      await notifyAdmin(
+      await safely(() => notifyAdmin(
         'OfficeExpenseRequest',
         `Expense request resubmitted by ${req.user.name || 'Accountant'}: "${officeExpense.title || officeExpense.reference}" (৳${Number(officeExpense.amount).toLocaleString()})`,
         'OfficeExpense',
         officeExpense.id
-      );
+      ));
     }
 
     res.json({ ...officeExpense.toJSON(), budgetWarning });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message });
   }
 });
 
-// Delete expense record
+// Delete expense record (its journal entry is removed in the same transaction)
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const officeExpense = await OfficeExpense.findByPk(req.params.id);
-    if (!officeExpense) return res.status(404).json({ message: 'Not found' });
+    const isNonAdmin = !isAdminRole(req.user);
 
-    const isNonAdmin = !['superadmin', 'admin'].includes(req.user?.role);
-    if (isNonAdmin && officeExpense.status === 'approved') {
-      return res.status(403).json({ message: 'Approved expenses cannot be deleted by Accountant. Contact Admin.' });
-    }
+    const snapshot = await inTransaction(async (t) => {
+      const row = await OfficeExpense.findByPk(req.params.id, { transaction: t });
+      if (!row) throw fail('Not found', 404);
 
-    if (officeExpense.voucherId) {
-      await Voucher.destroy({ where: { id: officeExpense.voucherId } });
-    }
+      if (isNonAdmin && String(row.status).toLowerCase() === 'approved') {
+        throw fail('Approved expenses cannot be deleted by Accountant. Contact Admin.', 403);
+      }
 
-    await logActivity({
-      module: 'Expense',
-      action: 'Deleted',
-      message: `Deleted expense "${officeExpense.title || officeExpense.reference}" (${officeExpense.reference})`,
-      amount: officeExpense.amount,
-      budgetCategoryId: officeExpense.budgetCategoryId,
-      relatedType: 'OfficeExpense',
-      relatedId: officeExpense.id,
-      performedBy: req.user?.name || 'User',
+      await unpostExpense(row, t);
+      const data = row.toJSON();
+      await row.destroy({ transaction: t });
+      return data;
     });
 
-    await officeExpense.destroy();
+    await safely(() => logActivity({
+      module: 'Expense',
+      action: 'Deleted',
+      message: `Deleted expense "${snapshot.title || snapshot.reference}" (${snapshot.reference})`,
+      amount: snapshot.amount,
+      budgetCategoryId: snapshot.budgetCategoryId,
+      relatedType: 'OfficeExpense',
+      relatedId: snapshot.id,
+      performedBy: req.user?.name || 'User',
+    }));
+
     res.json({ deleted: true });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message });
   }
 });
 

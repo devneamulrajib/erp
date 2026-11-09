@@ -20,13 +20,8 @@ import {
   ClipboardList,
   AlertCircle,
   Building2,
-  Calendar,
   Briefcase,
   Layers,
-  MapPin,
-  CheckCircle2,
-  FileText,
-  DollarSign,
   Info,
 } from 'lucide-react';
 
@@ -67,7 +62,6 @@ export default function ServiceRequisitionPage() {
   const [date, setDate] = useState(today());
   const [code, setCode] = useState('');
   const [project, setProject] = useState('');
-  const [projectType, setProjectType] = useState('');
   const [titleOfWork, setTitleOfWork] = useState('');
   const [site, setSite] = useState('');
   const [task, setTask] = useState('');
@@ -105,7 +99,6 @@ export default function ServiceRequisitionPage() {
         setDate((r.date || today()).slice(0, 10));
         setCode(r.code || '');
         setProject(r.projectId ? String(r.projectId) : '');
-        setProjectType(r.projectType || '');
         setTitleOfWork(r.titleOfWork || '');
         setSite(r.siteId ? String(r.siteId) : '');
         setTask(r.task || '');
@@ -134,9 +127,6 @@ export default function ServiceRequisitionPage() {
   function handleProjectChange(value) {
     setProject(value);
     setSite('');
-    const p = projects.find((x) => String(x.id) === String(value));
-    const type = p?.projectType?.name || p?.projectType || p?.projectTypeName || '';
-    setProjectType(typeof type === 'string' ? type : '');
   }
 
   const visibleSites = useMemo(() => {
@@ -215,7 +205,6 @@ export default function ServiceRequisitionPage() {
         code,
         date,
         project,
-        projectType,
         titleOfWork,
         task,
         site,
@@ -309,7 +298,7 @@ export default function ServiceRequisitionPage() {
               </div>
 
               <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <div>
+                <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
                     Project <span className="text-rose-500">*</span>
                   </label>
@@ -324,18 +313,6 @@ export default function ServiceRequisitionPage() {
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Project Type
-                  </label>
-                  <input
-                    value={projectType}
-                    readOnly
-                    placeholder="Auto-detected"
-                    className="w-full text-sm rounded-lg border-slate-200 bg-slate-50 text-slate-500"
-                  />
                 </div>
 
                 <div className="sm:col-span-2">

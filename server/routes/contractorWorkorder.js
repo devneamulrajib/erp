@@ -104,7 +104,6 @@ router.post('/', auth, async (req, res) => {
       code: req.body.code || generateCode(),
       date: req.body.date,
       supplierId: req.body.supplier,
-      projectType: req.body.projectType,
       projectId: req.body.project,
       siteId: req.body.site,
       categoryId: req.body.category,
@@ -136,7 +135,6 @@ router.put('/:id', auth, async (req, res) => {
     const directFields = {
       date: req.body.date,
       supplierId: req.body.supplier,
-      projectType: req.body.projectType,
       projectId: req.body.project,
       siteId: req.body.site,
       categoryId: req.body.category,

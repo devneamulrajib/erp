@@ -13,6 +13,8 @@ import {
   LayoutGrid,
   Briefcase,
   AlertCircle,
+  Wallet,
+  Check,
 } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import {
@@ -20,24 +22,36 @@ import {
   createBudgetCategory,
   updateBudgetCategory,
   deleteBudgetCategory,
+  getAccountDefaults,
+  saveAccountDefaults,
 } from '../api/budgetCategory';
+import { getChartOfAccounts } from '../api/chartOfAccounts';
 
 // Color themes cycling through categories exactly like the design
 const CATEGORY_THEMES = [
-  { iconBg: 'bg-[#e7f3ee]', iconColor: 'text-[#1d5c48]', borderHover: 'hover:border-[#1d5c48]/30' }, // Facilities (Teal/Emerald)
-  { iconBg: 'bg-[#f2eefb]', iconColor: 'text-[#6d4ec7]', borderHover: 'hover:border-[#6d4ec7]/30' }, // People & Culture (Purple)
-  { iconBg: 'bg-[#fcf0e7]', iconColor: 'text-[#c06b2c]', borderHover: 'hover:border-[#c06b2c]/30' }, // Technology (Orange/Amber)
-  { iconBg: 'bg-[#eaf4ee]', iconColor: 'text-[#2a835b]', borderHover: 'hover:border-[#2a835b]/30' }, // Marketing (Green)
-  { iconBg: 'bg-[#faebee]', iconColor: 'text-[#b94a5c]', borderHover: 'hover:border-[#b94a5c]/30' }, // Travel (Blush/Rose)
+  { iconBg: 'bg-[#e7f3ee]', iconColor: 'text-[#1d5c48]', borderHover: 'hover:border-[#1d5c48]/30' },
+  { iconBg: 'bg-[#f2eefb]', iconColor: 'text-[#6d4ec7]', borderHover: 'hover:border-[#6d4ec7]/30' },
+  { iconBg: 'bg-[#fcf0e7]', iconColor: 'text-[#c06b2c]', borderHover: 'hover:border-[#c06b2c]/30' },
+  { iconBg: 'bg-[#eaf4ee]', iconColor: 'text-[#2a835b]', borderHover: 'hover:border-[#2a835b]/30' },
+  { iconBg: 'bg-[#faebee]', iconColor: 'text-[#b94a5c]', borderHover: 'hover:border-[#b94a5c]/30' },
 ];
+
+const selectClass =
+  'w-full h-10 px-3 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#123d33]/20 focus:border-[#123d33]';
 
 export default function BudgetCategoryPage() {
   const navigate = useNavigate();
 
   const [categories, setCategories] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
   const [search, setSearch] = useState('');
+
+  // Payment account defaults (credit side)
+  const [defaults, setDefaults] = useState({ cashAccount: '', bankAccount: '', chequeAccount: '' });
+  const [defaultsSaving, setDefaultsSaving] = useState(false);
+  const [defaultsMsg, setDefaultsMsg] = useState({ type: '', text: '' });
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -46,6 +60,7 @@ export default function BudgetCategoryPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [parentId, setParentId] = useState('');
+  const [defaultDr, setDefaultDr] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -72,10 +87,21 @@ export default function BudgetCategoryPage() {
     load();
   }, [load]);
 
-  const topLevel = useMemo(
-    () => categories.filter((c) => !c.parentId),
-    [categories]
-  );
+  useEffect(() => {
+    getChartOfAccounts()
+      .then((res) => {
+        const list = res?.data ?? res ?? [];
+        setAccounts(
+          [...(Array.isArray(list) ? list : [])].sort((a, b) =>
+            String(a.name || '').localeCompare(String(b.name || ''))
+          )
+        );
+      })
+      .catch(() => {});
+    getAccountDefaults().then(setDefaults).catch(() => {});
+  }, []);
+
+  const topLevel = useMemo(() => categories.filter((c) => !c.parentId), [categories]);
 
   const subsByParent = useMemo(() => {
     const map = {};
@@ -116,6 +142,19 @@ export default function BudgetCategoryPage() {
   const avgSubsPerCat =
     topLevel.length > 0 ? (totalSubcategories / topLevel.length).toFixed(1) : '0.0';
 
+  const withoutDefault = useMemo(
+    () => categories.filter((c) => !c.defaultDrAccount).length,
+    [categories]
+  );
+
+  // Account dropdown helpers
+  const optionsFor = (pattern, current) => {
+    const matches = accounts.filter((a) => pattern.test(a.name || ''));
+    const list = matches.length > 0 ? matches : accounts;
+    const hasCurrent = !current || list.some((a) => a.name === current);
+    return { list, extra: hasCurrent ? null : current };
+  };
+
   // Modal Handlers
   function openCreateMainModal() {
     setEditingCategory(null);
@@ -123,6 +162,7 @@ export default function BudgetCategoryPage() {
     setName('');
     setDescription('');
     setParentId('');
+    setDefaultDr('');
     setError('');
     setShowModal(true);
   }
@@ -133,6 +173,7 @@ export default function BudgetCategoryPage() {
     setName('');
     setDescription('');
     setParentId(parentCatId || selectedCategory?.id || '');
+    setDefaultDr('');
     setError('');
     setShowModal(true);
   }
@@ -143,6 +184,7 @@ export default function BudgetCategoryPage() {
     setName(cat.name);
     setDescription(cat.description || '');
     setParentId(cat.parentId || '');
+    setDefaultDr(cat.defaultDrAccount || '');
     setError('');
     setShowModal(true);
   }
@@ -162,6 +204,7 @@ export default function BudgetCategoryPage() {
         name: name.trim(),
         description: description.trim(),
         parentId: parentId || null,
+        defaultDrAccount: defaultDr || null,
       };
 
       if (editingCategory) {
@@ -199,6 +242,27 @@ export default function BudgetCategoryPage() {
       window.alert(err.response?.data?.message || 'Failed to delete category');
     }
   }
+
+  async function handleSaveDefaults() {
+    setDefaultsSaving(true);
+    setDefaultsMsg({ type: '', text: '' });
+    try {
+      const saved = await saveAccountDefaults(defaults);
+      setDefaults(saved);
+      setDefaultsMsg({ type: 'ok', text: 'Default payment accounts saved.' });
+    } catch (err) {
+      setDefaultsMsg({
+        type: 'err',
+        text: err.response?.data?.message || 'Failed to save default accounts',
+      });
+    } finally {
+      setDefaultsSaving(false);
+    }
+  }
+
+  const cashOpts = optionsFor(/cash/i, defaults.cashAccount);
+  const bankOpts = optionsFor(/bank/i, defaults.bankAccount);
+  const chequeOpts = optionsFor(/bank/i, defaults.chequeAccount);
 
   return (
     <div className="min-h-screen w-full bg-[#f4f6f4] text-[#132822] flex flex-col font-sans antialiased selection:bg-[#123d33] selection:text-white">
@@ -257,7 +321,6 @@ export default function BudgetCategoryPage() {
 
         {/* 3 Metrics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4.5">
-          {/* Main Categories Card */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm flex items-center justify-between">
             <div className="flex items-center gap-3.5">
               <div className="h-11 w-11 rounded-xl bg-[#e7f3ee] text-[#1d5c48] flex items-center justify-center shrink-0">
@@ -267,9 +330,7 @@ export default function BudgetCategoryPage() {
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Main Categories
                 </p>
-                <p className="text-2xl font-black text-[#102922] leading-tight">
-                  {topLevel.length}
-                </p>
+                <p className="text-2xl font-black text-[#102922] leading-tight">{topLevel.length}</p>
               </div>
             </div>
             <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-[#e9f2eb] text-[#22634d]">
@@ -277,7 +338,6 @@ export default function BudgetCategoryPage() {
             </span>
           </div>
 
-          {/* Expense Items Card */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm flex items-center justify-between">
             <div className="flex items-center gap-3.5">
               <div className="h-11 w-11 rounded-xl bg-[#f2eefb] text-[#6d4ec7] flex items-center justify-center shrink-0">
@@ -287,17 +347,12 @@ export default function BudgetCategoryPage() {
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Expense Items
                 </p>
-                <p className="text-2xl font-black text-[#102922] leading-tight">
-                  {totalSubcategories}
-                </p>
+                <p className="text-2xl font-black text-[#102922] leading-tight">{totalSubcategories}</p>
               </div>
             </div>
-            <span className="text-xs font-semibold text-slate-500">
-              {avgSubsPerCat} avg.
-            </span>
+            <span className="text-xs font-semibold text-slate-500">{avgSubsPerCat} avg.</span>
           </div>
 
-          {/* Currently Viewing Card */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm flex items-center justify-between">
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="h-11 w-11 rounded-xl bg-[#e8f1f8] text-[#2c6e9a] flex items-center justify-center shrink-0">
@@ -315,18 +370,96 @@ export default function BudgetCategoryPage() {
           </div>
         </div>
 
+        {/* Default payment accounts (credit side) */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
+          <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+            <div className="lg:w-72 shrink-0">
+              <div className="flex items-center gap-2">
+                <Wallet size={16} className="text-[#20674e]" />
+                <h2 className="text-sm font-extrabold text-[#102922]">Default payment accounts</h2>
+              </div>
+              <p className="text-xs text-slate-500 font-medium mt-1">
+                Set once. The expense form auto-selects the credit account for each payment channel.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Cash</label>
+                <select
+                  value={defaults.cashAccount}
+                  onChange={(e) => setDefaults((d) => ({ ...d, cashAccount: e.target.value }))}
+                  className={selectClass}
+                >
+                  <option value="">Not set</option>
+                  {cashOpts.extra && <option value={cashOpts.extra}>{cashOpts.extra}</option>}
+                  {cashOpts.list.map((a) => (
+                    <option key={a.id} value={a.name}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Bank Transfer</label>
+                <select
+                  value={defaults.bankAccount}
+                  onChange={(e) => setDefaults((d) => ({ ...d, bankAccount: e.target.value }))}
+                  className={selectClass}
+                >
+                  <option value="">Not set</option>
+                  {bankOpts.extra && <option value={bankOpts.extra}>{bankOpts.extra}</option>}
+                  {bankOpts.list.map((a) => (
+                    <option key={a.id} value={a.name}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                  Cheque <span className="font-normal text-slate-400">(uses Bank if empty)</span>
+                </label>
+                <select
+                  value={defaults.chequeAccount}
+                  onChange={(e) => setDefaults((d) => ({ ...d, chequeAccount: e.target.value }))}
+                  className={selectClass}
+                >
+                  <option value="">Same as Bank</option>
+                  {chequeOpts.extra && <option value={chequeOpts.extra}>{chequeOpts.extra}</option>}
+                  {chequeOpts.list.map((a) => (
+                    <option key={a.id} value={a.name}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSaveDefaults}
+              disabled={defaultsSaving}
+              className="h-10 px-4 rounded-xl bg-[#123d33] hover:bg-[#0c2c24] text-xs font-semibold text-white shadow-xs disabled:opacity-50 shrink-0"
+            >
+              {defaultsSaving ? 'Saving...' : 'Save defaults'}
+            </button>
+          </div>
+
+          {defaultsMsg.text && (
+            <p
+              className={`mt-3 text-xs font-semibold flex items-center gap-1.5 ${
+                defaultsMsg.type === 'ok' ? 'text-emerald-700' : 'text-rose-600'
+              }`}
+            >
+              {defaultsMsg.type === 'ok' ? <Check size={13} /> : <AlertCircle size={13} />}
+              {defaultsMsg.text}
+            </p>
+          )}
+        </div>
+
         {/* 2-Step Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] gap-5 items-start">
           {/* STEP 1: Categories Sidebar */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4.5 space-y-4">
             <div className="flex items-center justify-between px-1">
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-[#20674e]">
-                  Step 1
-                </span>
-                <h2 className="text-sm font-extrabold text-[#102922]">
-                  Choose a category
-                </h2>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#20674e]">Step 1</span>
+                <h2 className="text-sm font-extrabold text-[#102922]">Choose a category</h2>
               </div>
               <button
                 type="button"
@@ -338,12 +471,8 @@ export default function BudgetCategoryPage() {
               </button>
             </div>
 
-            {/* Search Categories */}
             <div className="relative">
-              <Search
-                size={15}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
-              />
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 value={search}
@@ -353,7 +482,6 @@ export default function BudgetCategoryPage() {
               />
             </div>
 
-            {/* Category Items */}
             <div className="space-y-2 max-h-[520px] overflow-y-auto pr-0.5">
               {loading ? (
                 <div className="py-12 text-center text-xs text-slate-400">
@@ -361,9 +489,7 @@ export default function BudgetCategoryPage() {
                   Loading categories...
                 </div>
               ) : filteredTopLevel.length === 0 ? (
-                <div className="py-10 text-center text-xs text-slate-400">
-                  No categories found.
-                </div>
+                <div className="py-10 text-center text-xs text-slate-400">No categories found.</div>
               ) : (
                 filteredTopLevel.map((cat, index) => {
                   const isSelected = selectedCategory?.id === cat.id;
@@ -388,19 +514,14 @@ export default function BudgetCategoryPage() {
                           <Folder size={17} />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-[#112a23] truncate">
-                            {cat.name}
-                          </p>
+                          <p className="text-xs font-bold text-[#112a23] truncate">{cat.name}</p>
                           <p className="text-[11px] text-slate-400 font-medium truncate">
                             {count} {count === 1 ? 'item' : 'items'}
                           </p>
                         </div>
                       </div>
 
-                      <ChevronRight
-                        size={15}
-                        className={isSelected ? 'text-[#123d33]' : 'text-slate-300'}
-                      />
+                      <ChevronRight size={15} className={isSelected ? 'text-[#123d33]' : 'text-slate-300'} />
                     </button>
                   );
                 })
@@ -412,7 +533,6 @@ export default function BudgetCategoryPage() {
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
             {selectedCategory ? (
               <>
-                {/* Header section of selected category */}
                 <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-start gap-4">
                     <div className="h-12 w-12 rounded-xl bg-[#e7f3ee] text-[#1d5c48] flex items-center justify-center shrink-0 mt-0.5">
@@ -422,13 +542,25 @@ export default function BudgetCategoryPage() {
                       <span className="text-[10px] font-bold uppercase tracking-widest text-[#20674e]">
                         Selected Category
                       </span>
-                      <h2 className="text-2xl font-black text-[#102922] mt-0.5">
-                        {selectedCategory.name}
-                      </h2>
+                      <h2 className="text-2xl font-black text-[#102922] mt-0.5">{selectedCategory.name}</h2>
                       <p className="text-xs text-slate-500 font-medium mt-1">
-                        {selectedCategory.description ||
-                          'Day-to-day office and workplace operations.'}
+                        {selectedCategory.description || 'Day-to-day office and workplace operations.'}
                       </p>
+                      <div className="mt-2">
+                        {selectedCategory.defaultDrAccount ? (
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <Check size={11} /> Default debit: {selectedCategory.defaultDrAccount}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(selectedCategory)}
+                            className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
+                          >
+                            <AlertCircle size={11} /> No default debit account — set one
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -452,15 +584,10 @@ export default function BudgetCategoryPage() {
                   </div>
                 </div>
 
-                {/* Step 2 Header bar */}
                 <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#20674e]">
-                      Step 2
-                    </span>
-                    <h3 className="text-sm font-extrabold text-[#102922]">
-                      Expense items
-                    </h3>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#20674e]">Step 2</span>
+                    <h3 className="text-sm font-extrabold text-[#102922]">Expense items</h3>
                   </div>
 
                   <button
@@ -473,13 +600,10 @@ export default function BudgetCategoryPage() {
                   </button>
                 </div>
 
-                {/* Sub-items List */}
                 <div className="divide-y divide-slate-100 min-h-[260px]">
                   {activeSubcategories.length === 0 ? (
                     <div className="py-16 text-center text-slate-400">
-                      <p className="text-xs font-medium">
-                        No expense items yet in "{selectedCategory.name}".
-                      </p>
+                      <p className="text-xs font-medium">No expense items yet in "{selectedCategory.name}".</p>
                       <button
                         type="button"
                         onClick={() => openCreateSubModal(selectedCategory.id)}
@@ -499,11 +623,22 @@ export default function BudgetCategoryPage() {
                             {String(idx + 1).padStart(2, '0')}
                           </span>
                           <div className="min-w-0">
-                            <p className="text-sm font-bold text-[#102922] truncate">
-                              {sub.name}
-                            </p>
+                            <p className="text-sm font-bold text-[#102922] truncate">{sub.name}</p>
                             <p className="text-xs text-slate-400 font-medium truncate mt-0.5">
                               {sub.description || 'No description provided'}
+                            </p>
+                            <p className="text-[11px] mt-0.5 truncate">
+                              {sub.defaultDrAccount ? (
+                                <span className="text-emerald-700 font-semibold">
+                                  Debit: {sub.defaultDrAccount}
+                                </span>
+                              ) : selectedCategory.defaultDrAccount ? (
+                                <span className="text-slate-400">
+                                  Debit: {selectedCategory.defaultDrAccount} (from category)
+                                </span>
+                              ) : (
+                                <span className="text-amber-600">No default debit account</span>
+                              )}
                             </p>
                           </div>
                         </div>
@@ -531,13 +666,16 @@ export default function BudgetCategoryPage() {
                   )}
                 </div>
 
-                {/* Footer bar */}
                 <div className="px-6 py-3.5 bg-[#fbfcfa] border-t border-slate-100 flex items-center justify-between text-xs font-medium text-slate-500 mt-auto">
                   <span>
-                    <strong className="text-[#102922]">
-                      {activeSubcategories.length}
-                    </strong>{' '}
-                    items in this category
+                    <strong className="text-[#102922]">{activeSubcategories.length}</strong> items in this
+                    category
+                    {withoutDefault > 0 && (
+                      <span className="ml-3 text-amber-600">
+                        {withoutDefault} categor{withoutDefault === 1 ? 'y' : 'ies'} without a default debit
+                        account
+                      </span>
+                    )}
                   </span>
                   <button
                     type="button"
@@ -575,7 +713,7 @@ export default function BudgetCategoryPage() {
                   {editingCategory
                     ? `Edit ${modalMode === 'sub' ? 'Item' : 'Category'}`
                     : modalMode === 'sub'
-                    ? `Add Expense Item`
+                    ? 'Add Expense Item'
                     : 'New Category'}
                 </h3>
               </div>
@@ -598,14 +736,8 @@ export default function BudgetCategoryPage() {
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               {modalMode === 'sub' && (
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Belongs to category
-                  </label>
-                  <select
-                    value={parentId}
-                    onChange={(e) => setParentId(e.target.value)}
-                    className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#123d33]/20 focus:border-[#123d33]"
-                  >
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Belongs to category</label>
+                  <select value={parentId} onChange={(e) => setParentId(e.target.value)} className={selectClass}>
                     {topLevel.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -623,11 +755,7 @@ export default function BudgetCategoryPage() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder={
-                    modalMode === 'sub'
-                      ? 'e.g. Electricity & water'
-                      : 'e.g. Facilities'
-                  }
+                  placeholder={modalMode === 'sub' ? 'e.g. Electricity & water' : 'e.g. Facilities'}
                   className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#123d33]/20 focus:border-[#123d33]"
                   autoFocus
                 />
@@ -644,6 +772,26 @@ export default function BudgetCategoryPage() {
                   placeholder="Utility bills for all locations..."
                   className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#123d33]/20 focus:border-[#123d33] resize-none"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Default debit account{' '}
+                  <span className="text-slate-400 font-normal">
+                    {modalMode === 'sub' ? '(blank = use the category’s)' : '(auto-selected on expenses)'}
+                  </span>
+                </label>
+                <select value={defaultDr} onChange={(e) => setDefaultDr(e.target.value)} className={selectClass}>
+                  <option value="">None</option>
+                  {defaultDr && !accounts.some((a) => a.name === defaultDr) && (
+                    <option value={defaultDr}>{defaultDr}</option>
+                  )}
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.name}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2.5">

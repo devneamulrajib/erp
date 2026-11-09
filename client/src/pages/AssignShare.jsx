@@ -16,7 +16,6 @@ function generateShareCode() {
 }
 
 const emptyAssignForm = {
-  projectType: '',
   project: '',
   shareCode: generateShareCode(),
   site: '',
@@ -53,7 +52,6 @@ export default function AssignShare() {
   const [addForm, setAddForm] = useState(emptyAssignForm);
   const [bulkForm, setBulkForm] = useState(emptyBulkForm);
 
-  const [projectTypeOptions, setProjectTypeOptions] = useState([]);
   const [projectListOptions, setProjectListOptions] = useState([]);
   const [allSites, setAllSites] = useState([]);
   const [allFlats, setAllFlats] = useState([]);
@@ -79,8 +77,7 @@ export default function AssignShare() {
     let cancelled = false;
     async function loadOptions() {
       try {
-        const [projectTypesRes, projectsRes, customers, sitesRes, flatsData] = await Promise.all([
-          api.get('/project-types'),
+        const [projectsRes, customers, sitesRes, flatsData] = await Promise.all([
           getProjects(),
           getCustomers(),
           getSites(),
@@ -89,7 +86,6 @@ export default function AssignShare() {
 
         if (cancelled) return;
 
-        setProjectTypeOptions(projectTypesRes.data.map((t) => ({ value: t.id, label: t.name })));
         setProjectListOptions(projectsRes.data.map((p) => ({ value: p.id, label: p.name })));
         setCustomerOptions(customers.map((c) => ({ value: c.id, label: c.name })));
         setAllSites(sitesRes.data);
@@ -211,7 +207,6 @@ export default function AssignShare() {
   function handleEdit(row) {
     setEditingId(row.id);
     setAddForm({
-      projectType: row.projectType || '',
       project: row.projectId || '',
       shareCode: row.shareCode || generateShareCode(),
       site: row.site || '',
@@ -465,19 +460,6 @@ export default function AssignShare() {
       {/* ---- Add Assign Share modal ---- */}
       <Modal open={isAddOpen} title={editingId ? 'Edit Assign Share' : 'Assign Share'} onClose={() => { setIsAddOpen(false); setEditingId(null); }}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">
-              Project Type <span className="text-red-500">*</span>
-            </label>
-            <SearchableSelect
-              options={projectTypeOptions}
-              value={addForm.projectType}
-              onChange={(v) => handleAddChange('projectType', v)}
-              placeholder="Select Project Type"
-              clearable
-            />
-          </div>
-
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1.5">
               Project <span className="text-red-500">*</span>

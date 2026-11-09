@@ -10,7 +10,6 @@ import {
 } from '../api/contraVoucher';
 import { getChartOfAccounts, createChartOfAccount } from '../api/chartOfAccounts';
 import { getChartOfGroupOptions } from '../api/chartOfGroup';
-import { getProjectTypes } from '../api/projectType';
 
 function num(v) {
   const n = Number(v);
@@ -28,11 +27,9 @@ export default function ContraVoucherPage() {
   const [sites, setSites] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [groupOptions, setGroupOptions] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
 
   const [voucherNo, setVoucherNo] = useState('');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [projectType, setProjectType] = useState('');
   const [titleOfWork, setTitleOfWork] = useState('');
   const [project, setProject] = useState('');
   const [site, setSite] = useState('');
@@ -62,7 +59,6 @@ export default function ContraVoucherPage() {
     api.get('/sites').then((res) => setSites(res.data)).catch(() => {});
     reloadAccounts();
     getChartOfGroupOptions().then((data) => setGroupOptions(data)).catch(() => {});
-    getProjectTypes().then((data) => setProjectTypes(data)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -75,7 +71,6 @@ export default function ContraVoucherPage() {
     getContraVoucher(id).then((v) => {
       setVoucherNo(v.voucherNo || '');
       setDate(v.date ? new Date(v.date).toISOString().slice(0, 10) : '');
-      setProjectType(v.projectType || '');
       setTitleOfWork(v.titleOfWork || '');
       setProject(v.project || '');
       setSite(v.site || '');
@@ -144,7 +139,7 @@ export default function ContraVoucherPage() {
     setSubmitting(true);
     try {
       const payload = {
-        voucherNo, date, projectType, project, titleOfWork, site, task,
+        voucherNo, date, project, titleOfWork, site, task,
         lines, comment, attachmentFile,
       };
       if (isEdit) {
@@ -203,12 +198,6 @@ export default function ContraVoucherPage() {
               <select value={site} onChange={(e) => setSite(e.target.value)} className="input">
                 <option value="">Select Site</option>
                 {sites.map((s) => <option key={s._id} value={s.name}>{s.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Project Type">
-              <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
-                <option value="">Select Project Type</option>
-                {projectTypes.map((pt) => <option key={pt.id} value={pt.name}>{pt.name}</option>)}
               </select>
             </Field>
             <Field label="If Task">

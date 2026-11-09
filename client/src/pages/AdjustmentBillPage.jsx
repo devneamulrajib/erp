@@ -26,7 +26,6 @@ function genTxnId() {
 function emptyRow() {
   return { itemName: '', description: '', unit: '', quantity: 0, rate: 0, image: '', amount: 0 };
 }
-// MySQL rows use `id`; fall back to `_id` only if present. Never falls back to name/text.
 function rid(o) {
   return o?.id ?? o?._id ?? '';
 }
@@ -49,13 +48,11 @@ export default function AdjustmentBillPage() {
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [units, setUnits] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [customer, setCustomer] = useState('');
   const [ledger, setLedger] = useState('');
   const [code, setCode] = useState('');
-  const [projectType, setProjectType] = useState('');
   const [project, setProject] = useState('');
   const [site, setSite] = useState('');
   const [refWoNo, setRefWoNo] = useState('');
@@ -85,8 +82,6 @@ export default function AdjustmentBillPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // Customers live in the Chart Of Accounts table (contactType: 'Customer'),
-    // same table backing the Customer Accounts page — not the old Customer model.
     api.get('/chart-of-accounts', { params: { contactType: 'Customer' } })
       .then((res) => setCustomers(res.data))
       .catch(() => {});
@@ -97,7 +92,6 @@ export default function AdjustmentBillPage() {
     getCategories().then(setCategories).catch(() => {});
     getBrands().then((res) => setBrands(res.data || res)).catch(() => {});
     getUnits().then((res) => setUnits(res.data || res)).catch(() => {});
-    api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -112,7 +106,6 @@ export default function AdjustmentBillPage() {
       setCustomer(rid(b.customer));
       setLedger(rid(b.ledger));
       setCode(b.code || '');
-      setProjectType(rid(b.projectType) || b.projectType || '');
       setProject(rid(b.project));
       setSite(rid(b.site));
       setRefWoNo(b.refWoNo || '');
@@ -176,8 +169,6 @@ export default function AdjustmentBillPage() {
     }
     setError('');
     try {
-      // Work orders aren't looked up by id here, only by their code, so pull the
-      // list (scoped to the selected customer when we have one) and match client-side.
       const res = await api.get('/workorder', { params: customer ? { customer } : {} });
       const match = (res.data || []).find((wo) => wo.code === refWoNo.trim());
       if (!match) {
@@ -194,8 +185,6 @@ export default function AdjustmentBillPage() {
         amount: it.amount || 0,
       }));
       setProposedRows(items);
-      // Adjustment Budget starts as a copy of the same items — you're adjusting
-      // from this baseline, not typing it all in again from scratch.
       setAdjustmentRows(items.map((it) => ({ ...it })));
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to fetch work order');
@@ -212,7 +201,7 @@ export default function AdjustmentBillPage() {
     setSubmitting(true);
     try {
       const payload = {
-        code, date, customer, ledger: ledger || null, projectType: projectType || null,
+        code, date, customer, ledger: ledger || null,
         project: project || null, site: site || null, refWoNo, contentBody,
         proposedItems: proposedRows.map((r) => ({ ...r, amount: num(r.rate) * num(r.quantity) })),
         adjustmentItems: adjustmentRows.map((r) => ({ ...r, amount: num(r.rate) * num(r.quantity) })),
@@ -307,12 +296,6 @@ export default function AdjustmentBillPage() {
               </Field>
               <Field label="Code">
                 <input value={code} readOnly className={`${inputCls} bg-slate-50 text-slate-500 font-mono`} />
-              </Field>
-              <Field label="Project Type">
-                <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
-                  <option value="">Select value</option>
-                  {projectTypes.map((pt) => <option key={rid(pt)} value={rid(pt)}>{pt.name}</option>)}
-                </select>
               </Field>
               <Field label="Project">
                 <select value={project} onChange={(e) => setProject(e.target.value)} className={inputCls}>
@@ -704,7 +687,6 @@ function CustomerAddModal({ chartGroups, onClose, onCreated }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // Chart Of Accounts codes are scoped by contactType (CUS/SUP/INV prefixes).
     api.get('/chart-of-accounts/next-code', { params: { contactType: 'Customer' } })
       .then((res) => setCode(res.data.code))
       .catch(() => {});
@@ -723,9 +705,6 @@ function CustomerAddModal({ chartGroups, onClose, onCreated }) {
     }
     setSaving(true);
     try {
-      // This modal writes into the Chart Of Accounts table (contactType: 'Customer'),
-      // the same table the Customer Accounts page reads from/writes to. Keeping this
-      // in sync is what makes newly-added customers show up in the dropdown above.
       const fd = new FormData();
       fd.append('code', code);
       fd.append('name', name.trim());

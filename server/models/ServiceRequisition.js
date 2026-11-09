@@ -9,7 +9,6 @@ const ServiceRequisition = sequelize.define('ServiceRequisition', {
   // associations.js and used by the portal. Nullable so older rows are fine.
   supplierId: { type: DataTypes.INTEGER, allowNull: true },
 
-  projectType: DataTypes.STRING,
   projectId: DataTypes.INTEGER,
   titleOfWork: DataTypes.STRING,
   task: DataTypes.STRING,

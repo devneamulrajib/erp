@@ -14,7 +14,6 @@ import {
 const COLUMNS = [
   { key: 'image', label: 'Image' },
   { key: 'duration', label: 'Duration' },
-  { key: 'projectType', label: 'Project Type' },
   { key: 'projectManager', label: 'Project Manager' },
   { key: 'code', label: 'Code' },
   { key: 'name', label: 'Name' },
@@ -27,7 +26,7 @@ const COLUMNS = [
 const ALL_VISIBLE = COLUMNS.reduce((acc, c) => ({ ...acc, [c.key]: true }), {});
 
 const EMPTY_FORM = {
-  projectType: '', projectManager: '', code: '', name: '', description: '',
+  projectManager: '', code: '', name: '', description: '',
   budget: '', location: '', status: '', area: '', assignUser: '', startDate: '', endDate: '',
   image: '',
 };
@@ -90,12 +89,10 @@ function FormSection({ icon: Icon, title, children }) {
 
 export default function Project() {
   const [rows, setRows] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
   const [options, setOptions] = useState({ statuses: [], areas: [] });
   const [projectManagers, setProjectManagers] = useState([]);
   const [error, setError] = useState(null);
 
-  const [filterType, setFilterType] = useState('All Types');
   const [filterStatus, setFilterStatus] = useState('All Status');
   const [filterArea, setFilterArea] = useState('');
   const [search, setSearch] = useState('');
@@ -122,15 +119,11 @@ export default function Project() {
   useEffect(() => {
     loadRows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterType, filterStatus, filterArea, search]);
+  }, [filterStatus, filterArea, search]);
 
   async function loadOptions() {
     try {
-      const [ptRes, optRes] = await Promise.all([
-        api.get('/project-types'),
-        api.get('/projects/options'),
-      ]);
-      setProjectTypes(ptRes.data);
+      const optRes = await api.get('/projects/options');
       setOptions(optRes.data);
     } catch (err) { console.error(err); }
   }
@@ -145,7 +138,6 @@ export default function Project() {
   async function loadRows() {
     try {
       const params = {};
-      if (filterType !== 'All Types') params.projectType = filterType;
       if (filterStatus !== 'All Status') params.status = filterStatus;
       if (filterArea) params.area = filterArea;
       if (search) params.search = search;
@@ -176,7 +168,7 @@ export default function Project() {
     setNewManagerName('');
     setImageError('');
     setForm({
-      projectType: row.projectType || '', projectManager: row.projectManager || '',
+      projectManager: row.projectManager || '',
       code: row.code || '', name: row.name || '', description: row.description || '',
       budget: row.budget || '', location: row.location || '', status: row.status || '',
       area: row.area || '', assignUser: row.assignUser || '',
@@ -201,7 +193,7 @@ export default function Project() {
 
   function handleImageChange(e) {
     const file = e.target.files?.[0];
-    e.target.value = ''; // allow re-selecting the same file later
+    e.target.value = '';
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
@@ -292,14 +284,14 @@ export default function Project() {
   }
 
   function handleCopy() {
-    const text = rows.map((r) => `${r.code}\t${r.name}\t${r.projectType}`).join('\n');
+    const text = rows.map((r) => `${r.code}\t${r.name}`).join('\n');
     navigator.clipboard.writeText(text).then(() => alert('Table copied to clipboard'));
   }
 
   function handleCsv() {
-    const header = 'Code,Name,Project Type,Project Manager,Budget,Location\n';
+    const header = 'Code,Name,Project Manager,Budget,Location\n';
     const body = rows.map((r) =>
-      [r.code, r.name, r.projectType, r.projectManager, r.budget, r.location].join(',')
+      [r.code, r.name, r.projectManager, r.budget, r.location].join(',')
     ).join('\n');
     const blob = new Blob([header + body], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -362,15 +354,7 @@ export default function Project() {
         {/* Table panel */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           {/* Filter bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-5 border-b border-slate-100 bg-slate-50/50">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Project Type</label>
-              <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition">
-                <option>All Types</option>
-                {projectTypes.map((pt) => <option key={pt.id} value={pt.name}>{pt.name}</option>)}
-              </select>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-5 border-b border-slate-100 bg-slate-50/50">
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">Status</label>
               <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
@@ -426,7 +410,6 @@ export default function Project() {
                   <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">ID</th>
                   {visibleColumns.image && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Image</th>}
                   {visibleColumns.duration && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Duration</th>}
-                  {visibleColumns.projectType && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Type</th>}
                   {visibleColumns.projectManager && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Manager</th>}
                   {visibleColumns.code && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Code</th>}
                   {visibleColumns.name && <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Name</th>}
@@ -439,7 +422,7 @@ export default function Project() {
               <tbody className="divide-y divide-slate-100">
                 {pagedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="text-center py-16">
+                    <td colSpan={10} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <LayoutGrid size={28} strokeWidth={1.5} />
                         <p className="text-sm">No projects found. Try adjusting your filters, or create one.</p>
@@ -466,13 +449,6 @@ export default function Project() {
                         <span className="inline-flex items-center gap-1.5">
                           <Calendar size={13} className="text-slate-400" />{row.duration}
                         </span>
-                      </td>
-                    )}
-                    {visibleColumns.projectType && (
-                      <td className="px-5 py-3.5">
-                        {row.projectType
-                          ? <span className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-600 px-2.5 py-1 text-xs font-medium ring-1 ring-inset ring-indigo-600/10">{row.projectType}</span>
-                          : <span className="text-slate-300 text-xs">—</span>}
                       </td>
                     )}
                     {visibleColumns.projectManager && (
@@ -561,10 +537,7 @@ export default function Project() {
         </div>
       </div>
 
-      {/* Modal — self-contained, no dependency on the shared <Modal> component.
-          Same pattern as Flat.jsx: fixed overlay with very high z-index (sits above
-          the floating topbar), flex-column container capped at 90vh so header and
-          footer stay pinned in place and only the middle section scrolls. */}
+      {/* Modal */}
       {modalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center z-[9999] p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
@@ -614,14 +587,8 @@ export default function Project() {
                   </div>
                 </div>
 
-                <FormSection icon={Tag} title="Classification & Code">
-                  <FormField label="Project Type">
-                    <select value={form.projectType} onChange={(e) => updateField('projectType', e.target.value)} className={inputClass}>
-                      <option value="">Select Project Type</option>
-                      {projectTypes.map((pt) => <option key={pt.id} value={pt.name}>{pt.name}</option>)}
-                    </select>
-                  </FormField>
-                  <FormField label="Code">
+                <FormSection icon={Tag} title="Project Code">
+                  <FormField label="Code" span>
                     <input value={form.code} readOnly className={`${inputClass} bg-slate-50 text-slate-500 font-mono`} />
                   </FormField>
                 </FormSection>
@@ -729,7 +696,7 @@ export default function Project() {
                 </FormSection>
               </div>
 
-              {/* Sticky footer — always visible, never scrolls away */}
+              {/* Sticky footer */}
               <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-100 shrink-0 bg-white rounded-b-2xl">
                 <button type="button" onClick={closeModal}
                   className="px-4 py-2.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">

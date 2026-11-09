@@ -9,7 +9,6 @@ const MaterialUsage = sequelize.define('MaterialUsage', {
   creditLedger: { type: DataTypes.STRING, defaultValue: 'Closing Stock' },
   debitLedger: { type: DataTypes.STRING, defaultValue: 'Cost of Goods Sold (COGS)' },
 
-  projectType: DataTypes.STRING,
   projectId: DataTypes.INTEGER,
   titleOfWork: DataTypes.STRING,
   task: DataTypes.STRING,

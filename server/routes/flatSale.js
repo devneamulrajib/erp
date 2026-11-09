@@ -150,7 +150,7 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', auth, async (req, res) => {
   try {
     const {
-      code, date, bookingNo, project, site, flat, customer, projectType,
+      code, date, bookingNo, project, site, flat, customer,
       collectionOfficer, salesBy, ledger, attachment,
       rate, parking, utilityCharge, otherCost, discount,
       bookingMoney, paymentMethod, chequeReceiptNo, installments,
@@ -181,7 +181,6 @@ router.post('/', auth, async (req, res) => {
       siteId: site,
       flatId: flat,
       customerId: customer,
-      projectType,
       collectionOfficer, salesBy,
       ledger: ledger || 'Flat Sales',
       attachment,
@@ -222,7 +221,7 @@ router.put('/:id', auth, async (req, res) => {
 
     const map = { project: 'projectId', site: 'siteId', flat: 'flatId', customer: 'customerId' };
     const fields = [
-      'date', 'bookingNo', 'project', 'site', 'flat', 'customer', 'projectType',
+      'date', 'bookingNo', 'project', 'site', 'flat', 'customer',
       'collectionOfficer', 'salesBy', 'ledger', 'attachment', 'size',
       'rate', 'parking', 'utilityCharge', 'otherCost', 'discount',
       'bookingMoney', 'paymentMethod', 'chequeReceiptNo',

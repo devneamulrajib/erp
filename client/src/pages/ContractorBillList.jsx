@@ -304,7 +304,7 @@ export default function ContractorBillList() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
-                  {['ID', 'Project Type', 'Project', 'Title/Name of Work', 'Contractor Name', 'DR Ledger', 'Code',
+                  {['ID', 'Project', 'Title/Name of Work', 'Contractor Name', 'DR Ledger', 'Code',
                     'Date', 'Grand Total', 'Paid', 'Due', 'Status', 'Added By', 'Approve', 'Attachment', 'Action'].map((h) => (
                     <th key={h} className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">{h}</th>
                   ))}
@@ -313,11 +313,11 @@ export default function ContractorBillList() {
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={16} className="text-center py-16 text-slate-400 text-sm">Loading...</td>
+                    <td colSpan={15} className="text-center py-16 text-slate-400 text-sm">Loading...</td>
                   </tr>
                 ) : paged.length === 0 ? (
                   <tr>
-                    <td colSpan={16} className="text-center py-16">
+                    <td colSpan={15} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <LayoutGrid size={28} strokeWidth={1.5} />
                         <p className="text-sm">No contractor/supplier bills found. Try adjusting your filters, or add one.</p>
@@ -331,7 +331,6 @@ export default function ContractorBillList() {
                     return (
                       <tr key={row.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap align-top">
                         <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">{(page - 1) * pageSize + i + 1}</td>
-                        <td className="px-5 py-3.5 text-slate-700">{row.projectType || '-'}</td>
                         <td className="px-5 py-3.5 text-slate-700">{row.Project?.name || '-'}</td>
                         <td className="px-5 py-3.5 text-slate-700">{row.titleOfWork || '-'}</td>
                         <td className="px-5 py-3.5 text-slate-700">{row.Party?.name || '-'}</td>
@@ -402,7 +401,7 @@ export default function ContractorBillList() {
               {filtered.length > 0 && (
                 <tfoot>
                   <tr className="border-t border-slate-200 font-medium bg-slate-50/50">
-                    <td colSpan={8} className="px-5 py-3 text-right text-slate-500 text-xs uppercase tracking-wide">Total:</td>
+                    <td colSpan={7} className="px-5 py-3 text-right text-slate-500 text-xs uppercase tracking-wide">Total:</td>
                     <td className="px-5 py-3 text-slate-900">{totals.grandTotal.toLocaleString()}</td>
                     <td className="px-5 py-3 text-slate-900">{totals.paid.toLocaleString()}</td>
                     <td className="px-5 py-3 text-slate-900">{totals.due.toLocaleString()}</td>
@@ -475,7 +474,6 @@ export default function ContractorBillList() {
                     <ViewField label="Contractor/Supplier" value={viewing.Party?.name} />
                     <ViewField label="Project" value={viewing.Project?.name} />
                     <ViewField label="Ledger" value={viewing.ChartOfAccount?.name} />
-                    <ViewField label="Project Type" value={viewing.projectType} />
                     <ViewField label="Title/Name of Work" value={viewing.titleOfWork} />
                     <ViewField label="Ref W/O No." value={viewing.refWoNo} />
                     <ViewField label="Status">

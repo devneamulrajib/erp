@@ -6,8 +6,6 @@ import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import { Eye, Pencil, Trash2, PlusCircle, Search, ClipboardList, X } from 'lucide-react';
 
-// ASSUMPTION: same endpoint the form uses for the Budget Category dropdown.
-// If it fails, the view popup just shows "-" for the category.
 const BUDGET_CATEGORY_ENDPOINT = '/budget-categories';
 
 function num(v) { return Number(v) || 0; }
@@ -209,7 +207,6 @@ export default function ServiceRequisitionList() {
                       <td className="px-4 py-3.5 text-slate-400 font-mono text-xs">{(page - 1) * pageSize + i + 1}</td>
                       <td className="px-4 py-3.5 text-slate-600">
                         <div>{row.project?.name || '-'}</div>
-                        {row.projectType && <div className="text-xs text-slate-400">{row.projectType}</div>}
                       </td>
                       <td className="px-4 py-3.5 text-slate-600 font-mono text-xs">{row.code}</td>
                       <td className="px-4 py-3.5 text-slate-600">{row.titleOfWork || '-'}</td>
@@ -353,7 +350,6 @@ function ViewModal({ onClose, loading, error, data, fmtDate, budgetCategories })
                 <InfoField label="Date" value={fmtDate(data.date)} />
                 <InfoField label="Required By" value={fmtDate(data.requiredByDate)} />
                 <InfoField label="Project" value={data.project?.name} />
-                <InfoField label="Project Type" value={data.projectType} />
                 <InfoField label="Site" value={data.site?.name} />
                 <InfoField label="Title/Name of Work" value={data.titleOfWork} />
                 <InfoField label="Task" value={data.task} />

@@ -5,7 +5,6 @@ const Workorder = sequelize.define('Workorder', {
   code: { type: DataTypes.STRING, unique: true },
   date: DataTypes.STRING,
   customerId: DataTypes.INTEGER,
-  projectType: DataTypes.STRING,
   projectId: DataTypes.INTEGER,
   siteId: DataTypes.INTEGER,
   clientOrderNo: DataTypes.STRING,

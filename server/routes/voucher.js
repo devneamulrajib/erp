@@ -127,7 +127,7 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
   try {
     const {
       type, date, project, contact, narration, reference, bank, chequeDate,
-      projectType, titleOfWork, task, site, item, ifCheque, chequeReceiptNo,
+      titleOfWork, task, site, item, ifCheque, chequeReceiptNo,
       paymentMethod, paymentType, installment,
     } = req.body;
     let entries = req.body.entries;
@@ -157,7 +157,6 @@ router.post('/', auth, upload.single('attachment'), async (req, res) => {
       chequeReceiptNo: chequeReceiptNo || '',
       narration,
       reference,
-      projectType: projectType || '',
       titleOfWork: titleOfWork || '',
       task: task || '',
       site: site || '',
@@ -196,7 +195,7 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
     const {
       type, date, project, contact, narration, reference, status,
       bank, chequeDate, reconciliationStatus,
-      projectType, titleOfWork, task, site, ifCheque, chequeReceiptNo,
+      titleOfWork, task, site, ifCheque, chequeReceiptNo,
       paymentMethod, paymentType, installment,
     } = req.body;
     const itemField = req.body.item;
@@ -237,7 +236,6 @@ router.put('/:id', auth, upload.single('attachment'), async (req, res) => {
     if (reconciliationStatus !== undefined) item.reconciliationStatus = reconciliationStatus;
     if (ifCheque !== undefined) item.ifCheque = ifCheque === 'true' || ifCheque === true;
     if (chequeReceiptNo !== undefined) item.chequeReceiptNo = chequeReceiptNo;
-    if (projectType !== undefined) item.projectType = projectType;
     if (titleOfWork !== undefined) item.titleOfWork = titleOfWork;
     if (task !== undefined) item.task = task;
     if (site !== undefined) item.site = site;

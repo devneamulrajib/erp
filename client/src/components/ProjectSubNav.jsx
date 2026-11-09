@@ -7,7 +7,6 @@ import {
 import { menuContainsRoute } from './navConfig';
 
 const ICONS = {
-  'project-type': Building2,
   project: Building2,
   agreement: UserSquare2,
   'party-list': UserSquare2,
@@ -29,7 +28,6 @@ const SUBNAV_ITEMS = [
     label: 'Project',
     icon: Building2,
     children: [
-      { key: 'project-type', label: 'Project Type', route: '/project-module/project-type' },
       { key: 'project', label: 'Project', route: '/project-module/projects' },
     ],
   },

@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
-import { getCustomers, createCustomer } from '../api/customer';
-import { getCategories } from '../api/category';
-import { getBrands } from '../api/brand';
-import { getUnits } from '../api/unit';
+import { getCustomers } from '../api/customer';
 import { getItems, createItem } from '../api/item';
 import {
   getSale, getNextSaleCode, createSale, updateSale,
@@ -27,13 +24,11 @@ export default function SalePage() {
   const [projects, setProjects] = useState([]);
   const [sites, setSites] = useState([]);
   const [items, setItems] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [customer, setCustomer] = useState('');
   const [ledger, setLedger] = useState('Flat Sales');
   const [code, setCode] = useState('');
-  const [projectType, setProjectType] = useState('');
   const [project, setProject] = useState('');
   const [titleOfWork, setTitleOfWork] = useState('');
   const [site, setSite] = useState('');
@@ -66,7 +61,6 @@ export default function SalePage() {
     getCustomers().then(setCustomers).catch(() => {});
     api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
     api.get('/sites').then((res) => setSites(res.data)).catch(() => {});
-    api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
     getItems().then(setItems).catch(() => {});
   }, []);
 
@@ -82,7 +76,6 @@ export default function SalePage() {
       setCustomer(s.customer?.id || s.customer || '');
       setLedger(s.ledger || 'Flat Sales');
       setCode(s.code || '');
-      setProjectType(s.projectType || '');
       setProject(s.project?.id || s.project || '');
       setTitleOfWork(s.titleOfWork || '');
       setSite(s.site?.id || s.site || '');
@@ -158,7 +151,7 @@ export default function SalePage() {
     setSubmitting(true);
     try {
       const payload = {
-        code, date, customer, ledger, projectType, project, titleOfWork, site, refWoNo, content,
+        code, date, customer, ledger, project, titleOfWork, site, refWoNo, content,
         items: rows.map((r) => ({ ...r, amount: num(r.rate) * num(r.quantity) })),
         subtotal,
         vatIncluded, vatPercent: num(vatPercent), vatAmount,
@@ -226,12 +219,6 @@ export default function SalePage() {
           </Field>
           <Field label="Code">
             <input value={code} readOnly className="input bg-gray-50" />
-          </Field>
-          <Field label="Project Type">
-            <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className="input">
-              <option value="">Select value</option>
-              {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
-            </select>
           </Field>
           <Field label="Project">
             <select value={project} onChange={(e) => setProject(e.target.value)} className="input">

@@ -112,7 +112,6 @@ const DASHBOARD_SUBPAGES = [
 ];
 
 const PROJECT_SUBPAGES = [
-  { key: 'project-type', label: 'Project Type', route: '/project-module/project-type' },
   { key: 'project', label: 'Project', route: '/project-module/projects' },
   { key: 'agreement', label: 'Agreement', route: '/accounts-module/agreement_list' },
   { key: 'party-list', label: 'Party List', route: '/accounts-module/party_list' },

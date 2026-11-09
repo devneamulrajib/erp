@@ -32,15 +32,13 @@ router.get('/', auth, async (req, res) => {
 
 router.post('/', auth, async (req, res) => {
   try {
-    const { name, code, projectTypeName, projectId, projectName, description, location } = req.body;
+    const { name, code, projectId, projectName, description, location } = req.body;
 
-    if (!projectTypeName) return res.status(400).json({ message: 'Project Type is required' });
     if (!projectId) return res.status(400).json({ message: 'Project is required' });
     if (!name || !name.trim()) return res.status(400).json({ message: 'Name is required' });
 
     const newSite = await Site.create({
       code: code || generateCode(),
-      projectTypeName,
       projectId,
       projectName: projectName || '',
       name: name.trim(),
@@ -60,7 +58,7 @@ router.put('/:id', auth, async (req, res) => {
     const item = await Site.findByPk(req.params.id);
     if (!item) return res.status(404).json({ message: 'Not found' });
 
-    const fields = ['projectTypeName', 'projectId', 'projectName', 'name', 'description', 'location'];
+    const fields = ['projectId', 'projectName', 'name', 'description', 'location'];
     fields.forEach((f) => {
       if (req.body[f] !== undefined) item[f] = req.body[f];
     });

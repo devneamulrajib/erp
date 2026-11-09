@@ -7,7 +7,6 @@ const LabourBill = sequelize.define('LabourBill', {
   partyId: DataTypes.INTEGER,
   ledgerId: DataTypes.INTEGER,
   creditLedgerLabel: { type: DataTypes.STRING, defaultValue: 'TBA' },
-  projectType: DataTypes.STRING,
   projectId: DataTypes.INTEGER,
   titleOfWork: DataTypes.STRING,
   task: DataTypes.STRING,

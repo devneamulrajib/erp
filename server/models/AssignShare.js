@@ -3,7 +3,6 @@ const sequelize = require('../config/db');
 
 const AssignShare = sequelize.define('AssignShare', {
   projectId: DataTypes.INTEGER,
-  projectTypeId: DataTypes.INTEGER,
   siteId: DataTypes.INTEGER,
   flatId: DataTypes.INTEGER,
   customerId: DataTypes.INTEGER,

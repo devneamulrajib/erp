@@ -11,7 +11,7 @@ import {
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import {
-  Plus, Trash2, ListOrdered, ClipboardList, Paperclip,
+  Plus, Trash2, ListOrdered, ClipboardList,
   Truck, FileText, Wallet, CheckCircle2,
 } from 'lucide-react';
 
@@ -64,7 +64,6 @@ export default function PurchaseOrderPage() {
 
   const [suppliers, setSuppliers] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
   const [sites, setSites] = useState([]);
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
@@ -72,7 +71,6 @@ export default function PurchaseOrderPage() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [supplier, setSupplier] = useState('');
   const [code, setCode] = useState('');
-  const [projectType, setProjectType] = useState('');
   const [project, setProject] = useState('');
   const [titleOfWork, setTitleOfWork] = useState('');
   const [task, setTask] = useState('');
@@ -98,9 +96,6 @@ export default function PurchaseOrderPage() {
     api.get('/projects')
       .then((res) => setProjects(asArray(res)))
       .catch(() => setProjects([]));
-    api.get('/project-types')
-      .then((res) => setProjectTypes(asArray(res)))
-      .catch(() => setProjectTypes([]));
     api.get('/sites')
       .then((res) => setSites(asArray(res)))
       .catch(() => setSites([]));
@@ -124,13 +119,9 @@ export default function PurchaseOrderPage() {
     if (!isEdit) return;
     getPurchaseOrder(id).then((o) => {
       setDate(o.date || '');
-      // Normalized to a string here — <select> values are always strings,
-      // and o.supplierId / o.supplier?.id may come back as a number from
-      // the API, which previously caused the dropdown to fail to match.
       const supplierId = o.supplier?.id ?? o.supplierId ?? o.supplier;
       setSupplier(supplierId != null ? String(supplierId) : '');
       setCode(o.code || '');
-      setProjectType(o.projectType?.id || o.projectTypeId || o.projectType || '');
       setProject(o.project?.id || o.projectId || o.project || '');
       setTitleOfWork(o.titleOfWork || '');
       setTask(o.task || '');
@@ -152,11 +143,6 @@ export default function PurchaseOrderPage() {
       setError('Failed to load purchase order.');
     });
   }, [id, isEdit]);
-
-  function projectTypeName(pid) {
-    if (!pid) return '-';
-    return projectTypes.find((pt) => String(pt.id) === String(pid))?.name || pid;
-  }
 
   const subtotal = useMemo(
     () => rows.reduce((sum, r) => sum + num(r.rate) * num(r.purchaseQty), 0),
@@ -211,7 +197,7 @@ export default function PurchaseOrderPage() {
     setSubmitting(true);
     try {
       const payload = {
-        code, date, supplier, projectType, project, titleOfWork, task,
+        code, date, supplier, project, titleOfWork, task,
         site, category, boqItems,
         items: rows.map((r) => ({ ...r, amount: num(r.rate) * num(r.purchaseQty) })),
         attachment: attachmentName,
@@ -318,12 +304,6 @@ export default function PurchaseOrderPage() {
               </Field>
               <Field label="Code">
                 <input value={code} readOnly className={`${inputCls} bg-slate-50 text-slate-500 font-mono`} />
-              </Field>
-              <Field label="Project Type">
-                <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
-                  <option value="">Select Project Type</option>
-                  {projectTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
-                </select>
               </Field>
               <Field label="Project">
                 <select value={project} onChange={(e) => setProject(e.target.value)} className={inputCls}>

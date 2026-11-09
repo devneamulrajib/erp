@@ -132,7 +132,7 @@ export default function PurchaseList() {
           <table className="min-w-full text-sm">
             <thead>
               <tr className="bg-indigo-500 text-white whitespace-nowrap">
-                {['ID', 'Project Type', 'Project', 'Title/Name of Work', 'Supplier Name', 'Code',
+                {['ID', 'Project', 'Title/Name of Work', 'Supplier Name', 'Code',
                   'Reference', 'Date', 'Sub Total', 'Discount', 'Grand Total', 'Paid', 'Due',
                   'Attachment', 'Note', 'Added By', 'Approval Layer', 'Action'].map((h) => (
                   <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
@@ -141,14 +141,13 @@ export default function PurchaseList() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={18} className="text-center py-8 text-gray-400">Loading…</td></tr>
+                <tr><td colSpan={17} className="text-center py-8 text-gray-400">Loading…</td></tr>
               ) : paged.length === 0 ? (
-                <tr><td colSpan={18} className="text-center py-8 text-gray-400">No entries found</td></tr>
+                <tr><td colSpan={17} className="text-center py-8 text-gray-400">No entries found</td></tr>
               ) : (
                 paged.map((row, i) => (
                   <tr key={row._id} className="border-t border-gray-100 whitespace-nowrap align-top">
                     <td className="px-3 py-2">{(page - 1) * pageSize + i + 1}</td>
-                    <td className="px-3 py-2">{row.projectType || '-'}</td>
                     <td className="px-3 py-2">{row.project?.name || '-'}</td>
                     <td className="px-3 py-2">{row.titleOfWork || '-'}</td>
                     <td className="px-3 py-2">{row.supplier?.name || '-'}</td>
@@ -202,7 +201,7 @@ export default function PurchaseList() {
             {paged.length > 0 && (
               <tfoot>
                 <tr className="border-t border-gray-200 font-medium">
-                  <td colSpan={10} className="px-3 py-2">TOTAL</td>
+                  <td colSpan={9} className="px-3 py-2">TOTAL</td>
                   <td className="px-3 py-2">{grandTotalSum.toLocaleString()}</td>
                   <td></td>
                   <td className="px-3 py-2">{dueSum.toLocaleString()}</td>

@@ -34,7 +34,6 @@ export default function FlatSaleForm() {
   const [sites, setSites] = useState([]);
   const [flats, setFlats] = useState([]);
   const [customers, setCustomers] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -47,7 +46,6 @@ export default function FlatSaleForm() {
   const [attachmentName, setAttachmentName] = useState('');
 
   const [customerId, setCustomerId] = useState('');
-  const [projectType, setProjectType] = useState('');
   const [salesBy, setSalesBy] = useState('');
   const [ledger, setLedger] = useState('Flat Sales');
 
@@ -71,7 +69,6 @@ export default function FlatSaleForm() {
   useEffect(() => {
     api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
     api.get('/sites').then((res) => setSites(res.data)).catch(() => {});
-    api.get('/project-types').then((res) => setProjectTypes(res.data)).catch(() => {});
     getCustomers().then(setCustomers).catch(() => {});
   }, []);
 
@@ -112,7 +109,6 @@ export default function FlatSaleForm() {
       setFlatId(sale.flat?.id || sale.flat || '');
       setCollectionOfficer(sale.collectionOfficer || '');
       setCustomerId(sale.customer?.id || sale.customer || '');
-      setProjectType(sale.projectType?.id || sale.projectType || '');
       setSalesBy(sale.salesBy || '');
       setLedger(sale.ledger || 'Flat Sales');
       setRate(sale.rate ?? '');
@@ -186,7 +182,7 @@ export default function FlatSaleForm() {
     try {
       const payload = {
         code, date, bookingNo, project, site, flat: flatId, customer: customerId,
-        projectType, collectionOfficer, salesBy, ledger, attachment: attachmentName,
+        collectionOfficer, salesBy, ledger, attachment: attachmentName,
         rate: num(rate), parking: num(parking), utilityCharge: num(utilityCharge),
         otherCost: num(otherCost), discount: num(discount),
         bookingMoney: num(bookingMoney),
@@ -311,14 +307,6 @@ export default function FlatSaleForm() {
                     <Plus size={16} />
                   </button>
                 </div>
-              </Field>
-              <Field label="Project Type">
-                <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputClass}>
-                  <option value="">Select Project Type</option>
-                  {projectTypes.map((pt) => (
-                    <option key={pt.id} value={pt.id}>{pt.name}</option>
-                  ))}
-                </select>
               </Field>
               <Field label="Site">
                 <select value={site} onChange={(e) => setSite(e.target.value)} className={inputClass}>

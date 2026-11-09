@@ -73,8 +73,8 @@ router.post('/', auth, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const {
-      code, date, employee, fromProjectType, fromProject, fromSite, fromTask,
-      category, items, toProjectType, toProject, toSite, toTask, toSubTask, contact,
+      code, date, employee, fromProject, fromSite, fromTask,
+      category, items, toProject, toSite, toTask, toSubTask, contact,
     } = req.body;
 
     if (!fromProject || !toProject) {
@@ -84,9 +84,9 @@ router.post('/', auth, async (req, res) => {
 
     const transfer = await StockTransfer.create({
       code: code || generateCode(),
-      date, employee, fromProjectType, fromProjectId: fromProject, fromSiteId: fromSite || null, fromTask,
+      date, employee, fromProjectId: fromProject, fromSiteId: fromSite || null, fromTask,
       categoryId: category || null,
-      toProjectType, toProjectId: toProject, toSiteId: toSite || null, toTask, toSubTask, contact,
+      toProjectId: toProject, toSiteId: toSite || null, toTask, toSubTask, contact,
       addedBy: req.user?.name || 'Admin',
     }, { transaction: t });
 
@@ -117,8 +117,8 @@ router.put('/:id', auth, async (req, res) => {
     }
 
     const fieldMap = {
-      date: 'date', employee: 'employee', fromProjectType: 'fromProjectType', fromTask: 'fromTask',
-      toProjectType: 'toProjectType', toTask: 'toTask', toSubTask: 'toSubTask', contact: 'contact',
+      date: 'date', employee: 'employee', fromTask: 'fromTask',
+      toTask: 'toTask', toSubTask: 'toSubTask', contact: 'contact',
       fromProject: 'fromProjectId', fromSite: 'fromSiteId', category: 'categoryId',
       toProject: 'toProjectId', toSite: 'toSiteId',
     };

@@ -5,7 +5,6 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import ProjectDashboard from './pages/ProjectDashboard'
 import InventoryDashboard from './pages/InventoryDashboard'
-import ProjectType from './pages/ProjectType'
 import Project from './pages/Project'
 import AgreementList from './pages/AgreementList'
 import AgreementForm from './pages/AgreementForm'
@@ -252,7 +251,6 @@ function App() {
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/dashboard/project" element={<ProtectedRoute><ProjectDashboard /></ProtectedRoute>} />
         <Route path="/dashboard/inventory" element={<ProtectedRoute><InventoryDashboard /></ProtectedRoute>} />
-        <Route path="/project-module/project-type" element={<ProtectedRoute><ProjectType /></ProtectedRoute>} />
         <Route path="/project-module/projects" element={<ProtectedRoute><Project /></ProtectedRoute>} />
         <Route path="/accounts-module/agreement_list" element={<ProtectedRoute><AgreementList /></ProtectedRoute>} />
         <Route path="/accounts-module/agreement_list_add" element={<ProtectedRoute><AgreementForm /></ProtectedRoute>} />

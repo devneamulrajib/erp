@@ -68,7 +68,6 @@ router.post('/', auth, async (req, res) => {
       date: payload.date,
       customerId: payload.customer,
       ledger: payload.ledger,
-      projectType: payload.projectType,
       projectId: payload.project,
       titleOfWork: payload.titleOfWork,
       siteId: payload.site,
@@ -119,7 +118,7 @@ router.put('/:id', auth, async (req, res) => {
 
     const payload = req.body;
     const directFields = [
-      'date', 'ledger', 'projectType', 'titleOfWork', 'refWoNo', 'content',
+      'date', 'ledger', 'titleOfWork', 'refWoNo', 'content',
       'subtotal', 'vatIncluded', 'vatPercent', 'vatAmount', 'aitIncluded', 'aitPercent', 'aitAmount',
       'interestRate', 'interestAmount', 'grandTotal', 'paid', 'due', 'attachment',
     ];

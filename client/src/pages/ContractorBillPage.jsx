@@ -29,21 +29,10 @@ function asArray(res) {
   if (Array.isArray(body)) return body;
   return body?.rows || body?.data || [];
 }
-// IDs coming from MySQL/Sequelize are numbers; <select> values are always
-// strings. Compare as strings everywhere we match an id picked from a
-// dropdown against an id coming back from the API.
 function sameId(a, b) {
   return a !== '' && a != null && b !== '' && b != null && String(a) === String(b);
 }
 
-// The "Contractor/Supplier" dropdown draws from two separate tables that
-// aren't otherwise linked: Party (contractors/workers, added via
-// "Labour/Worker Add" on this page) and ChartOfAccount contacts with
-// contactType 'Supplier' (added on the Supplier Accounts page). A
-// ContractorBill can only be billed against a Party id, so selections are
-// tagged with a `party-` / `coa-` prefix and resolved to a real Party id
-// right before submit — creating a matching Party on the fly the first
-// time a Chart-of-Accounts supplier is billed.
 const PARTY_PREFIX = 'party-';
 const COA_PREFIX = 'coa-';
 
@@ -56,11 +45,10 @@ export default function ContractorBillPage() {
   const isEdit = !!id;
 
   const [parties, setParties] = useState([]);
-  const [supplierContacts, setSupplierContacts] = useState([]); // ChartOfAccount, contactType: Supplier
+  const [supplierContacts, setSupplierContacts] = useState([]);
   const [ledgers, setLedgers] = useState([]);
   const [chartGroups, setChartGroups] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [projectTypes, setProjectTypes] = useState([]);
   const [sites, setSites] = useState([]);
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
@@ -68,10 +56,9 @@ export default function ContractorBillPage() {
   const [units, setUnits] = useState([]);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [party, setParty] = useState(''); // prefixed value: `party-<id>` or `coa-<id>`
+  const [party, setParty] = useState('');
   const [ledger, setLedger] = useState('');
   const [code, setCode] = useState('');
-  const [projectType, setProjectType] = useState('');
   const [project, setProject] = useState('');
   const [titleOfWork, setTitleOfWork] = useState('');
   const [site, setSite] = useState('');
@@ -109,10 +96,7 @@ export default function ContractorBillPage() {
     getContacts('Supplier').then((res) => setSupplierContacts(asArray(res))).catch((err) => console.error('Failed to load supplier contacts', err));
     getChartOfAccounts().then((res) => setLedgers(asArray(res))).catch((err) => console.error('Failed to load ledgers', err));
     getChartOfGroups().then((res) => setChartGroups(asArray(res))).catch((err) => console.error('Failed to load chart groups', err));
-    // Confirmed from server/index.js: app.use('/api/projects', ...), app.use('/api/sites', ...),
-    // app.use('/api/project-types', ...) — all plural, /api prefix handled by axios baseURL.
     api.get('/projects').then((res) => setProjects(asArray(res))).catch((err) => console.error('Failed to load projects', err));
-    api.get('/project-types').then((res) => setProjectTypes(asArray(res))).catch((err) => console.error('Failed to load project types', err));
     api.get('/sites').then((res) => setSites(asArray(res))).catch((err) => console.error('Failed to load sites', err));
     getCategories().then((res) => setCategories(asArray(res))).catch((err) => console.error('Failed to load categories', err));
     getBrands().then((res) => setBrands(asArray(res))).catch((err) => console.error('Failed to load brands', err));
@@ -121,7 +105,6 @@ export default function ContractorBillPage() {
 
   useEffect(() => {
     getItems(category ? { category } : {}).then((res) => setItems(asArray(res))).catch((err) => console.error('Failed to load items', err));
-    // Category changed, so any previously selected item no longer applies.
     setSelectedItemId('');
   }, [category]);
 
@@ -134,12 +117,9 @@ export default function ContractorBillPage() {
     if (!isEdit) return;
     getContractorBill(id).then((b) => {
       setDate(b.date || '');
-      // Existing bills are always billed against a Party (the FK only
-      // ever points there), so tag it with the party- prefix on load.
       setParty(b.partyId != null ? `${PARTY_PREFIX}${b.partyId}` : '');
       setLedger(b.ledgerId != null ? String(b.ledgerId) : '');
       setCode(b.code || '');
-      setProjectType(b.projectType || '');
       setProject(b.projectId != null ? String(b.projectId) : '');
       setTitleOfWork(b.titleOfWork || '');
       setSite(b.siteId != null ? String(b.siteId) : '');
@@ -191,8 +171,7 @@ export default function ContractorBillPage() {
     }]);
     setSelectedItemId('');
   }
-  // After a row is added, jump straight into its Quantity field so the user
-  // can type the real value without hunting for it.
+
   useEffect(() => {
     if (rows.length === 0) return;
     const lastInput = qtyInputRefs.current[rows.length - 1];
@@ -226,12 +205,6 @@ export default function ContractorBillPage() {
     setPayments((prev) => prev.filter((_, idx) => idx !== i));
   }
 
-  // Resolves the dropdown's tagged selection to a real Party id.
-  // - `party-<id>` selections already point at a Party: return the id.
-  // - `coa-<id>` selections point at a ChartOfAccount supplier: reuse a
-  //   Party with the same name if one exists, otherwise create one so the
-  //   bill (and every report reading Party + ContractorBill) has something
-  //   real to link against.
   async function resolvePartyId(selection) {
     if (!selection) return null;
     if (selection.startsWith(PARTY_PREFIX)) {
@@ -259,8 +232,6 @@ export default function ContractorBillPage() {
       setParties((prev) => [...prev, created]);
       return created.id;
     }
-    // Legacy/plain numeric value (shouldn't normally happen once every
-    // option is prefixed) — treat it as an existing Party id.
     return selection;
   }
 
@@ -281,7 +252,7 @@ export default function ContractorBillPage() {
       }
 
       const payload = {
-        code, date, party: resolvedPartyId, ledger, projectType, project, titleOfWork, task,
+        code, date, party: resolvedPartyId, ledger, project, titleOfWork, task,
         site, category, refWoNo,
         items: rows.map((r) => ({ ...r, amount: num(r.rate) * num(r.quantity) })),
         vatIncluded, vatPercent, securityDeposit,
@@ -403,12 +374,6 @@ export default function ContractorBillPage() {
 
             <h2 className="text-sm font-semibold text-slate-800 mb-4">Project &amp; Work Reference</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Field label="Project Type">
-                <select value={projectType} onChange={(e) => setProjectType(e.target.value)} className={inputCls}>
-                  <option value="">Select value</option>
-                  {projectTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </Field>
               <Field label="Project">
                 <select value={project} onChange={(e) => setProject(e.target.value)} className={inputCls}>
                   <option value="">Select Project</option>
@@ -588,9 +553,9 @@ export default function ContractorBillPage() {
                 <input
                   type="file"
                   onChange={(e) => {
-                    const f = e.target.files?.[0] || null;
+                    const f = e.target.files ? e.target.files[0] : null;
                     setAttachmentFile(f);
-                    setAttachmentName(f?.name || '');
+                    setAttachmentName(f ? f.name : '');
                   }}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:bg-slate-100 file:text-slate-600 file:text-xs file:font-medium hover:file:bg-slate-200 transition"
                 />
