@@ -154,6 +154,13 @@ async function getBudgetStatus(budgetCategoryId, dateValue, excludeId) {
   };
 }
 
+// Parses "YYYY-MM-DD" as a local date (same approach as the rest of this file),
+// so the server timezone can't shift the day.
+function parseDay(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ''));
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+}
+
 const listInclude = [{ model: BudgetCategory, as: 'budgetCategory' }];
 
 router.get('/next-code', auth, async (req, res) => {
@@ -317,17 +324,29 @@ router.get('/report', auth, async (req, res) => {
   }
 });
 
+// List expenses. `from` / `to` are YYYY-MM-DD and both days are included.
 router.get('/', auth, async (req, res) => {
   try {
     const { budgetCategory, from, to } = req.query;
     const where = {};
     if (budgetCategory) where.budgetCategoryId = budgetCategory;
-    if (from || to) {
+
+    const fromDay = parseDay(from);
+    const toDay = parseDay(to);
+    if (fromDay || toDay) {
       where.date = {};
-      if (from) where.date[Op.gte] = new Date(from);
-      if (to) where.date[Op.lte] = new Date(to);
+      if (fromDay) where.date[Op.gte] = fromDay;
+      // End date is inclusive: everything before the start of the NEXT day.
+      if (toDay) {
+        where.date[Op.lt] = new Date(toDay.getFullYear(), toDay.getMonth(), toDay.getDate() + 1);
+      }
     }
-    const rows = await OfficeExpense.findAll({ where, include: listInclude, order: [['createdAt', 'DESC']] });
+
+    const rows = await OfficeExpense.findAll({
+      where,
+      include: listInclude,
+      order: [['date', 'DESC'], ['id', 'DESC']],
+    });
     res.json(rows);
   } catch (err) {
     res.status(500).json({ message: err.message });

@@ -1,10 +1,10 @@
 // client/src/pages/OfficeExpenseListPage.jsx
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Plus, Calendar, Eye, Pencil, Trash2, Clock, CheckCircle2,
   XCircle, FileText, ArrowUpRight, X, TrendingUp, TrendingDown,
-  Download, Layers, RefreshCw, Check, Lock
+  Download, Layers, RefreshCw, Check, Lock, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 import Topbar from '../components/Topbar';
@@ -74,6 +74,44 @@ const formatDate = (value) => {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
+// ---- Date helpers (all use the same local-time view the table displays) ----
+const pad2 = (n) => String(n).padStart(2, '0');
+
+// "YYYY-MM-DD" for a stored date, or '' when invalid
+function dayKeyOf(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+// "YYYY-MM" for a stored date, or '' when invalid
+function monthKeyOf(value) {
+  const day = dayKeyOf(value);
+  return day ? day.slice(0, 7) : '';
+}
+
+function currentMonthKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+}
+
+function shiftMonthKey(key, delta) {
+  const [y, m] = key.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+}
+
+function monthLabel(key) {
+  const [y, m] = key.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function dayLabel(key) {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 export default function OfficeExpenseListPage() {
   const navigate = useNavigate();
 
@@ -83,9 +121,13 @@ export default function OfficeExpenseListPage() {
   const isAdmin = currentUser && ['superadmin', 'admin'].includes(currentUser.role);
   const isAccountant = currentUser?.role === 'accountant';
 
+  // `rows` holds every expense (used for the trend chart and category list).
+  // The table / stats only use the rows inside the chosen period.
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Period: a month ('YYYY-MM') or 'all'. A custom From/To range overrides it.
+  const [monthValue, setMonthValue] = useState(currentMonthKey());
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [search, setSearch] = useState('');
@@ -98,10 +140,12 @@ export default function OfficeExpenseListPage() {
   const [viewing, setViewing] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
 
+  const monthInitialised = useRef(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getOfficeExpenses({ from: fromDate || undefined, to: toDate || undefined });
+      const data = await getOfficeExpenses();
       setRows(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to load office expenses:', error);
@@ -109,10 +153,56 @@ export default function OfficeExpenseListPage() {
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setPage(1); }, [search, pageSize, categoryFilter, statusFilter]);
+
+  // First load only: if the current month has no records, jump to the latest month that does.
+  useEffect(() => {
+    if (loading || monthInitialised.current) return;
+    monthInitialised.current = true;
+    if (rows.length === 0) return;
+    if (rows.some((r) => monthKeyOf(r.date) === monthValue)) return;
+    const latest = rows.map((r) => monthKeyOf(r.date)).filter(Boolean).sort().pop();
+    if (latest) setMonthValue(latest);
+  }, [loading, rows, monthValue]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, pageSize, categoryFilter, statusFilter, monthValue, fromDate, toDate]);
+
+  const rangeActive = !!(fromDate || toDate);
+
+  const periodLabel = useMemo(() => {
+    if (rangeActive) {
+      if (fromDate && toDate) return `${dayLabel(fromDate)} – ${dayLabel(toDate)}`;
+      if (fromDate) return `From ${dayLabel(fromDate)}`;
+      return `Up to ${dayLabel(toDate)}`;
+    }
+    if (monthValue === 'all') return 'All months';
+    return monthLabel(monthValue);
+  }, [rangeActive, fromDate, toDate, monthValue]);
+
+  // Rows inside the chosen period, newest first
+  const scopedRows = useMemo(() => {
+    const list = rows.filter((item) => {
+      const dk = dayKeyOf(item.date);
+      if (rangeActive) {
+        if (!dk) return false;
+        if (fromDate && dk < fromDate) return false;
+        if (toDate && dk > toDate) return false;
+        return true;
+      }
+      if (monthValue === 'all') return true;
+      return dk.slice(0, 7) === monthValue;
+    });
+    return list.sort((a, b) => {
+      const da = new Date(a.date).getTime() || 0;
+      const db = new Date(b.date).getTime() || 0;
+      if (db !== da) return db - da;
+      return Number(b.id || 0) - Number(a.id || 0);
+    });
+  }, [rows, rangeActive, fromDate, toDate, monthValue]);
 
   const categoryOptions = useMemo(() => {
     const set = new Set();
@@ -125,7 +215,7 @@ export default function OfficeExpenseListPage() {
 
   const filteredRows = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return rows.filter((item) => {
+    return scopedRows.filter((item) => {
       if (categoryFilter && textValue(item.budgetCategory) !== categoryFilter) return false;
       if (statusFilter !== 'all' && textValue(item.status).toLowerCase() !== statusFilter) return false;
       if (!term) return true;
@@ -133,7 +223,7 @@ export default function OfficeExpenseListPage() {
       const title = textValue(item.title);
       return `${reference} ${title}`.toLowerCase().includes(term);
     });
-  }, [rows, search, categoryFilter, statusFilter]);
+  }, [scopedRows, search, categoryFilter, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
 
@@ -146,17 +236,18 @@ export default function OfficeExpenseListPage() {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  const totalAmount = rows.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const approvedCount = rows.filter((item) => textValue(item.status).toLowerCase() === 'approved').length;
-  const pendingCount = rows.filter((item) => textValue(item.status).toLowerCase() === 'pending').length;
-  const rejectedCount = rows.filter((item) => textValue(item.status).toLowerCase() === 'rejected').length;
+  // Stat cards follow the chosen period
+  const totalAmount = scopedRows.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const approvedCount = scopedRows.filter((item) => textValue(item.status).toLowerCase() === 'approved').length;
+  const pendingCount = scopedRows.filter((item) => textValue(item.status).toLowerCase() === 'pending').length;
+  const rejectedCount = scopedRows.filter((item) => textValue(item.status).toLowerCase() === 'rejected').length;
 
+  // Trend chart always uses every month, so it still works when one month is selected
   const monthlyTrend = useMemo(() => {
     const map = {};
     rows.forEach((item) => {
-      const d = new Date(item.date);
-      if (Number.isNaN(d.getTime())) return;
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const key = monthKeyOf(item.date);
+      if (!key) return;
       map[key] = (map[key] || 0) + Number(item.amount || 0);
     });
     const sortedKeys = Object.keys(map).sort();
@@ -175,6 +266,18 @@ export default function OfficeExpenseListPage() {
     if (prev === 0) return null;
     return ((curr - prev) / prev) * 100;
   }, [monthlyTrend]);
+
+  // Month navigation
+  const goToMonth = (key) => {
+    setFromDate('');
+    setToDate('');
+    setMonthValue(key || currentMonthKey());
+  };
+
+  const shiftMonth = (delta) => {
+    const base = monthValue === 'all' ? currentMonthKey() : monthValue;
+    goToMonth(shiftMonthKey(base, delta));
+  };
 
   // Handle Approve / Reject (Admin only)
   const handleStatusChange = async (item, newStatus) => {
@@ -215,6 +318,7 @@ export default function OfficeExpenseListPage() {
     }
   };
 
+  // Resets search / date range / category / status. The selected month is kept.
   const clearFilters = () => {
     setSearch('');
     setFromDate('');
@@ -237,8 +341,11 @@ export default function OfficeExpenseListPage() {
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
+    const suffix = rangeActive
+      ? `${fromDate || 'start'}_to_${toDate || 'end'}`
+      : (monthValue === 'all' ? 'all' : monthValue);
     a.href = url;
-    a.download = `office_expenses_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `office_expenses_${suffix}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -301,7 +408,7 @@ export default function OfficeExpenseListPage() {
                   Net Disbursement
                 </span>
                 <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-600">
-                  {rows.length} total entries
+                  {scopedRows.length} total entries
                 </span>
               </div>
               <div className="mt-3">
@@ -312,7 +419,7 @@ export default function OfficeExpenseListPage() {
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
-                  Aggregated office operational expenditures across all categories
+                  Office expenditures for <span className="font-semibold text-slate-700">{periodLabel}</span>
                 </p>
               </div>
             </div>
@@ -373,6 +480,49 @@ export default function OfficeExpenseListPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                {/* Month selector */}
+                <div className={`inline-flex items-center rounded-xl border bg-white ${
+                  rangeActive ? 'border-slate-200 opacity-60' : 'border-blue-200 ring-2 ring-blue-500/10'
+                }`}>
+                  <button
+                    type="button"
+                    onClick={() => shiftMonth(-1)}
+                    title="Previous month"
+                    className="px-2 py-2 text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-l-xl transition"
+                  >
+                    <ChevronLeft size={15} />
+                  </button>
+                  <input
+                    type="month"
+                    value={monthValue === 'all' ? '' : monthValue}
+                    onChange={(e) => goToMonth(e.target.value)}
+                    title="Select month"
+                    className="bg-transparent px-1 py-2 text-xs font-semibold text-slate-700 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => shiftMonth(1)}
+                    title="Next month"
+                    className="px-2 py-2 text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-r-xl transition"
+                  >
+                    <ChevronRight size={15} />
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => { setFromDate(''); setToDate(''); setMonthValue('all'); }}
+                  className={`px-3 py-2 rounded-xl text-xs font-medium border transition ${
+                    monthValue === 'all' && !rangeActive
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  All months
+                </button>
+
+                <span className="hidden sm:block w-px h-6 bg-slate-200" />
+
                 <DateFilter value={fromDate} onChange={setFromDate} placeholder="From date" />
                 <DateFilter value={toDate} onChange={setToDate} placeholder="To date" />
 
@@ -403,7 +553,7 @@ export default function OfficeExpenseListPage() {
                     type="button"
                     onClick={clearFilters}
                     className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition"
-                    title="Reset all filters"
+                    title="Reset search, dates, category and status"
                   >
                     <X size={13} />
                     Reset
@@ -419,6 +569,7 @@ export default function OfficeExpenseListPage() {
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
                 {filteredRows.length}
               </span>
+              <span className="text-xs text-slate-400">· {periodLabel}</span>
             </div>
 
             <div className="inline-flex p-1 rounded-xl bg-slate-100/90 border border-slate-200/70 text-xs">
@@ -461,7 +612,11 @@ export default function OfficeExpenseListPage() {
                 {loading ? (
                   <LoadingRows />
                 ) : pageRows.length === 0 ? (
-                  <EmptyState hasFilters={hasActiveFilters} onClear={clearFilters} />
+                  <EmptyState
+                    hasFilters={hasActiveFilters}
+                    periodLabel={periodLabel}
+                    onClear={clearFilters}
+                  />
                 ) : (
                   pageRows.map((item) => (
                     <ExpenseRow
@@ -955,7 +1110,7 @@ function LoadingRows() {
   ));
 }
 
-function EmptyState({ hasFilters, onClear }) {
+function EmptyState({ hasFilters, periodLabel, onClear }) {
   return (
     <tr>
       <td colSpan={8} className="py-16 px-4 text-center">
@@ -965,8 +1120,8 @@ function EmptyState({ hasFilters, onClear }) {
         <p className="text-sm font-bold text-slate-800">No expense records found</p>
         <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
           {hasFilters
-            ? 'There are no expense records matching your active filters. Try resetting search or date ranges.'
-            : 'No office expenses have been logged yet. Click "Add Expense" to record your first transaction.'}
+            ? `There are no expense records in ${periodLabel} matching your active filters. Try resetting search or date ranges.`
+            : `No office expenses were recorded for ${periodLabel}. Use the arrows to browse other months, or click "Add Expense" to record a transaction.`}
         </p>
         {hasFilters && (
           <button
