@@ -1,15 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Search, X, ExternalLink, LifeBuoy } from 'lucide-react';
+import { Search, X, ExternalLink, LifeBuoy, Paperclip } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import {
-  getAllSupportTickets,
+  listSupportTickets,
+  getSupportMeta,
   getSupportTicket,
-  updateSupportTicket,
+  changeSupportTicketStatus,
+  assignSupportTicket,
+  addSupportMessage,
+  downloadSupportAttachment,
 } from '../api/supportTicket';
 
 const STATUS_STYLE = {
   open: 'bg-amber-100 text-amber-700',
   in_progress: 'bg-blue-100 text-blue-700',
+  pending_customer: 'bg-violet-100 text-violet-700',
   resolved: 'bg-emerald-100 text-emerald-700',
   closed: 'bg-slate-100 text-slate-600',
 };
@@ -19,13 +24,36 @@ const SEVERITY_STYLE = {
   high: 'bg-orange-100 text-orange-700',
   critical: 'bg-rose-100 text-rose-700',
 };
-const STATUSES = ['open', 'in_progress', 'resolved', 'closed'];
+const DEFAULT_STATUSES = [
+  { key: 'open', label: 'Open' },
+  { key: 'in_progress', label: 'In progress' },
+  { key: 'pending_customer', label: 'Pending customer' },
+  { key: 'resolved', label: 'Resolved' },
+  { key: 'closed', label: 'Closed' },
+];
 const TYPE_LABEL = { bug: 'Bug', difficulty: 'Difficulty', suggestion: 'Suggestion' };
 
-const label = (s) => s.replace('_', ' ');
+const pretty = (s) => String(s || '').replace(/_/g, ' ');
+const errMsg = (err, fallback) => err?.response?.data?.message || fallback;
+
+// Loads every page (100 per page) so counts and filters cover all tickets.
+async function fetchAllTickets() {
+  const all = [];
+  let page = 1;
+  let totalPages = 1;
+  do {
+    const res = await listSupportTickets({ pageSize: 100, page });
+    all.push(...(res.items || []));
+    totalPages = res.totalPages || 1;
+    page += 1;
+  } while (page <= totalPages && page <= 30);
+  return all;
+}
 
 export default function SupportTicketsPage() {
   const [tickets, setTickets] = useState([]);
+  const [statuses, setStatuses] = useState(DEFAULT_STATUSES);
+  const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -37,7 +65,7 @@ export default function SupportTicketsPage() {
   async function load() {
     setLoading(true);
     try {
-      setTickets(await getAllSupportTickets());
+      setTickets(await fetchAllTickets());
       setError('');
     } catch (err) {
       setError(
@@ -52,11 +80,22 @@ export default function SupportTicketsPage() {
 
   useEffect(() => {
     load();
+    getSupportMeta()
+      .then((m) => {
+        if (Array.isArray(m.statuses) && m.statuses.length) setStatuses(m.statuses);
+        setAgents(m.agents || []);
+      })
+      .catch(() => {});
   }, []);
 
+  const statusLabel = useMemo(
+    () => Object.fromEntries(statuses.map((s) => [s.key, s.label])),
+    [statuses]
+  );
+
   const counts = useMemo(() => {
-    const c = { open: 0, in_progress: 0, resolved: 0, closed: 0 };
-    tickets.forEach((t) => (c[t.status] = (c[t.status] || 0) + 1));
+    const c = {};
+    tickets.forEach((t) => { c[t.status] = (c[t.status] || 0) + 1; });
     return c;
   }, [tickets]);
 
@@ -89,19 +128,19 @@ export default function SupportTicketsPage() {
         ) : (
           <>
             {/* Status counts */}
-            <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-              {STATUSES.map((s) => (
+            <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
+              {statuses.map((s) => (
                 <button
-                  key={s}
-                  onClick={() => setStatusFilter(statusFilter === s ? 'all' : s)}
+                  key={s.key}
+                  onClick={() => setStatusFilter(statusFilter === s.key ? 'all' : s.key)}
                   className={`rounded-2xl border p-4 text-left transition-colors ${
-                    statusFilter === s
+                    statusFilter === s.key
                       ? 'border-slate-900 bg-white'
                       : 'border-slate-200 bg-white hover:bg-slate-50'
                   }`}
                 >
-                  <p className="text-[11px] font-semibold capitalize text-slate-500">{label(s)}</p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900">{counts[s] || 0}</p>
+                  <p className="text-[11px] font-semibold text-slate-500">{s.label}</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{counts[s.key] || 0}</p>
                 </button>
               ))}
             </div>
@@ -132,7 +171,7 @@ export default function SupportTicketsPage() {
                 onChange={(e) => setSeverityFilter(e.target.value)}
                 className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs capitalize outline-none"
               >
-                <option value="all">All severities</option>
+                <option value="all">All priorities</option>
                 {['low', 'medium', 'high', 'critical'].map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
@@ -147,17 +186,18 @@ export default function SupportTicketsPage() {
                     <th className="px-4 py-3">Ticket</th>
                     <th className="px-4 py-3">Title</th>
                     <th className="px-4 py-3">Reporter</th>
+                    <th className="px-4 py-3">Assignee</th>
                     <th className="px-4 py-3">Type</th>
-                    <th className="px-4 py-3">Severity</th>
+                    <th className="px-4 py-3">Priority</th>
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Reported</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loading ? (
-                    <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">Loading…</td></tr>
+                    <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">Loading…</td></tr>
                   ) : filtered.length === 0 ? (
-                    <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">No tickets found</td></tr>
+                    <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">No tickets found</td></tr>
                   ) : (
                     filtered.map((t) => (
                       <tr
@@ -168,15 +208,16 @@ export default function SupportTicketsPage() {
                         <td className="px-4 py-3 font-semibold text-slate-700">{t.ticketNo}</td>
                         <td className="max-w-[320px] truncate px-4 py-3 text-slate-800">{t.title}</td>
                         <td className="px-4 py-3 text-slate-600">{t.reporterName}</td>
-                        <td className="px-4 py-3 text-slate-600">{TYPE_LABEL[t.type]}</td>
+                        <td className="px-4 py-3 text-slate-600">{t.assignedToName || 'Unassigned'}</td>
+                        <td className="px-4 py-3 text-slate-600">{TYPE_LABEL[t.type] || t.type}</td>
                         <td className="px-4 py-3">
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${SEVERITY_STYLE[t.severity]}`}>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${SEVERITY_STYLE[t.severity] || SEVERITY_STYLE.low}`}>
                             {t.severity}
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_STYLE[t.status]}`}>
-                            {label(t.status)}
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLE[t.status] || STATUS_STYLE.closed}`}>
+                            {statusLabel[t.status] || pretty(t.status)}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-slate-500">{new Date(t.createdAt).toLocaleDateString()}</td>
@@ -192,6 +233,8 @@ export default function SupportTicketsPage() {
         {selectedId && (
           <TicketDetail
             id={selectedId}
+            statusLabel={statusLabel}
+            agents={agents}
             onClose={() => setSelectedId(null)}
             onSaved={load}
           />
@@ -201,38 +244,120 @@ export default function SupportTicketsPage() {
   );
 }
 
-function TicketDetail({ id, onClose, onSaved }) {
-  const [ticket, setTicket] = useState(null);
-  const [status, setStatus] = useState('open');
-  const [note, setNote] = useState('');
-  const [saving, setSaving] = useState(false);
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function ImagePreview({ ticketId, att }) {
+  const [src, setSrc] = useState('');
+  useEffect(() => {
+    let url = '';
+    let alive = true;
+    downloadSupportAttachment(ticketId, att.id, true)
+      .then((blob) => {
+        if (!alive) return;
+        url = URL.createObjectURL(blob);
+        setSrc(url);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [ticketId, att.id]);
+  if (!src) return null;
+  return <img src={src} alt={att.originalName} className="max-h-72 rounded-xl border border-slate-200" />;
+}
+
+function TicketDetail({ id, statusLabel, agents, onClose, onSaved }) {
+  const [detail, setDetail] = useState(null);
+  const [status, setStatus] = useState('');
+  const [statusNote, setStatusNote] = useState('');
+  const [assignee, setAssignee] = useState('');
+  const [reply, setReply] = useState('');
+  const [kind, setKind] = useState('reply');
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [savedMsg, setSavedMsg] = useState('');
 
-  useEffect(() => {
-    getSupportTicket(id)
-      .then((t) => {
-        setTicket(t);
-        setStatus(t.status);
-        setNote(t.resolutionNote || '');
-      })
-      .catch(() => setError('Failed to load ticket'));
-  }, [id]);
-
-  async function save() {
-    setError('');
-    setSavedMsg('');
-    setSaving(true);
+  async function loadDetail() {
     try {
-      await updateSupportTicket(id, { status, resolutionNote: note });
-      setSavedMsg('Saved');
-      onSaved();
+      const d = await getSupportTicket(id);
+      setDetail(d);
+      setStatus(d.ticket.status);
+      setAssignee(d.ticket.assignedToId ? String(d.ticket.assignedToId) : '');
+      setError('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to save');
-    } finally {
-      setSaving(false);
+      setError(errMsg(err, 'Failed to load ticket'));
     }
   }
+
+  useEffect(() => {
+    loadDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const ticket = detail?.ticket;
+  const can = detail?.can || {};
+
+  // Current status + the statuses this user may move to
+  const statusOptions = useMemo(() => {
+    if (!detail) return [];
+    const keys = (detail.transitions || []).map((t) =>
+      typeof t === 'string' ? t : t.key || t.status || t.to
+    );
+    return Array.from(new Set([detail.ticket.status, ...keys.filter(Boolean)]));
+  }, [detail]);
+
+  async function run(fn, okText) {
+    setError('');
+    setSavedMsg('');
+    setBusy(true);
+    try {
+      await fn();
+      setSavedMsg(okText);
+      await loadDetail();
+      onSaved();
+    } catch (err) {
+      setError(errMsg(err, 'Action failed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const saveStatus = () =>
+    run(async () => {
+      await changeSupportTicketStatus(id, status, statusNote.trim() || undefined);
+      setStatusNote('');
+    }, 'Status updated');
+
+  const saveAssignee = () =>
+    run(() => assignSupportTicket(id, assignee || null), 'Assignee updated');
+
+  const sendMessage = () =>
+    run(async () => {
+      const fd = new FormData();
+      fd.append('body', reply);
+      fd.append('kind', kind);
+      await addSupportMessage(id, fd);
+      setReply('');
+    }, kind === 'note' ? 'Note added' : 'Reply sent');
+
+  async function download(att) {
+    try {
+      saveBlob(await downloadSupportAttachment(id, att.id), att.originalName);
+    } catch (err) {
+      setError(errMsg(err, 'Download failed'));
+    }
+  }
+
+  const statusChanged = ticket && status !== ticket.status;
+  const assigneeChanged = ticket && assignee !== (ticket.assignedToId ? String(ticket.assignedToId) : '');
 
   return (
     <div
@@ -266,10 +391,13 @@ function TicketDetail({ id, onClose, onSaved }) {
                 <h2 className="text-sm font-bold text-slate-900">{ticket.title}</h2>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-                    {TYPE_LABEL[ticket.type]}
+                    {TYPE_LABEL[ticket.type] || ticket.type}
                   </span>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${SEVERITY_STYLE[ticket.severity]}`}>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${SEVERITY_STYLE[ticket.severity] || SEVERITY_STYLE.low}`}>
                     {ticket.severity}
+                  </span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLE[ticket.status] || STATUS_STYLE.closed}`}>
+                    {statusLabel[ticket.status] || pretty(ticket.status)}
                   </span>
                 </div>
               </div>
@@ -295,12 +423,24 @@ function TicketDetail({ id, onClose, onSaved }) {
                 </div>
               )}
 
-              {ticket.screenshot && (
+              {/* Attachments (includes the old screenshot) */}
+              {detail.attachments.length > 0 && (
                 <div>
-                  <p className="mb-1 text-[11px] font-semibold text-slate-500">Screenshot</p>
-                  <a href={ticket.screenshot} target="_blank" rel="noreferrer">
-                    <img src={ticket.screenshot} alt="Screenshot" className="max-h-72 rounded-xl border border-slate-200" />
-                  </a>
+                  <p className="mb-1 text-[11px] font-semibold text-slate-500">Attachments</p>
+                  <div className="space-y-2">
+                    {detail.attachments.map((a) => (
+                      <div key={a.id} className="space-y-2">
+                        {a.isImage && <ImagePreview ticketId={id} att={a} />}
+                        <button
+                          onClick={() => download(a)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] text-slate-700 hover:bg-slate-50"
+                        >
+                          <Paperclip size={12} /> {a.originalName}
+                          {a.isInternal && <span className="text-amber-600">(internal)</span>}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -310,44 +450,140 @@ function TicketDetail({ id, onClose, onSaved }) {
 
               <hr className="border-slate-100" />
 
-              <div className="space-y-3">
+              {/* Status */}
+              <div className="space-y-2">
                 <label className="block text-[11px] font-semibold text-slate-500">
                   Status
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value)}
-                    className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs capitalize outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-100"
+                    disabled={statusOptions.length <= 1}
+                    className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-100 disabled:bg-slate-50"
                   >
-                    {STATUSES.map((s) => (
-                      <option key={s} value={s}>{label(s)}</option>
+                    {statusOptions.map((s) => (
+                      <option key={s} value={s}>{statusLabel[s] || pretty(s)}</option>
                     ))}
                   </select>
                 </label>
-
-                <label className="block text-[11px] font-semibold text-slate-500">
-                  Resolution note (the reporter will see this)
-                  <textarea
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    rows={4}
-                    placeholder="What was the cause and what was done to fix it?"
-                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-100"
-                  />
-                </label>
-
-                {error && <p className="text-xs font-medium text-rose-600">{error}</p>}
-                {savedMsg && <p className="text-xs font-medium text-emerald-600">{savedMsg}</p>}
-
-                <div className="flex justify-end">
-                  <button
-                    onClick={save}
-                    disabled={saving}
-                    className="h-9 rounded-xl bg-slate-900 px-5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-                  >
-                    {saving ? 'Saving…' : 'Save'}
-                  </button>
-                </div>
+                {statusChanged && (
+                  <>
+                    <textarea
+                      value={statusNote}
+                      onChange={(e) => setStatusNote(e.target.value)}
+                      rows={3}
+                      placeholder="Note for this change (e.g. cause and fix when resolving)"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-100"
+                    />
+                    <div className="flex justify-end">
+                      <button
+                        onClick={saveStatus}
+                        disabled={busy}
+                        className="h-9 rounded-xl bg-slate-900 px-5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                      >
+                        {busy ? 'Saving…' : 'Update status'}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
+
+              {/* Assignee */}
+              {can.assign && (
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-semibold text-slate-500">
+                    Assigned to
+                    <select
+                      value={assignee}
+                      onChange={(e) => setAssignee(e.target.value)}
+                      className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-100"
+                    >
+                      <option value="">Unassigned</option>
+                      {agents.map((a) => (
+                        <option key={a.id} value={String(a.id)}>{a.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {assigneeChanged && (
+                    <div className="flex justify-end">
+                      <button
+                        onClick={saveAssignee}
+                        disabled={busy}
+                        className="h-9 rounded-xl bg-slate-900 px-5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                      >
+                        {busy ? 'Saving…' : 'Update assignee'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <hr className="border-slate-100" />
+
+              {/* Conversation */}
+              <div>
+                <p className="mb-2 text-[11px] font-semibold text-slate-500">Conversation</p>
+                {detail.messages.length === 0 ? (
+                  <p className="text-xs text-slate-400">No messages yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {detail.messages.map((m) => (
+                      <div
+                        key={m.id}
+                        className={`rounded-xl p-3 text-xs ${
+                          m.kind === 'note' ? 'border border-amber-200 bg-amber-50' : 'bg-slate-50'
+                        }`}
+                      >
+                        <p className="mb-1 text-[10px] text-slate-500">
+                          <span className="font-semibold text-slate-700">{m.authorName}</span>
+                          {m.kind === 'note' && ' · internal note'}
+                          {' · '}
+                          {new Date(m.createdAt).toLocaleString()}
+                        </p>
+                        <p className="whitespace-pre-wrap leading-relaxed text-slate-800">{m.body}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {(can.reply || can.note) && (
+                <div className="space-y-2">
+                  {can.reply && can.note && (
+                    <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-[11px]">
+                      {[['reply', 'Reply to reporter'], ['note', 'Internal note']].map(([k, l]) => (
+                        <button
+                          key={k}
+                          onClick={() => setKind(k)}
+                          className={`rounded-md px-3 py-1 font-medium ${
+                            kind === k ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                          }`}
+                        >
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <textarea
+                    value={reply}
+                    onChange={(e) => setReply(e.target.value)}
+                    rows={3}
+                    placeholder={kind === 'note' ? 'Internal note (not visible to the reporter)' : 'Write a reply'}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-100"
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      onClick={sendMessage}
+                      disabled={busy || !reply.trim()}
+                      className="h-9 rounded-xl bg-slate-900 px-5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                    >
+                      {busy ? 'Sending…' : kind === 'note' ? 'Add note' : 'Send reply'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {error && <p className="text-xs font-medium text-rose-600">{error}</p>}
+              {savedMsg && <p className="text-xs font-medium text-emerald-600">{savedMsg}</p>}
             </>
           )}
         </div>
