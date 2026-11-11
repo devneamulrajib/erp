@@ -1,601 +1,437 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Search, X, ExternalLink, LifeBuoy, Paperclip } from 'lucide-react';
-import Topbar from '../components/Topbar';
-import {
-  listSupportTickets,
-  getSupportMeta,
-  getSupportTicket,
-  changeSupportTicketStatus,
-  assignSupportTicket,
-  addSupportMessage,
-  downloadSupportAttachment,
-} from '../api/supportTicket';
+const { Op } = require('sequelize');
+const User = require('../models/User');
+const SupportSlaRule = require('../models/SupportSlaRule');
+const SupportTicketEvent = require('../models/SupportTicketEvent');
+const Notification = require('../models/Notification');
+const notify = require('./notify');
 
-const STATUS_STYLE = {
-  open: 'bg-amber-100 text-amber-700',
-  in_progress: 'bg-blue-100 text-blue-700',
-  pending_customer: 'bg-violet-100 text-violet-700',
-  pending_internal: 'bg-indigo-100 text-indigo-700',
-  reopened: 'bg-orange-100 text-orange-700',
-  resolved: 'bg-emerald-100 text-emerald-700',
-  closed: 'bg-slate-100 text-slate-600',
+class HttpError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+
+const STATUSES = ['open', 'in_progress', 'pending_customer', 'pending_internal', 'resolved', 'closed', 'reopened'];
+
+const STATUS_LABEL = {
+  open: 'Open',
+  in_progress: 'In Progress',
+  pending_customer: 'Pending Customer',
+  pending_internal: 'Pending Internal Team',
+  resolved: 'Resolved',
+  closed: 'Closed',
+  reopened: 'Reopened',
 };
-const SEVERITY_STYLE = {
-  low: 'bg-slate-100 text-slate-600',
-  medium: 'bg-sky-100 text-sky-700',
-  high: 'bg-orange-100 text-orange-700',
-  critical: 'bg-rose-100 text-rose-700',
-};
-const DEFAULT_STATUSES = [
-  { key: 'open', label: 'Open' },
-  { key: 'in_progress', label: 'In Progress' },
-  { key: 'pending_customer', label: 'Pending Customer' },
-  { key: 'pending_internal', label: 'Pending Internal Team' },
-  { key: 'resolved', label: 'Resolved' },
-  { key: 'closed', label: 'Closed' },
-  { key: 'reopened', label: 'Reopened' },
+
+const PRIORITIES = ['low', 'medium', 'high', 'critical'];
+
+const CATEGORIES = [
+  { key: 'bug', label: 'Bug / Issue' },
+  { key: 'difficulty', label: 'Difficulty / Question' },
+  { key: 'suggestion', label: 'Suggestion / Improvement' },
+  { key: 'other', label: 'Other' },
 ];
-const TYPE_LABEL = { bug: 'Bug', difficulty: 'Difficulty', suggestion: 'Suggestion' };
+const CATEGORY_KEYS = CATEGORIES.map((c) => c.key);
 
-const pretty = (s) => String(s || '').replace(/_/g, ' ');
-const errMsg = (err, fallback) => err?.response?.data?.message || fallback;
+const CATEGORY_FROM_TYPE = {
+  bug: 'bug',
+  difficulty: 'difficulty',
+  suggestion: 'suggestion',
+  other: 'other',
+};
 
-// Loads every page (100 per page) so counts and filters cover all tickets.
-async function fetchAllTickets() {
-  const all = [];
-  let page = 1;
-  let totalPages = 1;
-  do {
-    const res = await listSupportTickets({ pageSize: 100, page });
-    all.push(...(res.items || []));
-    totalPages = res.totalPages || 1;
-    page += 1;
-  } while (page <= totalPages && page <= 30);
-  return all;
-}
+const TYPE_FROM_CATEGORY = {
+  bug: 'bug',
+  difficulty: 'difficulty',
+  suggestion: 'suggestion',
+  other: 'other',
+};
 
-export default function SupportTicketsPage() {
-  const [tickets, setTickets] = useState([]);
-  const [statuses, setStatuses] = useState(DEFAULT_STATUSES);
-  const [agents, setAgents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [severityFilter, setSeverityFilter] = useState('all');
-  const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState(null);
+const MODULES = [
+  { key: 'dashboard', label: 'Dashboard' },
+  { key: 'accounts', label: 'Accounts' },
+  { key: 'inventory', label: 'Inventory' },
+  { key: 'crm', label: 'CRM / Leads' },
+  { key: 'projects', label: 'Projects' },
+  { key: 'investors', label: 'Investors' },
+  { key: 'hrm', label: 'HRM / Payroll' },
+  { key: 'billing', label: 'Billing' },
+  { key: 'portal', label: 'Client / Vendor Portal' },
+  { key: 'other', label: 'Other' },
+];
+const MODULE_KEYS = MODULES.map((m) => m.key);
 
-  async function load() {
-    setLoading(true);
-    try {
-      setTickets(await fetchAllTickets());
-      setError('');
-    } catch (err) {
-      setError(
-        err.response?.status === 403
-          ? 'You do not have access to this page.'
-          : 'Failed to load tickets.'
-      );
-    } finally {
-      setLoading(false);
+const DONE = ['resolved', 'closed'];
+const REOPEN_DAYS = 7;
+const DUE_SOON_MINUTES = 120;
+
+const DEFAULT_SLA = {
+  low: { firstResponseMins: 1440, resolutionMins: 4320 },
+  medium: { firstResponseMins: 480, resolutionMins: 2880 },
+  high: { firstResponseMins: 120, resolutionMins: 1440 },
+  critical: { firstResponseMins: 30, resolutionMins: 240 },
+};
+
+const STAFF_ROLES = new Set(
+  (process.env.SUPPORT_STAFF_ROLES || 'superadmin,admin,manager')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+const isStaff = (actor) => {
+  if (!actor) return false;
+  const roles = [actor.role, ...(actor.secondaryRoles || [])].filter(Boolean).map((r) => String(r).toLowerCase());
+  return roles.some((r) => STAFF_ROLES.has(r));
+};
+
+const isAdmin = (actor) => {
+  if (!actor) return false;
+  const roles = [actor.role, ...(actor.secondaryRoles || [])].filter(Boolean).map((r) => String(r).toLowerCase());
+  return roles.some((r) => r === 'superadmin' || r === 'admin');
+};
+
+const canView = (actor, ticket) => {
+  if (!actor || !ticket) return false;
+  if (isStaff(actor)) return true;
+  return String(ticket.reporterId) === String(actor.id);
+};
+
+const loadActor = (req, res, next) => {
+  if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+  req.actor = {
+    id: req.user.id,
+    name: req.user.name || req.user.email || 'User',
+    email: req.user.email,
+    role: req.user.role,
+    secondaryRoles: req.user.secondaryRoles || [],
+  };
+  next();
+};
+
+const listPeople = async () => {
+  const users = await User.findAll({
+    attributes: ['id', 'name', 'email', 'role', 'status'],
+    order: [['name', 'ASC']],
+  });
+  return users.map((u) => ({
+    id: String(u.id),
+    name: u.name || u.email,
+    email: u.email,
+    role: u.role,
+    isStaff: isStaff(u),
+  }));
+};
+
+const getSlaRules = async (transaction) => {
+  const rules = await SupportSlaRule.findAll({ transaction });
+  const map = { ...DEFAULT_SLA };
+  rules.forEach((r) => {
+    if (r.priority) {
+      map[r.priority] = {
+        firstResponseMins: Number(r.firstResponseMins) || DEFAULT_SLA[r.priority]?.firstResponseMins,
+        resolutionMins: Number(r.resolutionMins) || DEFAULT_SLA[r.priority]?.resolutionMins,
+      };
     }
+  });
+  return map;
+};
+
+const dueDates = (baseDate, rule, pausedSeconds = 0) => {
+  const base = new Date(baseDate).getTime() + (Number(pausedSeconds) || 0) * 1000;
+  const r = rule || DEFAULT_SLA.medium;
+  return {
+    first: new Date(base + (r.firstResponseMins || 480) * 60000),
+    res: new Date(base + (r.resolutionMins || 2880) * 60000),
+  };
+};
+
+const PRIORITY_RANK = `CASE 
+  WHEN severity = 'critical' THEN 1 
+  WHEN severity = 'high' THEN 2 
+  WHEN severity = 'medium' THEN 3 
+  ELSE 4 
+END`;
+
+const activeCond = {
+  status: { [Op.notIn]: DONE },
+  archivedAt: null,
+};
+
+const overdueCond = (now = new Date()) => ({
+  status: { [Op.notIn]: DONE },
+  archivedAt: null,
+  resolutionDueAt: { [Op.ne]: null, [Op.lt]: now },
+});
+
+const slaInfo = (ticket, now = new Date()) => {
+  if (ticket.status === 'resolved' || ticket.status === 'closed') {
+    if (!ticket.resolutionDueAt || !ticket.resolvedAt) return { state: 'completed', label: 'Resolved' };
+    const met = new Date(ticket.resolvedAt) <= new Date(ticket.resolutionDueAt);
+    return { state: met ? 'met' : 'breached', label: met ? 'Resolved on time' : 'Resolved late' };
   }
+  if (!ticket.resolutionDueAt) return { state: 'none', label: 'No SLA' };
+  const diffMin = (new Date(ticket.resolutionDueAt).getTime() - now.getTime()) / 60000;
+  if (diffMin < 0) return { state: 'overdue', label: 'Overdue' };
+  if (diffMin <= DUE_SOON_MINUTES) return { state: 'due_soon', label: 'Due soon' };
+  return { state: 'on_track', label: 'On track' };
+};
 
-  useEffect(() => {
-    load();
-    getSupportMeta()
-      .then((m) => {
-        if (Array.isArray(m.statuses) && m.statuses.length) setStatuses(m.statuses);
-        setAgents(m.agents || []);
-      })
-      .catch(() => {});
-  }, []);
+const decorate = (ticket, now = new Date()) => {
+  const json = typeof ticket.toJSON === 'function' ? ticket.toJSON() : { ...ticket };
+  json.sla = slaInfo(ticket, now);
+  return json;
+};
 
-  const statusLabel = useMemo(
-    () => Object.fromEntries(statuses.map((s) => [s.key, s.label])),
-    [statuses]
-  );
+const allowedTransitions = (actor, ticket, now = new Date()) => {
+  const staff = isStaff(actor);
+  const status = ticket.status;
+  const isReporter = String(ticket.reporterId) === String(actor.id);
 
-  const counts = useMemo(() => {
-    const c = {};
-    tickets.forEach((t) => { c[t.status] = (c[t.status] || 0) + 1; });
-    return c;
-  }, [tickets]);
+  if (ticket.archivedAt) return [];
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return tickets.filter((t) => {
-      if (statusFilter !== 'all' && t.status !== statusFilter) return false;
-      if (typeFilter !== 'all' && t.type !== typeFilter) return false;
-      if (severityFilter !== 'all' && t.severity !== severityFilter) return false;
-      if (q) {
-        const hay = `${t.ticketNo} ${t.title} ${t.reporterName}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
+  const transitions = [];
+  if (staff) {
+    STATUSES.filter((s) => s !== status).forEach((s) => {
+      transitions.push({ key: s, label: STATUS_LABEL[s] });
     });
-  }, [tickets, statusFilter, typeFilter, severityFilter, search]);
-
-  return (
-    <div className="min-h-screen bg-slate-50">
-      <Topbar />
-
-      <div className="mx-auto w-full max-w-[1500px] p-4 sm:p-6">
-        <div className="mb-5 flex items-center gap-2">
-          <LifeBuoy size={20} className="text-slate-700" />
-          <h1 className="text-lg font-bold text-slate-900">Support Tickets</h1>
-        </div>
-
-        {error ? (
-          <p className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</p>
-        ) : (
-          <>
-            {/* Status counts */}
-            <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
-              {statuses.map((s) => (
-                <button
-                  key={s.key}
-                  onClick={() => setStatusFilter(statusFilter === s.key ? 'all' : s.key)}
-                  className={`rounded-2xl border p-4 text-left transition-colors ${
-                    statusFilter === s.key
-                      ? 'border-slate-900 bg-white'
-                      : 'border-slate-200 bg-white hover:bg-slate-50'
-                  }`}
-                >
-                  <p className="text-[11px] font-semibold text-slate-500">{s.label}</p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900">{counts[s.key] || 0}</p>
-                </button>
-              ))}
-            </div>
-
-            {/* Filters */}
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <div className="relative min-w-[220px] flex-1">
-                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search ticket no, title or reporter..."
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-100"
-                />
-              </div>
-              <select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs outline-none"
-              >
-                <option value="all">All types</option>
-                {Object.entries(TYPE_LABEL).map(([v, l]) => (
-                  <option key={v} value={v}>{l}</option>
-                ))}
-              </select>
-              <select
-                value={severityFilter}
-                onChange={(e) => setSeverityFilter(e.target.value)}
-                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs capitalize outline-none"
-              >
-                <option value="all">All priorities</option>
-                {['low', 'medium', 'high', 'critical'].map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Table */}
-            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3">Ticket</th>
-                    <th className="px-4 py-3">Title</th>
-                    <th className="px-4 py-3">Reporter</th>
-                    <th className="px-4 py-3">Assignee</th>
-                    <th className="px-4 py-3">Type</th>
-                    <th className="px-4 py-3">Priority</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Reported</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {loading ? (
-                    <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">Loading…</td></tr>
-                  ) : filtered.length === 0 ? (
-                    <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">No tickets found</td></tr>
-                  ) : (
-                    filtered.map((t) => (
-                      <tr
-                        key={t.id}
-                        onClick={() => setSelectedId(t.id)}
-                        className="cursor-pointer hover:bg-slate-50"
-                      >
-                        <td className="px-4 py-3 font-semibold text-slate-700">{t.ticketNo}</td>
-                        <td className="max-w-[320px] truncate px-4 py-3 text-slate-800">{t.title}</td>
-                        <td className="px-4 py-3 text-slate-600">{t.reporterName}</td>
-                        <td className="px-4 py-3 text-slate-600">{t.assignedToName || 'Unassigned'}</td>
-                        <td className="px-4 py-3 text-slate-600">{TYPE_LABEL[t.type] || t.type}</td>
-                        <td className="px-4 py-3">
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${SEVERITY_STYLE[t.severity] || SEVERITY_STYLE.low}`}>
-                            {t.severity}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLE[t.status] || STATUS_STYLE.closed}`}>
-                            {statusLabel[t.status] || pretty(t.status)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-slate-500">{new Date(t.createdAt).toLocaleDateString()}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-
-        {selectedId && (
-          <TicketDetail
-            id={selectedId}
-            statusLabel={statusLabel}
-            agents={agents}
-            onClose={() => setSelectedId(null)}
-            onSaved={load}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function saveBlob(blob, name) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function ImagePreview({ ticketId, att }) {
-  const [src, setSrc] = useState('');
-  useEffect(() => {
-    let url = '';
-    let alive = true;
-    downloadSupportAttachment(ticketId, att.id, true)
-      .then((blob) => {
-        if (!alive) return;
-        url = URL.createObjectURL(blob);
-        setSrc(url);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [ticketId, att.id]);
-  if (!src) return null;
-  return <img src={src} alt={att.originalName} className="max-h-72 rounded-xl border border-slate-200" />;
-}
-
-function TicketDetail({ id, statusLabel, agents, onClose, onSaved }) {
-  const [detail, setDetail] = useState(null);
-  const [status, setStatus] = useState('');
-  const [statusNote, setStatusNote] = useState('');
-  const [assignee, setAssignee] = useState('');
-  const [reply, setReply] = useState('');
-  const [kind, setKind] = useState('reply');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [savedMsg, setSavedMsg] = useState('');
-
-  async function loadDetail() {
-    try {
-      const d = await getSupportTicket(id);
-      setDetail(d);
-      setStatus(d.ticket.status);
-      setAssignee(d.ticket.assignedToId ? String(d.ticket.assignedToId) : '');
-      setError('');
-    } catch (err) {
-      setError(errMsg(err, 'Failed to load ticket'));
-    }
+    return transitions;
   }
 
-  useEffect(() => {
-    loadDetail();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-
-  const ticket = detail?.ticket;
-  const can = detail?.can || {};
-
-  // Current status + the statuses this user may move to
-  const statusOptions = useMemo(() => {
-    if (!detail) return [];
-    const keys = (detail.transitions || []).map((t) =>
-      typeof t === 'string' ? t : t.key || t.status || t.to
-    );
-    return Array.from(new Set([detail.ticket.status, ...keys.filter(Boolean)]));
-  }, [detail]);
-
-  async function run(fn, okText) {
-    setError('');
-    setSavedMsg('');
-    setBusy(true);
-    try {
-      await fn();
-      setSavedMsg(okText);
-      await loadDetail();
-      onSaved();
-    } catch (err) {
-      setError(errMsg(err, 'Action failed'));
-    } finally {
-      setBusy(false);
+  // Reporter rules
+  if (isReporter) {
+    if (status === 'resolved') {
+      const closedCutoff = new Date(ticket.resolvedAt || ticket.updatedAt).getTime() + REOPEN_DAYS * 86400000;
+      if (now.getTime() <= closedCutoff) {
+        transitions.push({ key: 'reopened', label: 'Reopen' });
+      }
+      transitions.push({ key: 'closed', label: 'Close Ticket' });
+    } else if (status !== 'closed') {
+      transitions.push({ key: 'closed', label: 'Close Ticket' });
     }
   }
+  return transitions;
+};
 
-  const saveStatus = () =>
-    run(async () => {
-      await changeSupportTicketStatus(id, status, statusNote.trim() || undefined);
-      setStatusNote('');
-    }, 'Status updated');
-
-  const saveAssignee = () =>
-    run(() => assignSupportTicket(id, assignee || null), 'Assignee updated');
-
-  const sendMessage = () =>
-    run(async () => {
-      const fd = new FormData();
-      fd.append('body', reply);
-      fd.append('kind', kind);
-      await addSupportMessage(id, fd);
-      setReply('');
-    }, kind === 'note' ? 'Note added' : 'Reply sent');
-
-  async function download(att) {
-    try {
-      saveBlob(await downloadSupportAttachment(id, att.id), att.originalName);
-    } catch (err) {
-      setError(errMsg(err, 'Download failed'));
-    }
+const buildWhere = (actor, query = {}, now = new Date()) => {
+  const where = {};
+  if (!isStaff(actor)) {
+    where.reporterId = String(actor.id);
+  } else if (query.reporterId) {
+    where.reporterId = String(query.reporterId);
   }
 
-  const statusChanged = ticket && status !== ticket.status;
-  const assigneeChanged = ticket && assignee !== (ticket.assignedToId ? String(ticket.assignedToId) : '');
+  if (query.archived === '1') {
+    where.archivedAt = { [Op.ne]: null };
+  } else {
+    where.archivedAt = null;
+  }
 
-  return (
-    <div
-      className="fixed inset-0 z-[10000] flex justify-end bg-slate-900/40"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="flex h-full w-full max-w-xl flex-col overflow-hidden bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-5 py-3.5">
-          <div>
-            <p className="text-xs font-semibold text-slate-900">{ticket?.ticketNo || 'Ticket'}</p>
-            {ticket && (
-              <p className="text-[10px] text-slate-400">
-                {ticket.reporterName} · {new Date(ticket.createdAt).toLocaleString()}
-              </p>
-            )}
-          </div>
-          <button
-            onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-          >
-            <X size={16} />
-          </button>
-        </div>
+  if (query.status && query.status !== 'all') {
+    where.status = query.status;
+  }
+  if (query.severity && query.severity !== 'all') {
+    where.severity = query.severity;
+  }
+  if (query.category && query.category !== 'all') {
+    where.category = query.category;
+  }
+  if (query.module && query.module !== 'all') {
+    where.module = query.module;
+  }
+  if (query.assignedToId) {
+    where.assignedToId = query.assignedToId === 'unassigned' ? null : query.assignedToId;
+  }
 
-        <div className="flex-1 space-y-4 overflow-y-auto p-5">
-          {!ticket ? (
-            <p className="py-10 text-center text-xs text-slate-400">{error || 'Loading…'}</p>
-          ) : (
-            <>
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">{ticket.title}</h2>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-                    {TYPE_LABEL[ticket.type] || ticket.type}
-                  </span>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${SEVERITY_STYLE[ticket.severity] || SEVERITY_STYLE.low}`}>
-                    {ticket.severity}
-                  </span>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLE[ticket.status] || STATUS_STYLE.closed}`}>
-                    {statusLabel[ticket.status] || pretty(ticket.status)}
-                  </span>
-                </div>
-              </div>
+  if (query.search) {
+    const q = `%${String(query.search).trim()}%`;
+    where[Op.or] = [
+      { ticketNo: { [Op.like]: q } },
+      { title: { [Op.like]: q } },
+      { reporterName: { [Op.like]: q } },
+      { description: { [Op.like]: q } },
+    ];
+  }
 
-              <div>
-                <p className="mb-1 text-[11px] font-semibold text-slate-500">Description</p>
-                <p className="whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-800">
-                  {ticket.description}
-                </p>
-              </div>
+  return where;
+};
 
-              {ticket.pageUrl && (
-                <div>
-                  <p className="mb-1 text-[11px] font-semibold text-slate-500">Page where it happened</p>
-                  <a
-                    href={ticket.pageUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 break-all text-xs text-blue-600 hover:underline"
-                  >
-                    {ticket.pageUrl} <ExternalLink size={12} />
-                  </a>
-                </div>
-              )}
+const buildOrder = (sort = 'createdAt', dir = 'DESC') => {
+  const direction = String(dir).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+  if (sort === 'priority') {
+    return [[literal(PRIORITY_RANK), direction], ['createdAt', 'DESC']];
+  }
+  const allowed = ['id', 'ticketNo', 'title', 'status', 'severity', 'createdAt', 'updatedAt', 'resolutionDueAt'];
+  return [[allowed.includes(sort) ? sort : 'createdAt', direction]];
+};
 
-              {/* Attachments (includes the old screenshot) */}
-              {detail.attachments.length > 0 && (
-                <div>
-                  <p className="mb-1 text-[11px] font-semibold text-slate-500">Attachments</p>
-                  <div className="space-y-2">
-                    {detail.attachments.map((a) => (
-                      <div key={a.id} className="space-y-2">
-                        {a.isImage && <ImagePreview ticketId={id} att={a} />}
-                        <button
-                          onClick={() => download(a)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] text-slate-700 hover:bg-slate-50"
-                        >
-                          <Paperclip size={12} /> {a.originalName}
-                          {a.isInternal && <span className="text-amber-600">(internal)</span>}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+const logEvent = async (ticketId, actor, action, details = {}, transaction) => {
+  return SupportTicketEvent.create({
+    ticketId,
+    actorId: actor ? String(actor.id) : null,
+    actorName: actor ? actor.name : 'System',
+    action,
+    details: details.note || details.from ? JSON.stringify(details) : null,
+    isInternal: Boolean(details.internal),
+  }, { transaction });
+};
 
-              {ticket.userAgent && (
-                <p className="break-all text-[10px] text-slate-400">{ticket.userAgent}</p>
-              )}
+const resolveReporter = async (reporterId) => {
+  const user = await User.findByPk(reporterId, { attributes: ['id', 'name', 'email'] });
+  if (!user) throw new HttpError(400, 'Selected reporter does not exist');
+  return { id: String(user.id), name: user.name || user.email };
+};
 
-              <hr className="border-slate-100" />
+const resolveAssignee = async (assigneeId) => {
+  if (!assigneeId) return null;
+  const user = await User.findByPk(assigneeId, { attributes: ['id', 'name', 'email', 'role'] });
+  if (!user) throw new HttpError(400, 'Selected assignee does not exist');
+  return { id: String(user.id), name: user.name || user.email };
+};
 
-              {/* Status */}
-              <div className="space-y-2">
-                <label className="block text-[11px] font-semibold text-slate-500">
-                  Status
-                  <select
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                    disabled={statusOptions.length <= 1}
-                    className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-100 disabled:bg-slate-50"
-                  >
-                    {statusOptions.map((s) => (
-                      <option key={s} value={s}>{statusLabel[s] || pretty(s)}</option>
-                    ))}
-                  </select>
-                </label>
-                {statusChanged && (
-                  <>
-                    <textarea
-                      value={statusNote}
-                      onChange={(e) => setStatusNote(e.target.value)}
-                      rows={3}
-                      placeholder={
-                        status === 'resolved'
-                          ? 'Resolution summary (required): cause and fix'
-                          : 'Note for this change (optional)'
-                      }
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-100"
-                    />
-                    <div className="flex justify-end">
-                      <button
-                        onClick={saveStatus}
-                        disabled={busy}
-                        className="h-9 rounded-xl bg-slate-900 px-5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-                      >
-                        {busy ? 'Saving…' : 'Update status'}
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
+const applyAssign = async (ticket, actor, assigneeId, transaction) => {
+  const fromName = ticket.assignedToName || 'Unassigned';
+  const assignee = await resolveAssignee(assigneeId);
+  const toName = assignee ? assignee.name : 'Unassigned';
+  
+  await ticket.update({
+    assignedToId: assignee ? assignee.id : null,
+    assignedToName: assignee ? assignee.name : null,
+  }, { transaction });
 
-              {/* Assignee */}
-              {can.assign && (
-                <div className="space-y-2">
-                  <label className="block text-[11px] font-semibold text-slate-500">
-                    Assigned to
-                    <select
-                      value={assignee}
-                      onChange={(e) => setAssignee(e.target.value)}
-                      className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-100"
-                    >
-                      <option value="">Unassigned</option>
-                      {agents.map((a) => (
-                        <option key={a.id} value={String(a.id)}>{a.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                  {assigneeChanged && (
-                    <div className="flex justify-end">
-                      <button
-                        onClick={saveAssignee}
-                        disabled={busy}
-                        className="h-9 rounded-xl bg-slate-900 px-5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-                      >
-                        {busy ? 'Saving…' : 'Update assignee'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
+  await logEvent(ticket.id, actor, 'assigned', { from: fromName, to: toName }, transaction);
 
-              <hr className="border-slate-100" />
+  const notices = [];
+  if (assignee && String(assignee.id) !== String(actor.id)) {
+    notices.push({
+      ticket,
+      type: 'SupportTicketAssigned',
+      message: `${ticket.ticketNo} was assigned to you`,
+      to: [{ user: assignee.id }],
+      actorId: actor.id,
+    });
+  }
+  return notices;
+};
 
-              {/* Conversation */}
-              <div>
-                <p className="mb-2 text-[11px] font-semibold text-slate-500">Conversation</p>
-                {detail.messages.length === 0 ? (
-                  <p className="text-xs text-slate-400">No messages yet.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {detail.messages.map((m) => (
-                      <div
-                        key={m.id}
-                        className={`rounded-xl p-3 text-xs ${
-                          m.kind === 'note' ? 'border border-amber-200 bg-amber-50' : 'bg-slate-50'
-                        }`}
-                      >
-                        <p className="mb-1 text-[10px] text-slate-500">
-                          <span className="font-semibold text-slate-700">{m.authorName}</span>
-                          {m.kind === 'note' && ' · internal note'}
-                          {' · '}
-                          {new Date(m.createdAt).toLocaleString()}
-                        </p>
-                        <p className="whitespace-pre-wrap leading-relaxed text-slate-800">{m.body}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+const changeStatus = async (ticket, actor, newStatus, options = {}, transaction) => {
+  if (!STATUSES.includes(newStatus)) throw new HttpError(400, 'Invalid status');
+  const oldStatus = ticket.status;
+  if (oldStatus === newStatus) return [];
 
-              {(can.reply || can.note) && (
-                <div className="space-y-2">
-                  {can.reply && can.note && (
-                    <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-[11px]">
-                      {[['reply', 'Reply to reporter'], ['note', 'Internal note']].map(([k, l]) => (
-                        <button
-                          key={k}
-                          onClick={() => setKind(k)}
-                          className={`rounded-md px-3 py-1 font-medium ${
-                            kind === k ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
-                          }`}
-                        >
-                          {l}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <textarea
-                    value={reply}
-                    onChange={(e) => setReply(e.target.value)}
-                    rows={3}
-                    placeholder={kind === 'note' ? 'Internal note (not visible to the reporter)' : 'Write a reply'}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none placeholder:text-slate-400 focus:border-slate-400 focus:ring-4 focus:ring-slate-100"
-                  />
-                  <div className="flex justify-end">
-                    <button
-                      onClick={sendMessage}
-                      disabled={busy || !reply.trim()}
-                      className="h-9 rounded-xl bg-slate-900 px-5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-                    >
-                      {busy ? 'Sending…' : kind === 'note' ? 'Add note' : 'Send reply'}
-                    </button>
-                  </div>
-                </div>
-              )}
+  const now = new Date();
+  const upd = { status: newStatus, statusChangedAt: now };
 
-              {error && <p className="text-xs font-medium text-rose-600">{error}</p>}
-              {savedMsg && <p className="text-xs font-medium text-emerald-600">{savedMsg}</p>}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+  if (newStatus === 'resolved') {
+    upd.resolvedAt = now;
+  } else if (newStatus === 'reopened') {
+    upd.reopenCount = (ticket.reopenCount || 0) + 1;
+    upd.resolvedAt = null;
+  }
+
+  await ticket.update(upd, { transaction });
+  await logEvent(ticket.id, actor, 'status_changed', { from: oldStatus, to: newStatus, note: options.note }, transaction);
+
+  const notices = [];
+  if (String(ticket.reporterId) !== String(actor.id)) {
+    notices.push({
+      ticket,
+      type: 'SupportTicketStatus',
+      message: `${ticket.ticketNo} status changed to ${STATUS_LABEL[newStatus] || newStatus}`,
+      to: [{ user: ticket.reporterId }],
+      actorId: actor.id,
+    });
+  }
+  return notices;
+};
+
+const applyPriority = async (ticket, actor, newPriority, transaction) => {
+  if (!PRIORITIES.includes(newPriority)) throw new HttpError(400, 'Invalid priority');
+  const fromPriority = ticket.severity;
+  if (fromPriority === newPriority) return [];
+
+  const rule = (await getSlaRules(transaction))[newPriority];
+  const due = dueDates(ticket.createdAt, rule, ticket.pausedSeconds);
+
+  await ticket.update({
+    severity: newPriority,
+    firstResponseDueAt: due.first,
+    resolutionDueAt: ticket.slaCustom ? ticket.resolutionDueAt : due.res,
+  }, { transaction });
+
+  await logEvent(ticket.id, actor, 'priority_changed', { from: fromPriority, to: newPriority }, transaction);
+  return [];
+};
+
+const applyArchive = async (ticket, actor, isArchive, note, transaction) => {
+  const now = isArchive ? new Date() : null;
+  await ticket.update({ archivedAt: now }, { transaction });
+  await logEvent(ticket.id, actor, isArchive ? 'archived' : 'restored', { note }, transaction);
+  return [];
+};
+
+const sendNotices = async (notices = []) => {
+  for (const n of notices || []) {
+    try {
+      if (typeof notify?.sendNotification === 'function') {
+        await notify.sendNotification(n);
+      }
+    } catch (e) {
+      console.error('[support notices] notification failed:', e.message);
+    }
+  }
+};
+
+const toCsv = (rows) => {
+  return rows
+    .map((row) =>
+      row
+        .map((cell) => {
+          const val = cell === null || cell === undefined ? '' : String(cell);
+          return `"${val.replace(/"/g, '""')}"`;
+        })
+        .join(',')
+    )
+    .join('\r\n');
+};
+
+module.exports = {
+  HttpError,
+  STATUSES,
+  STATUS_LABEL,
+  PRIORITIES,
+  CATEGORIES,
+  CATEGORY_KEYS,
+  CATEGORY_FROM_TYPE,
+  TYPE_FROM_CATEGORY,
+  MODULES,
+  MODULE_KEYS,
+  DONE,
+  REOPEN_DAYS,
+  DUE_SOON_MINUTES,
+  PRIORITY_RANK,
+  activeCond,
+  overdueCond,
+  isStaff,
+  isAdmin,
+  canView,
+  loadActor,
+  listPeople,
+  getSlaRules,
+  dueDates,
+  slaInfo,
+  decorate,
+  allowedTransitions,
+  buildWhere,
+  buildOrder,
+  logEvent,
+  resolveReporter,
+  resolveAssignee,
+  applyAssign,
+  changeStatus,
+  applyPriority,
+  applyArchive,
+  sendNotices,
+  toCsv,
+};
