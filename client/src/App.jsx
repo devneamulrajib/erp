@@ -124,12 +124,19 @@ import AdminApprovalCenter from './pages/AdminApprovalCenter'
 import AccountantDashboard from './pages/AccountantDashboard'
 
 import AttendanceLogPage from './pages/AttendanceLogPage'
+import EmployeeTaskOverview from './pages/EmployeeTaskOverview'
+import TaskListPage from './pages/TaskListPage'
+import TaskDetailPage from './pages/TaskDetailPage'
+import WorkLogReportPage from './pages/WorkLogReportPage'
 
 // --- Core Portal ---
 import PortalLogin from './portal/pages/PortalLogin'
 import PortalDashboard from './portal/pages/PortalDashboard'
 import PortalEmployeeDashboard from './portal/pages/PortalEmployeeDashboard'
 import PortalAttendancePage from './portal/pages/PortalAttendancePage'
+import PortalTasksPage from './portal/pages/PortalTasksPage'
+import PortalTaskDetailPage from './portal/pages/PortalTaskDetailPage'
+import PortalWorkLogPage from './portal/pages/PortalWorkLogPage'
 import PortalLeaveRequestPage from './portal/pages/PortalLeaveRequestPage'
 import PortalAdvanceRequestPage from './portal/pages/PortalAdvanceRequestPage'
 import PortalMyRequestsPage from './portal/pages/PortalMyRequestsPage'
@@ -368,6 +375,10 @@ function App() {
         <Route path="/accounts-module/contra_list_add/:id" element={<ProtectedRoute><ContraVoucherPage /></ProtectedRoute>} />
         <Route path="/inventory-module/reports/stock" element={<ProtectedRoute><StockReportPage /></ProtectedRoute>} />
         <Route path="/hrm-module/attendance-log" element={<ProtectedRoute><AttendanceLogPage /></ProtectedRoute>} />
+        <Route path="/hrm-module/tasks/overview" element={<ProtectedRoute><EmployeeTaskOverview /></ProtectedRoute>} />
+        <Route path="/hrm-module/tasks/:id" element={<ProtectedRoute><TaskDetailPage /></ProtectedRoute>} />
+        <Route path="/hrm-module/tasks" element={<ProtectedRoute><TaskListPage /></ProtectedRoute>} />
+        <Route path="/hrm-module/work-log" element={<ProtectedRoute><WorkLogReportPage /></ProtectedRoute>} />
 
         {/* --- HRM MODULE ROUTES --- */}
         <Route path="/hrm-module/employee" element={<ProtectedRoute><EmployeeListPage /></ProtectedRoute>} />
@@ -426,6 +437,9 @@ function App() {
           }
         />
         <Route path="/portal/employee/attendance" element={<PortalProtectedRoute allowedRoles={['employee']}><PortalAttendancePage /></PortalProtectedRoute>} />
+        <Route path="/portal/employee/tasks" element={<PortalProtectedRoute allowedRoles={['employee']}><PortalTasksPage /></PortalProtectedRoute>} />
+        <Route path="/portal/employee/tasks/:id" element={<PortalProtectedRoute allowedRoles={['employee']}><PortalTaskDetailPage /></PortalProtectedRoute>} />
+        <Route path="/portal/employee/work-log" element={<PortalProtectedRoute allowedRoles={['employee']}><PortalWorkLogPage /></PortalProtectedRoute>} />
         <Route path="/portal/employee/leave" element={<PortalProtectedRoute allowedRoles={['employee']}><PortalLeaveRequestPage /></PortalProtectedRoute>} />
         <Route path="/portal/employee/advance" element={<PortalProtectedRoute allowedRoles={['employee']}><PortalAdvanceRequestPage /></PortalProtectedRoute>} />
         <Route path="/portal/employee/requests" element={<PortalProtectedRoute allowedRoles={['employee']}><PortalMyRequestsPage /></PortalProtectedRoute>} />

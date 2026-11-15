@@ -14,6 +14,7 @@ import { getPortalUser } from '../api/portalAuth';
 import PortalLayout from '../components/PortalLayout';
 import CheckInCard from '../components/CheckInCard';
 import SalaryCard from '../components/SalaryCard';
+import TaskTimerCard from '../components/TaskTimerCard';
 
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTH_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -262,6 +263,9 @@ export default function PortalEmployeeDashboard() {
             <div className="contents md:block md:col-span-3 md:space-y-5">
               <div className="order-1 [&>*]:mb-0">
                 <CheckInCard onChange={loadAttendance} />
+              </div>
+              <div className="order-1">
+                <TaskTimerCard />
               </div>
               <div className="order-2">
                 <SalaryCard />

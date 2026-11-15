@@ -456,7 +456,10 @@ router.post('/attendance/mark', auth, async (req, res) => {
     const markedBy = req.user?.name || 'Admin';
     for (const r of records) {
       if (!r.employeeId || !r.status) continue;
-      await Attendance.upsert({ employeeId: r.employeeId, date, status: r.status, markedBy });
+      // Update the latest row for that day (keeps check-in/out times); create only if none exists.
+      const existing = await Attendance.findOne({ where: { employeeId: r.employeeId, date }, order: [['id', 'DESC']] });
+      if (existing) await existing.update({ status: r.status, markedBy });
+      else await Attendance.create({ employeeId: r.employeeId, date, status: r.status, markedBy });
     }
     res.json({ message: 'Attendance saved' });
   } catch (err) {

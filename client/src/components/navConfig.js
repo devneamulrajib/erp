@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   TrendingUp,
   LineChart,
+  ListChecks,
 } from 'lucide-react';
 import { canAccessModule } from '../config/permissions';
 
@@ -348,6 +349,17 @@ const HRM_SUBPAGES = [
   { key: 'allowance-deduction', label: 'Allowance & Deduction', route: '/hrm-module/allowance-deduction' },
   { key: 'salary-grade', label: 'Salary Grade', route: '/hrm-module/salary-grade' },
   { key: 'attendance-log', label: 'Attendance Log', route: '/hrm-module/attendance-log' },
+  {
+    key: 'tasks-worklog',
+    label: 'Tasks & Work Log',
+    icon: ListChecks,
+    route: null,
+    children: [
+      { key: 'task-overview', label: 'Live Overview', route: '/hrm-module/tasks/overview' },
+      { key: 'task-list', label: 'All Tasks', route: '/hrm-module/tasks' },
+      { key: 'work-log-report', label: 'Work Log Report', route: '/hrm-module/work-log' },
+    ],
+  },
   { key: 'attendance', label: 'Attendance', route: '/hrm-module/attendance' },
   { key: 'pay-slip-process', label: 'Pay Slip Process', route: '/hrm-module/pay-slip-process' },
   { key: 'pay-slip', label: 'Pay Slip', route: '/hrm-module/pay-slip' },

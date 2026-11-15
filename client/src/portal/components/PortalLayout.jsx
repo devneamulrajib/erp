@@ -10,6 +10,7 @@ import {
   CalendarDays,
   CalendarCheck,
   Banknote,
+  ListChecks,
   Search,
   Bell,
 } from 'lucide-react';
@@ -19,10 +20,11 @@ import trikonLogo from '../../assets/trikon-logo.png';
 
 const NAV_ITEMS = [
   { to: '/portal/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: null },
-  { to: '/portal/invoices', label: 'Invoices', icon: Receipt, roles: null },
+  { to: '/portal/invoices', label: 'Invoices', icon: Receipt, roles: ['customer', 'supplier', 'vendor'] },
   { to: '/portal/quotes', label: 'Quotes', icon: FileCheck2, roles: ['customer'] },
   { to: '/portal/orders', label: 'Orders', icon: ShoppingCart, roles: ['supplier', 'vendor'] },
   { to: '/portal/material-requisitions', label: 'Requisitions', icon: ClipboardList, roles: ['supplier', 'vendor'] },
+  { to: '/portal/employee/tasks', label: 'Tasks', icon: ListChecks, roles: ['employee'] },
   { to: '/portal/employee/attendance', label: 'Attendance', icon: CalendarCheck, roles: ['employee'] },
   { to: '/portal/employee/leave', label: 'Leave', icon: CalendarDays, roles: ['employee'] },
   { to: '/portal/employee/advance', label: 'Advance', icon: Banknote, roles: ['employee'] },
