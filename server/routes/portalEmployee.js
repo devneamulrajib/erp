@@ -3,11 +3,15 @@ const { Op } = require('sequelize');
 const { portalAuth, requireRole } = require('../middleware/portalAuth');
 const { Employee, EmployeeAdvance, LeaveRequest, Attendance } = require('../models/associations');
 const { notifyAdmin } = require('../utils/notify');
+const sequelize = require('../config/db');
+const { TaskTimeLog } = require('../models/associations');
+const { stopRunningLogs } = require('../utils/taskTime');
 
 router.use(portalAuth, requireRole('employee'));
 router.use('/salary', require('./portalSalary'));
 router.use('/requests', require('./portalEmployeeRequests'));
 router.use('/account', require('./portalEmployeeAccount'));
+router.use('/tasks', require('./portalTasks'));
 
 /* ---------- Attendance settings (edit here) ---------- */
 const TIMEZONE = process.env.APP_TIMEZONE || 'Asia/Dhaka';
@@ -128,12 +132,15 @@ router.get('/attendance/today', async (req, res) => {
     const employeeId = req.portalUser.customerId;
     const date = todayStr();
     const weeklyOff = isWeeklyOff(date);
-    const record = await Attendance.findOne({ where: { employeeId, date }, order: [['id', 'DESC']] });
+    const records = await Attendance.findAll({ where: { employeeId, date }, order: [['id', 'DESC']] });
+    const record = records[0];
+    const checkInAt = records.map((r) => r.checkInAt).filter(Boolean).sort((a, b) => a - b)[0] || null;
+    const checkOutAt = records.map((r) => r.checkOutAt).filter(Boolean).sort((a, b) => b - a)[0] || null;
 
     let status = record?.status || null;
     if (!status && !weeklyOff && (await findApprovedLeave(employeeId, date))) status = 'Leave';
 
-    res.json({ date, status, weeklyOff });
+    res.json({ date, status, weeklyOff, checkInAt, checkOutAt });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -152,7 +159,11 @@ router.post('/attendance/check-in', async (req, res) => {
 
     const existing = await Attendance.findOne({ where: { employeeId, date }, order: [['id', 'DESC']] });
     if (existing) {
-      if (existing.status === 'Present') return res.json({ date, status: 'Present', alreadyMarked: true });
+      if (existing.status === 'Present') {
+        // Admin may have marked Present earlier without a time; record the self check-in time now.
+        if (!existing.checkInAt) await existing.update({ checkInAt: new Date() });
+        return res.json({ date, status: 'Present', alreadyMarked: true });
+      }
       return res.status(400).json({
         message: `Today is already recorded as ${existing.status}. Contact HR if this is wrong.`,
       });
@@ -161,8 +172,32 @@ router.post('/attendance/check-in', async (req, res) => {
       return res.status(400).json({ message: 'You are on approved leave today.' });
     }
 
-    await Attendance.create({ employeeId, date, status: 'Present', markedBy: `${employee.name} (self)` });
+    await Attendance.create({
+      employeeId, date, status: 'Present', markedBy: `${employee.name} (self)`, checkInAt: new Date(),
+    });
     res.status(201).json({ date, status: 'Present' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/attendance/check-out', async (req, res) => {
+  try {
+    const employeeId = req.portalUser.customerId;
+    const date = todayStr();
+    const record = await Attendance.findOne({ where: { employeeId, date }, order: [['id', 'DESC']] });
+    if (!record || record.status !== 'Present') {
+      return res.status(400).json({ message: 'You have not checked in today.' });
+    }
+    if (record.checkOutAt) {
+      return res.json({ date, checkOutAt: record.checkOutAt, alreadyCheckedOut: true });
+    }
+    const checkOutAt = new Date();
+    await sequelize.transaction(async (t) => {
+      await stopRunningLogs(TaskTimeLog, employeeId, { transaction: t });
+      await record.update({ checkOutAt }, { transaction: t });
+    });
+    res.json({ date, checkOutAt });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

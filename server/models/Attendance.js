@@ -6,6 +6,8 @@ const Attendance = sequelize.define('Attendance', {
   date: { type: DataTypes.DATEONLY, allowNull: false },
   status: { type: DataTypes.ENUM('Present', 'Absent', 'Leave', 'Holiday'), defaultValue: 'Present' },
   markedBy: DataTypes.STRING,
+  checkInAt: { type: DataTypes.DATE, allowNull: true },
+  checkOutAt: { type: DataTypes.DATE, allowNull: true },
 }, {
   tableName: 'attendances',
   timestamps: true,

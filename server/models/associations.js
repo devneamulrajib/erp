@@ -163,6 +163,9 @@ const Employee = require('./Employee');
 const EmployeeAdvance = require('./EmployeeAdvance');
 const LeaveRequest = require('./LeaveRequest');
 const Attendance = require('./Attendance');
+const Task = require('./Task');
+const TaskProgressUpdate = require('./TaskProgressUpdate');
+const TaskTimeLog = require('./TaskTimeLog');
 const PaySlip = require('./PaySlip');
 const SalaryDeduction = require('./SalaryDeduction');
 
@@ -184,6 +187,20 @@ LeaveRequest.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
 
 Employee.hasMany(Attendance, { as: 'attendanceRecords', foreignKey: 'employeeId', onDelete: 'CASCADE' });
 Attendance.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
+
+// ---- Employee Tasks & Work Log ----
+Employee.hasMany(Task, { as: 'tasks', foreignKey: 'assignedTo', onDelete: 'CASCADE' });
+Task.belongsTo(Employee, { as: 'assignee', foreignKey: 'assignedTo' });
+Project.hasMany(Task, { as: 'tasks', foreignKey: 'projectId', onDelete: 'SET NULL' });
+Task.belongsTo(Project, { as: 'project', foreignKey: 'projectId' });
+Task.hasMany(TaskProgressUpdate, { as: 'progressUpdates', foreignKey: 'taskId', onDelete: 'CASCADE' });
+TaskProgressUpdate.belongsTo(Task, { as: 'task', foreignKey: 'taskId' });
+Task.hasMany(TaskTimeLog, { as: 'timeLogs', foreignKey: 'taskId', onDelete: 'CASCADE' });
+TaskTimeLog.belongsTo(Task, { as: 'task', foreignKey: 'taskId' });
+Employee.hasMany(TaskTimeLog, { as: 'timeLogs', foreignKey: 'employeeId', onDelete: 'CASCADE' });
+TaskTimeLog.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
+Employee.hasMany(TaskProgressUpdate, { as: 'taskProgressUpdates', foreignKey: 'employeeId', onDelete: 'CASCADE' });
+TaskProgressUpdate.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
 
 // ---- PaySlip / SalaryDeduction (Payroll) ----
 OfficeExpense.hasOne(PaySlip, { foreignKey: 'officeExpenseId' });
@@ -874,6 +891,9 @@ module.exports = {
   EmployeeAdvance,
   LeaveRequest,
   Attendance,
+  Task,
+  TaskProgressUpdate,
+  TaskTimeLog,
   PaySlip,
   SalaryDeduction,
   PortalRequest,

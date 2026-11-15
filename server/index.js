@@ -106,6 +106,7 @@ app.use('/api/support-tickets', require('./routes/supportTicket'));
 app.use('/api/employee', require('./routes/employee'));
 app.use('/api/payslip', require('./routes/paySlip'));
 app.use('/api/attendance-corrections', require('./routes/attendanceCorrection'));
+app.use('/api/tasks', require('./routes/task'));
 app.use('/api/assign-share', require('./routes/assignShare'));
 app.use('/api/investor-management', require('./routes/investor'));
 
@@ -140,4 +141,5 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  require('./utils/timerSweeper').startTimerSweeper();
 });
