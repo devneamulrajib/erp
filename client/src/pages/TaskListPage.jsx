@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Loader2, X } from 'lucide-react';
+import { Plus, Loader2 } from 'lucide-react';
 import Topbar from '../components/Topbar';
+import Modal from '../components/Modal';
 import { listTasks, createTasks, deleteTask, fmtMinutes } from '../api/task';
 import { getEmployees } from '../api/employee';
 
@@ -106,18 +107,34 @@ export default function TaskListPage() {
           </table>
         </div>
       </main>
-      {showForm && <AssignModal employees={employees} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); load(); }} />}
+
+      <AssignModal
+        open={showForm}
+        employees={employees}
+        onClose={() => setShowForm(false)}
+        onSaved={() => { setShowForm(false); load(); }}
+      />
     </div>
   );
 }
 
-function AssignModal({ employees, onClose, onSaved }) {
+function AssignModal({ open, employees, onClose, onSaved }) {
   const [form, setForm] = useState({ title: '', description: '', priority: 'Medium', dueDate: '', estimateHours: '' });
   const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const toggle = (id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+
+  // Reset the form every time the dialog is opened
+  useEffect(() => {
+    if (open) {
+      setForm({ title: '', description: '', priority: 'Medium', dueDate: '', estimateHours: '' });
+      setSelected([]);
+      setError('');
+      setBusy(false);
+    }
+  }, [open]);
 
   async function submit(e) {
     e.preventDefault();
@@ -139,12 +156,8 @@ function AssignModal({ employees, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-      <form onSubmit={submit} className="max-h-[90vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-semibold text-slate-900">Assign task</h3>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
-        </div>
+    <Modal open={open} title="Assign task" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3">
         {error && <p className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-600">{error}</p>}
         <input required className={inputCls} placeholder="Task title" value={form.title} onChange={set('title')} />
         <textarea rows={3} className={inputCls} placeholder="Description" value={form.description} onChange={set('description')} />
@@ -169,6 +182,6 @@ function AssignModal({ employees, onClose, onSaved }) {
           <button disabled={busy} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{busy ? 'Assigning…' : 'Assign'}</button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
