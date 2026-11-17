@@ -11,6 +11,7 @@ import {
   CalendarCheck,
   Banknote,
   ListChecks,
+  TrendingUp,
   Search,
   Bell,
 } from 'lucide-react';
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { to: '/portal/quotes', label: 'Quotes', icon: FileCheck2, roles: ['customer'] },
   { to: '/portal/orders', label: 'Orders', icon: ShoppingCart, roles: ['supplier', 'vendor'] },
   { to: '/portal/material-requisitions', label: 'Requisitions', icon: ClipboardList, roles: ['supplier', 'vendor'] },
+  { to: '/portal/earnings', label: 'Earnings', icon: TrendingUp, roles: ['supplier', 'vendor'] },
   { to: '/portal/employee/tasks', label: 'Tasks', icon: ListChecks, roles: ['employee'] },
   { to: '/portal/employee/attendance', label: 'Attendance', icon: CalendarCheck, roles: ['employee'] },
   { to: '/portal/employee/leave', label: 'Leave', icon: CalendarDays, roles: ['employee'] },

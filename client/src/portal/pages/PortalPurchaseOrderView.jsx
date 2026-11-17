@@ -86,6 +86,24 @@ export default function PortalPurchaseOrderView() {
 
   const currentStepIndex = order ? DELIVERY_STEPS.indexOf(order.deliveryStatus || 'Pending') : 0;
 
+  const bill = order?.bill || null;
+  const totalAmt = Number(bill?.grandTotal ?? order?.grandTotal) || 0;
+  const paidAmt = Number(bill?.paid) || 0;
+  const dueAmt = bill
+    ? Math.max(bill.due !== undefined && bill.due !== null ? Number(bill.due) || 0 : totalAmt - paidAmt, 0)
+    : totalAmt;
+  let payState = order?.paymentStatus === 'Paid' ? 'Paid' : 'Unpaid';
+  if (bill && totalAmt > 0 && dueAmt <= 0) payState = 'Paid';
+  else if (paidAmt > 0) payState = 'Partial';
+  const paidPct = totalAmt > 0 ? Math.min(100, Math.round((paidAmt / totalAmt) * 100)) : 0;
+  const payTone = payState === 'Paid' ? 'text-emerald-600' : payState === 'Partial' ? 'text-amber-600' : 'text-rose-600';
+
+  let runningBal = totalAmt;
+  const historyRows = (bill?.BillPayments || []).map((p) => {
+    runningBal -= Number(p.amount) || 0;
+    return { ...p, balance: Math.max(runningBal, 0) };
+  });
+
   return (
     <PortalLayout>
       <Link to="/portal/orders" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-700 mb-4">
@@ -186,11 +204,57 @@ export default function PortalPurchaseOrderView() {
               <Wallet size={15} className="text-slate-400" /> Payment
             </h2>
             <p className="text-sm text-slate-600 mb-3">
-              Status: <span className={order.paymentStatus === 'Paid' ? 'text-emerald-600 font-medium' : 'text-rose-600 font-medium'}>
-                {order.paymentStatus || 'Unpaid'}
-              </span>
+              Status: <span className={`${payTone} font-medium`}>{payState}</span>
             </p>
-            {order.paymentStatus === 'Paid' && !order.supplierPaymentConfirmedAt && (
+
+            {bill && (
+              <>
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  <div>
+                    <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wide mb-0.5">Total</div>
+                    <div className="text-sm font-semibold text-slate-800">৳{totalAmt.toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wide mb-0.5">Paid</div>
+                    <div className="text-sm font-semibold text-emerald-600">৳{paidAmt.toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wide mb-0.5">Due</div>
+                    <div className={`text-sm font-semibold ${dueAmt > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>৳{dueAmt.toLocaleString()}</div>
+                  </div>
+                </div>
+                <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                  <div className="h-full bg-emerald-500" style={{ width: `${paidPct}%` }} />
+                </div>
+                <div className="text-[11px] text-slate-400 mt-1 mb-4">{paidPct}% paid</div>
+
+                <div className="border border-slate-200 rounded-xl overflow-hidden overflow-x-auto mb-4">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-500">
+                        <th className="text-left px-3 py-2 font-medium text-[10px] uppercase tracking-wide">Date</th>
+                        <th className="text-left px-3 py-2 font-medium text-[10px] uppercase tracking-wide">Method</th>
+                        <th className="text-right px-3 py-2 font-medium text-[10px] uppercase tracking-wide">Amount</th>
+                        <th className="text-right px-3 py-2 font-medium text-[10px] uppercase tracking-wide">Balance Due</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {historyRows.length === 0 ? (
+                        <tr><td colSpan={4} className="text-center py-5 text-slate-400">No payments received yet</td></tr>
+                      ) : historyRows.map((p, i) => (
+                        <tr key={p.id || i}>
+                          <td className="px-3 py-2 text-slate-500">{p.date}</td>
+                          <td className="px-3 py-2 text-slate-700">{p.paymentMethod}{p.chequeReceiptNo ? ` · ${p.chequeReceiptNo}` : ''}</td>
+                          <td className="px-3 py-2 text-right font-medium text-emerald-700">৳{Number(p.amount || 0).toLocaleString()}</td>
+                          <td className={`px-3 py-2 text-right font-medium ${p.balance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>৳{p.balance.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+            {payState === 'Paid' && !order.supplierPaymentConfirmedAt && (
               <button
                 onClick={handleConfirmPayment}
                 disabled={busy}

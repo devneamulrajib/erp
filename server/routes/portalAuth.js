@@ -2,9 +2,10 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { Op } = require('sequelize');
 
 // Models
-const { Customer, Party, Employee, Investor } = require('../models/associations');
+const { Customer, Party, Employee, Investor, ChartOfAccount } = require('../models/associations');
 // Middleware & Utilities
 const { portalAuth } = require('../middleware/portalAuth'); // named export
 const limiter = require('../utils/attemptLimiter'); // exports: check, fail, clear
@@ -43,6 +44,19 @@ async function touchLastLogin(user) {
   await user.save({ fields: [field], validate: false });
 }
 
+/**
+ * Finds a Customer / Supplier account (ChartOfAccount) that already has a
+ * portal password, by saved email or mobile number.
+ */
+function findContactForLogin(identifier) {
+  return ChartOfAccount.findOne({
+    where: {
+      portalPassword: { [Op.ne]: null },
+      [Op.or]: [{ email: identifier }, { mobile: identifier }]
+    }
+  });
+}
+
 // ==========================================
 // POST /login - Portal Multi-Role Login
 // ==========================================
@@ -69,13 +83,21 @@ router.post('/login', async (req, res) => {
     let user = null;
     let role = null;
 
-    // 1. Check Customer
-    user = await findForLogin(Customer, identifier);
+    // 0. Check Customer / Supplier accounts (ChartOfAccount)
+    user = await findContactForLogin(identifier);
     if (user) {
-      role = user.portalRole || 'customer';
+      role = user.portalRole || (user.contactType === 'Supplier' ? 'supplier' : 'customer');
     }
 
-    // 2. Check Supplier / Party
+    // 1. Check Customer (legacy table)
+    if (!user) {
+      user = await findForLogin(Customer, identifier);
+      if (user) {
+        role = user.portalRole || 'customer';
+      }
+    }
+
+    // 2. Check Supplier / Party (legacy table)
     if (!user) {
       user = await findForLogin(Party, identifier);
       if (user) {
@@ -126,7 +148,7 @@ router.post('/login', async (req, res) => {
     await touchLastLogin(user);
 
     // Payload standardization
-    const username = fields.username || user.email;
+    const username = fields.username || user.email || identifier;
     const payload = {
       portal: true,
       id: user.id,
@@ -170,6 +192,26 @@ router.get('/me', portalAuth, async (req, res) => {
       return wanted.filter((a) => a in attrs);
     };
 
+    // Customer / Supplier accounts (ChartOfAccount) with portal access
+    if (['customer', 'supplier', 'vendor'].includes(role)) {
+      const contact = await ChartOfAccount.findOne({
+        where: { id, portalPassword: { [Op.ne]: null } },
+        attributes: ['id', 'name', 'mobile', 'email', 'lastPortalLoginAt']
+      });
+      if (contact) {
+        const data = contact.toJSON();
+        return res.json({
+          id: data.id,
+          name: data.name,
+          phone: data.mobile,
+          email: data.email,
+          portal_username: data.email,
+          portal_last_login: data.lastPortalLoginAt,
+          role
+        });
+      }
+    }
+
     const common = ['id', 'name', 'phone', 'email', 'portal_username', 'portal_last_login'];
     let user = null;
 
@@ -179,6 +221,7 @@ router.get('/me', portalAuth, async (req, res) => {
         break;
 
       case 'supplier':
+      case 'vendor':
         user = await Party.findByPk(id, { attributes: pick(Party, common) });
         break;
 

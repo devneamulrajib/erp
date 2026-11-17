@@ -1,5 +1,5 @@
 // client/src/components/Topbar.jsx
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -66,6 +66,21 @@ const NOTIFICATION_MODULE_MAP = {
   BudgetRejected: 'accounts',
 };
 
+// Which menu item (key from navConfig) each notification type points to.
+// This is what puts the badge on the exact entry inside the dropdown.
+const NOTIFICATION_ITEM_MAP = {
+  MaterialRequisitionQuotation: 'material-requisition',
+  PurchaseOrderConfirmed: 'purchase-order-list',
+  PurchaseOrderDelivered: 'purchase-order-list',
+  InvoiceUploaded: 'purchase-order-list',
+  DeliveryConfirmed: 'purchase-order-list',
+  PaymentConfirmedBySupplier: 'purchase-order-list',
+  PaymentRecorded: 'purchase-order-list',
+  OfficeExpenseRequest: 'approval-center',
+  PaymentVoucherRequest: 'approval-center',
+  BudgetRequest: 'approval-center',
+};
+
 const MODULE_TAG_STYLES = {
   requisition: 'bg-amber-50 text-amber-700 border-amber-200/60',
   inventory: 'bg-sky-50 text-sky-700 border-sky-200/60',
@@ -84,6 +99,7 @@ export default function Topbar() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [moduleCounts, setModuleCounts] = useState({});
+  const [itemCounts, setItemCounts] = useState({});
 
   const profileRef = useRef(null);
   const notifRef = useRef(null);
@@ -124,25 +140,31 @@ export default function Topbar() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Refresh unread total + per-module + per-menu-item counts
+  const refreshCount = useCallback(() => {
+    getUnreadCount().then(setUnreadCount).catch(() => {});
+    getUnreadCountByType()
+      .then((byType) => {
+        const modules = {};
+        const items = {};
+        Object.entries(byType).forEach(([type, count]) => {
+          const moduleKey = NOTIFICATION_MODULE_MAP[type];
+          if (moduleKey) modules[moduleKey] = (modules[moduleKey] || 0) + count;
+          const itemKey = NOTIFICATION_ITEM_MAP[type];
+          if (itemKey) items[itemKey] = (items[itemKey] || 0) + count;
+        });
+        setModuleCounts(modules);
+        setItemCounts(items);
+      })
+      .catch(() => {});
+  }, []);
+
   // Poll notifications
   useEffect(() => {
-    function refreshCount() {
-      getUnreadCount().then(setUnreadCount).catch(() => {});
-      getUnreadCountByType()
-        .then((byType) => {
-          const grouped = {};
-          Object.entries(byType).forEach(([type, count]) => {
-            const key = NOTIFICATION_MODULE_MAP[type];
-            if (key) grouped[key] = (grouped[key] || 0) + count;
-          });
-          setModuleCounts(grouped);
-        })
-        .catch(() => {});
-    }
     refreshCount();
     const interval = setInterval(refreshCount, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [refreshCount]);
 
   // Click outside listener
   useEffect(() => {
@@ -180,6 +202,7 @@ export default function Topbar() {
         await markNotificationRead(n.id);
         setUnreadCount((c) => Math.max(0, c - 1));
         setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
+        refreshCount(); // clears the nav badges right away
       } catch { /* ignore */ }
     }
     setNotifOpen(false);
@@ -194,6 +217,7 @@ export default function Topbar() {
       await markAllNotificationsRead();
       setUnreadCount(0);
       setModuleCounts({});
+      setItemCounts({});
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     } catch { /* ignore */ }
   }
@@ -488,7 +512,7 @@ export default function Topbar() {
 
         {/* SUB NAVIGATION (ModuleNav) */}
         <div className="relative z-10 -mt-[1px] flex justify-center px-4">
-          <ModuleNav badgeCounts={moduleCounts} />
+          <ModuleNav badgeCounts={moduleCounts} itemBadgeCounts={itemCounts} />
         </div>
       </header>
 

@@ -27,8 +27,27 @@ function asArray(res) {
   return body?.rows || body?.data || [];
 }
 
+const money = (n) => `৳${Number(n || 0).toLocaleString()}`;
+
 function pendingQuotationCount(row) {
   return (row.quotations || []).filter((q) => q.status === 'Submitted').length;
+}
+
+function correctionCount(row) {
+  return (row.quotations || []).filter((q) => q.status === 'NeedsCorrection').length;
+}
+
+/* Money + supplier summary for one requisition row.
+   - Accepted quote wins (that is the final supplier and amount).
+   - Otherwise show every live quote and the lowest amount. */
+function quoteSummary(row) {
+  const quotes = row.quotations || [];
+  const accepted = quotes.find((q) => q.status === 'Accepted');
+  const live = quotes.filter((q) => q.status === 'Submitted' || q.status === 'NeedsCorrection');
+  const lowest = live.length
+    ? live.reduce((min, q) => (Number(q.subtotal) < Number(min.subtotal) ? q : min), live[0])
+    : null;
+  return { accepted, live, lowest };
 }
 
 const inputCls = 'w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition';
@@ -143,8 +162,8 @@ function QuotationReviewModal({ requisition, onClose, onAccepted }) {
                         <td className="py-1.5 text-slate-700">{it.itemName}</td>
                         <td className="py-1.5 text-slate-600">{it.available === false ? 'No' : 'Yes'}</td>
                         <td className="py-1.5 text-right text-slate-600">{it.available === false ? '—' : it.offeredQty}</td>
-                        <td className="py-1.5 text-right text-slate-600">{it.available === false ? '—' : `৳${Number(it.quotedRate).toLocaleString()}`}</td>
-                        <td className="py-1.5 text-right font-medium text-slate-800">{it.available === false ? '—' : `৳${Number(it.quotedAmount).toLocaleString()}`}</td>
+                        <td className="py-1.5 text-right text-slate-600">{it.available === false ? '—' : money(it.quotedRate)}</td>
+                        <td className="py-1.5 text-right font-medium text-slate-800">{it.available === false ? '—' : money(it.quotedAmount)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -153,7 +172,7 @@ function QuotationReviewModal({ requisition, onClose, onAccepted }) {
                 {q.notes && <p className="text-xs text-slate-500 mb-3">Note: {q.notes}</p>}
 
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-slate-800">Subtotal: ৳{Number(q.subtotal).toLocaleString()}</p>
+                  <p className="text-sm font-semibold text-slate-800">Subtotal: {money(q.subtotal)}</p>
                   {q.status === 'Submitted' && (
                     <div className="flex items-center gap-2">
                       <button
@@ -276,8 +295,8 @@ function RequisitionOverviewModal({ requisitionId, initialRow, onClose, onEdit }
                         <td className="px-3 py-2 font-medium text-slate-700">{it.itemName}</td>
                         <td className="px-3 py-2 text-slate-600">{it.unit || '-'}</td>
                         <td className="px-3 py-2 text-right text-slate-600">{it.demandQty}</td>
-                        <td className="px-3 py-2 text-right text-slate-600">৳{Number(it.rate || 0).toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right font-medium text-slate-800">৳{((Number(it.rate) || 0) * (Number(it.demandQty) || 0)).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right text-slate-600">{money(it.rate)}</td>
+                        <td className="px-3 py-2 text-right font-medium text-slate-800">{money((Number(it.rate) || 0) * (Number(it.demandQty) || 0))}</td>
                       </tr>
                     ))
                   )}
@@ -287,7 +306,7 @@ function RequisitionOverviewModal({ requisitionId, initialRow, onClose, onEdit }
 
             <div className="flex items-center justify-between mb-5">
               <p className="text-sm text-slate-500">{data?.note ? `Note: ${data.note}` : ''}</p>
-              <p className="text-sm font-semibold text-slate-800">Subtotal: ৳{subtotal.toLocaleString()}</p>
+              <p className="text-sm font-semibold text-slate-800">Subtotal: {money(subtotal)}</p>
             </div>
 
             {(data?.approvals || []).length > 0 && (
@@ -338,36 +357,31 @@ function OverviewField({ label, value }) {
   );
 }
 
-/* Derives an overall lifecycle status for a requisition from whatever signals
-   the row carries. Trusts an explicit backend `status` field if present. */
+/* Overall lifecycle status. Converted wins; otherwise quotation activity
+   is more useful than the raw "Open" value. */
 function requisitionStatus(row) {
-  if (row.status) {
-    const label = String(row.status);
-    const key = label.toLowerCase();
-    if (key.includes('reject')) return { label, tone: 'red' };
-    if (key.includes('approve') || key.includes('complete') || key.includes('done')) return { label, tone: 'emerald' };
-    if (key.includes('convert') || key.includes('order') || key.includes('purchase')) return { label, tone: 'sky' };
-    if (key.includes('quotation') || key.includes('rfq')) return { label, tone: 'indigo' };
-    if (key.includes('pending') || key.includes('review')) return { label, tone: 'amber' };
-    return { label, tone: 'slate' };
-  }
+  const raw = row.status ? String(row.status) : '';
+  const key = raw.toLowerCase();
 
-  const approvals = row.approvals || [];
-  const hasPendingApproval = approvals.length > 0 && !approvals.every((a) => a.approved);
-  if (hasPendingApproval) return { label: 'Pending Approval', tone: 'amber' };
+  if (key.includes('reject')) return { label: raw, tone: 'red' };
+  if (key.includes('convert')) return { label: raw, tone: 'sky' };
+  if (key.includes('approve') || key.includes('complete') || key.includes('done')) return { label: raw, tone: 'emerald' };
 
   const pendingQuotes = pendingQuotationCount(row);
-  if (pendingQuotes > 0) return { label: 'Quotation Review', tone: 'indigo' };
+  if (pendingQuotes > 0) return { label: pendingQuotes > 1 ? `${pendingQuotes} Quotes to Review` : 'Quote to Review', tone: 'indigo' };
+  if (correctionCount(row) > 0) return { label: 'Correction Requested', tone: 'amber' };
 
-  if (approvals.length > 0 && approvals.every((a) => a.approved)) return { label: 'Approved', tone: 'emerald' };
+  const approvals = row.approvals || [];
+  if (approvals.length > 0 && !approvals.every((a) => a.approved)) return { label: 'Pending Approval', tone: 'amber' };
 
+  if (raw) return { label: raw, tone: key.includes('open') ? 'sky' : 'slate' };
   return { label: 'Draft', tone: 'slate' };
 }
 
 function StatusBadge({ label, tone = 'slate' }) {
   const tones = {
     slate: 'bg-slate-100 text-slate-600 ring-slate-500/10',
-    amber: 'bg-amber-50 text-amber-600 ring-amber-600/10',
+    amber: 'bg-amber-50 text-amber-700 ring-amber-600/20',
     emerald: 'bg-emerald-50 text-emerald-600 ring-emerald-600/10',
     indigo: 'bg-indigo-50 text-indigo-600 ring-indigo-600/10',
     sky: 'bg-sky-50 text-sky-600 ring-sky-600/10',
@@ -453,6 +467,95 @@ function StatCard({ icon: Icon, label, value, theme }) {
       </div>
     </div>
   );
+}
+
+/* ---------- Table cells ---------- */
+
+function ItemsCell({ row }) {
+  const items = row.items || [];
+  if (items.length === 0) return <span className="text-slate-400">No items</span>;
+  const shown = items.slice(0, 2);
+  const rest = items.length - shown.length;
+  const all = items.map((it) => `${it.itemName} (${it.demandQty} ${it.unit || ''})`.trim()).join('\n');
+  return (
+    <div className="space-y-0.5 max-w-[220px]" title={all}>
+      {shown.map((it) => (
+        <div key={it.id} className="flex items-baseline justify-between gap-2">
+          <span className="font-medium text-slate-800 truncate">{it.itemName}</span>
+          <span className="text-slate-400 shrink-0">{it.demandQty} {it.unit || ''}</span>
+        </div>
+      ))}
+      {rest > 0 && <div className="text-[11px] font-medium text-indigo-600">+{rest} more</div>}
+    </div>
+  );
+}
+
+function SupplierCell({ row }) {
+  const { accepted, live } = quoteSummary(row);
+
+  if (accepted) {
+    return (
+      <div>
+        <div className="font-semibold text-slate-800 truncate max-w-[200px]">{accepted.supplier?.name || 'Supplier'}</div>
+        <div className="text-[11px] text-emerald-600 font-medium">Selected supplier</div>
+      </div>
+    );
+  }
+
+  if (live.length > 0) {
+    const shown = live.slice(0, 2);
+    const rest = live.length - shown.length;
+    return (
+      <div className="space-y-0.5 max-w-[220px]">
+        {shown.map((q) => (
+          <div key={q.id} className="flex items-baseline justify-between gap-2">
+            <span className="font-medium text-slate-800 truncate">{q.supplier?.name || 'Supplier'}</span>
+            <span className={`shrink-0 text-[11px] ${q.status === 'NeedsCorrection' ? 'text-amber-600' : 'text-slate-500'}`}>
+              {money(q.subtotal)}
+            </span>
+          </div>
+        ))}
+        {rest > 0 && <div className="text-[11px] font-medium text-indigo-600">+{rest} more quoting</div>}
+      </div>
+    );
+  }
+
+  if (row.supplier?.name) {
+    return (
+      <div>
+        <div className="font-medium text-slate-800 truncate max-w-[200px]">{row.supplier.name}</div>
+        <div className="text-[11px] text-slate-400">Sent, awaiting quote</div>
+      </div>
+    );
+  }
+
+  return <span className="text-slate-400">Not assigned</span>;
+}
+
+function AmountCell({ row }) {
+  const { accepted, live, lowest } = quoteSummary(row);
+
+  if (accepted) {
+    return (
+      <div className="text-right">
+        <div className="text-sm font-bold text-slate-900">{money(accepted.subtotal)}</div>
+        <div className="text-[11px] text-emerald-600 font-medium">Accepted</div>
+      </div>
+    );
+  }
+
+  if (lowest) {
+    return (
+      <div className="text-right">
+        <div className="text-sm font-bold text-slate-900">{money(lowest.subtotal)}</div>
+        <div className="text-[11px] text-slate-400">
+          {live.length > 1 ? `Lowest of ${live.length} quotes` : '1 quote'}
+        </div>
+      </div>
+    );
+  }
+
+  return <div className="text-right text-slate-400">No quote yet</div>;
 }
 
 export default function MaterialRequisitionList() {
@@ -583,9 +686,12 @@ export default function MaterialRequisitionList() {
   const filtered = rows.filter((r) => {
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
-    return [r.code, r.reference, r.supplier?.name, r.project?.name]
-      .filter(Boolean)
-      .some((v) => String(v).toLowerCase().includes(q));
+    const haystack = [
+      r.code, r.reference, r.titleOfWork, r.supplier?.name, r.project?.name,
+      ...(r.items || []).map((it) => it.itemName),
+      ...(r.quotations || []).map((x) => x.supplier?.name),
+    ];
+    return haystack.filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
   });
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -642,7 +748,7 @@ export default function MaterialRequisitionList() {
           <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-5">{error}</div>
         )}
 
-        {/* Summary strip — colorful stat cards */}
+        {/* Summary strip */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           <StatCard icon={ClipboardList} label="Total Requisitions" value={rows.length} theme="indigo" />
           <StatCard icon={Search} label="Matching Search" value={filtered.length} theme="sky" />
@@ -650,7 +756,7 @@ export default function MaterialRequisitionList() {
           <StatCard icon={CheckCircle2} label="Active Filters" value={activeFilterCount} theme="emerald" />
         </div>
 
-        {/* Filters — collapsed behind a toggle button */}
+        {/* Filters */}
         <div className="mb-5">
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -739,8 +845,8 @@ export default function MaterialRequisitionList() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search requisitions..."
-                className="border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm w-64 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+                placeholder="Search code, item, supplier, project…"
+                className="border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm w-72 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
               />
             </div>
           </div>
@@ -752,26 +858,21 @@ export default function MaterialRequisitionList() {
                   <th className="px-3 py-2.5 text-left">
                     <input type="checkbox" onChange={(e) => toggleSelectAll(e.target.checked)} checked={selected.length > 0 && selected.length === paged.length} className="rounded border-slate-300" />
                   </th>
-                  <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">ID</th>
-                  <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">Project</th>
-                  <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">Title</th>
-                  <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">Code</th>
-                  <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">Ref</th>
-                  <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">Date</th>
-                  <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">Demand</th>
-                  <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">By</th>
+                  <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">Requisition</th>
+                  <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">Items</th>
+                  <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">Supplier</th>
+                  <th className="px-2 py-2.5 text-right font-medium text-[11px] uppercase tracking-wide">Amount</th>
                   <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">Status</th>
                   <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">Approval</th>
-                  <th className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">File</th>
                   <th className="px-2 py-2.5 text-right font-medium text-[11px] uppercase tracking-wide">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={13} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
+                  <tr><td colSpan={8} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
                 ) : paged.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="text-center py-16">
+                    <td colSpan={8} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <ClipboardList size={28} strokeWidth={1.5} />
                         <p className="text-sm">No entries found. Try adjusting your filters, or add a new requisition.</p>
@@ -779,33 +880,48 @@ export default function MaterialRequisitionList() {
                     </td>
                   </tr>
                 ) : (
-                  paged.map((row, i) => {
+                  paged.map((row) => {
                     const pendingCount = pendingQuotationCount(row);
+                    const needsFix = correctionCount(row) > 0;
                     return (
                       <tr
                         key={row.id}
-                        className={`hover:bg-slate-50/70 transition-colors whitespace-nowrap align-top text-xs ${
-                          pendingCount > 0 ? 'bg-amber-50/40 border-l-2 border-l-amber-400' : ''
+                        className={`hover:bg-slate-50/70 transition-colors align-top text-xs ${
+                          pendingCount > 0
+                            ? 'bg-amber-50/40 border-l-2 border-l-amber-400'
+                            : needsFix ? 'border-l-2 border-l-orange-300' : ''
                         }`}
                       >
-                        <td className="px-3 py-2.5">
+                        <td className="px-3 py-3">
                           <input type="checkbox" checked={selected.includes(row.id)} onChange={(e) => toggleSelectOne(row.id, e.target.checked)} className="rounded border-slate-300" />
                         </td>
-                        <td className="px-2 py-2.5 text-slate-400 font-mono">{(page - 1) * pageSize + i + 1}</td>
-                        <td className="px-2 py-2.5 text-slate-600">{row.project?.name || '-'}</td>
-                        <td className="px-2 py-2.5 font-medium text-slate-700 max-w-[140px] truncate">{row.titleOfWork || '-'}</td>
-                        <td className="px-2 py-2.5 text-slate-600 font-mono">{row.code}</td>
-                        <td className="px-2 py-2.5 text-slate-600">{row.reference || '-'}</td>
-                        <td className="px-2 py-2.5 text-slate-600">{fmtDate(row.date)}</td>
-                        <td className="px-2 py-2.5 text-slate-600">{fmtDate(row.demandDate)}</td>
-                        <td className="px-2 py-2.5 text-slate-600">{row.addedBy || '-'}</td>
-                        <td className="px-2 py-2.5">
+
+                        {/* Requisition: code, title, project, dates */}
+                        <td className="px-2 py-3">
+                          <div className="font-mono font-semibold text-slate-800">{row.code}</div>
+                          {row.titleOfWork && (
+                            <div className="text-slate-600 truncate max-w-[180px]">{row.titleOfWork}</div>
+                          )}
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            {row.project?.name || 'No project'}
+                          </div>
+                          <div className="text-[11px] text-slate-400">
+                            {fmtDate(row.date)} · Demand {fmtDate(row.demandDate)}
+                          </div>
+                        </td>
+
+                        <td className="px-2 py-3"><ItemsCell row={row} /></td>
+                        <td className="px-2 py-3"><SupplierCell row={row} /></td>
+                        <td className="px-2 py-3"><AmountCell row={row} /></td>
+
+                        <td className="px-2 py-3 whitespace-nowrap">
                           {(() => {
                             const st = requisitionStatus(row);
                             return <StatusBadge label={st.label} tone={st.tone} />;
                           })()}
                         </td>
-                        <td className="px-2 py-2.5">
+
+                        <td className="px-2 py-3 whitespace-nowrap">
                           {(() => {
                             const approvals = row.approvals || [];
                             if (approvals.length === 0) {
@@ -818,10 +934,7 @@ export default function MaterialRequisitionList() {
                                 {allApproved ? (
                                   <StatusBadge label="Approved" tone="emerald" />
                                 ) : (
-                                  <StatusBadge
-                                    label={`Pending (${pendingNames.length})`}
-                                    tone="amber"
-                                  />
+                                  <StatusBadge label={`Pending (${pendingNames.length})`} tone="amber" />
                                 )}
                                 {!allApproved && (
                                   <div className="text-[10px] text-slate-400 max-w-[140px] truncate" title={pendingNames.join(', ')}>
@@ -832,15 +945,9 @@ export default function MaterialRequisitionList() {
                             );
                           })()}
                         </td>
-                        <td className="px-2 py-2.5">
-                          {row.attachment ? (
-                            <a href={row.attachment} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-700 font-medium">
-                              <Paperclip size={11} />
-                            </a>
-                          ) : '-'}
-                        </td>
-                        <td className="px-2 py-2.5">
-                          <div className="flex items-center justify-end flex-wrap gap-1.5 max-w-[420px] ml-auto">
+
+                        <td className="px-2 py-3">
+                          <div className="flex items-center justify-end flex-wrap gap-1.5 max-w-[300px] ml-auto">
                             <ActionBtn
                               icon={Eye}
                               label="View"

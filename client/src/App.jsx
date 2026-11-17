@@ -146,6 +146,7 @@ import PortalQuotesPage from './portal/pages/PortalQuotesPage'
 import PortalOrdersPage from './portal/pages/PortalOrdersPage'
 import PortalRequestsPage from './portal/pages/PortalRequestsPage'
 import PortalPurchaseOrderView from './portal/pages/PortalPurchaseOrderView'
+import PortalEarnings from './portal/pages/PortalEarnings'
 import PortalMaterialRequisitionsPage from './portal/pages/PortalMaterialRequisitionsPage'
 import PortalMaterialRequisitionView from './portal/pages/PortalMaterialRequisitionView'
 import PortalProtectedRoute from './portal/components/PortalProtectedRoute'
@@ -448,6 +449,7 @@ function App() {
         <Route path="/portal/quotes" element={<PortalProtectedRoute allowedRoles={['customer', 'supplier']}><PortalQuotesPage /></PortalProtectedRoute>} />
         <Route path="/portal/orders" element={<PortalProtectedRoute allowedRoles={['customer', 'supplier']}><PortalOrdersPage /></PortalProtectedRoute>} />
         <Route path="/portal/orders/:id" element={<PortalProtectedRoute allowedRoles={['customer', 'supplier']}><PortalPurchaseOrderView /></PortalProtectedRoute>} />
+        <Route path="/portal/earnings" element={<PortalProtectedRoute allowedRoles={['supplier', 'vendor']}><PortalEarnings /></PortalProtectedRoute>} />
         <Route path="/portal/requests" element={<PortalProtectedRoute allowedRoles={['customer', 'supplier']}><PortalRequestsPage /></PortalProtectedRoute>} />
         <Route path="/portal/material-requisitions" element={<PortalProtectedRoute allowedRoles={['customer', 'supplier', 'employee']}><PortalMaterialRequisitionsPage /></PortalProtectedRoute>} />
         <Route path="/portal/material-requisitions/:id" element={<PortalProtectedRoute allowedRoles={['customer', 'supplier', 'employee']}><PortalMaterialRequisitionView /></PortalProtectedRoute>} />

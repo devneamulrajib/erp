@@ -109,6 +109,24 @@ export default function PortalDashboard() {
                 ৳{Number(data.cards.outstandingBalance || 0).toLocaleString()}
               </p>
 
+              {/* Suppliers: how much we've already paid them, with a link to the full track record */}
+              {isSupplierOrVendor && (
+                <Link
+                  to="/portal/earnings"
+                  className="flex items-center justify-between bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 rounded-xl px-3 py-2.5 mb-3 transition-colors"
+                >
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Total Received</p>
+                    <p className="text-lg font-bold text-emerald-700 leading-tight">
+                      ৳{Number(data.cards.paidAmount || 0).toLocaleString()}
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
+                    Track record <ArrowRight size={13} />
+                  </span>
+                </Link>
+              )}
+
               <div className="flex items-center gap-2">
                 <Link
                   to="/portal/invoices"

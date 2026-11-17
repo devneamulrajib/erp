@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const { Customer, Party, Employee, Investor } = require('../models/associations');
+const { Op } = require('sequelize');
+const { Customer, Party, Employee, Investor, ChartOfAccount } = require('../models/associations');
 const auth = require('../middleware/auth');
 const { findByPortalUsername } = require('../utils/portalFields');
 
@@ -22,12 +23,17 @@ function verifyAdminOrPermission(req, res, next) {
 // Attach base authentication and permission check across all administrative routes
 router.use(auth, verifyAdminOrPermission);
 
+const CONTACT_PORTAL_ROLES = ['customer', 'supplier', 'vendor'];
+
 /**
  * Resolves the Sequelize model and default portal role from an entity type string.
+ * 'contact' = rows from the Customer / Supplier account pages (ChartOfAccount table).
  */
 function resolveModelAndRole(type) {
   const t = (type || '').toLowerCase();
   switch (t) {
+    case 'contact':
+      return { Model: ChartOfAccount, defaultRole: null };
     case 'customer':
       return { Model: Customer, defaultRole: 'customer' };
     case 'supplier':
@@ -41,6 +47,13 @@ function resolveModelAndRole(type) {
     default:
       return { Model: null, defaultRole: null };
   }
+}
+
+/**
+ * Portal role for a ChartOfAccount row, taken from its contact type.
+ */
+function contactRoleOf(entity) {
+  return entity.contactType === 'Supplier' ? 'supplier' : 'customer';
 }
 
 /**
@@ -114,8 +127,38 @@ router.post('/create', async (req, res) => {
       return res.status(404).json({ message: `${entityType} record not found.` });
     }
 
+    let assignedRole = portalRole || defaultRole;
+
+    // Customer / Supplier accounts (ChartOfAccount) have no username column,
+    // so they sign in to the portal with their saved email or mobile number.
+    if (Model === ChartOfAccount) {
+      assignedRole = portalRole || contactRoleOf(entity);
+      if (!CONTACT_PORTAL_ROLES.includes(assignedRole)) {
+        return res.status(400).json({ message: 'Invalid portal role provided.' });
+      }
+
+      const allowed = [entity.email, entity.mobile]
+        .filter(Boolean)
+        .map((v) => String(v).trim().toLowerCase());
+      if (!allowed.includes(cleanUsername)) {
+        return res.status(400).json({
+          message: 'The portal username must be this account\'s saved email or mobile number.'
+        });
+      }
+
+      const clash = await ChartOfAccount.findOne({
+        where: {
+          id: { [Op.ne]: entity.id },
+          portalPassword: { [Op.ne]: null },
+          [Op.or]: [{ email: cleanUsername }, { mobile: cleanUsername }]
+        }
+      });
+      if (clash) {
+        return res.status(409).json({ message: 'Another portal account already uses this email or mobile number.' });
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
-    const assignedRole = portalRole || defaultRole;
 
     syncEntityFields(entity, {
       enable: true,

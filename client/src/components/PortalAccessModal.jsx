@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { ShieldCheck, ShieldAlert, ShieldOff, KeyRound, X, Loader2 } from 'lucide-react';
 import axios from '../api/axios';
 
+// Rows from the Customer / Supplier account pages (ChartOfAccount) carry a
+// contactType. For those, the portal role is fixed and no choice is needed.
+const CONTACT_ROLE_BY_TYPE = { Supplier: 'supplier', Customer: 'customer' };
+
 export default function PortalAccessModal({
   // Modal visibility props
   open,
@@ -18,6 +22,11 @@ export default function PortalAccessModal({
   const show = Boolean(open ?? isOpen);
   const entity = rawEntity || customer;
   const entityType = (rawEntityType || entity?.portalRole || 'customer').toLowerCase();
+
+  // Customer / Supplier contact rows: role is locked, and the server looks the
+  // record up in the ChartOfAccount table (entityType 'contact').
+  const lockedRole = CONTACT_ROLE_BY_TYPE[entity?.contactType] || null;
+  const apiEntityType = lockedRole ? 'contact' : entityType;
 
   // State Management
   const [username, setUsername] = useState('');
@@ -41,12 +50,12 @@ export default function PortalAccessModal({
         '';
 
       setUsername(defaultUsername);
-      setPortalRole(entity.portalRole || entity.portal_role || entityType || 'customer');
+      setPortalRole(lockedRole || entity.portalRole || entity.portal_role || entityType || 'customer');
       setPassword('');
       setConfirmPassword('');
       setError('');
     }
-  }, [show, entity, entityType]);
+  }, [show, entity, entityType, lockedRole]);
 
   if (!show || !entity) return null;
 
@@ -70,18 +79,18 @@ export default function PortalAccessModal({
       if (isConfigured) {
         // Reset password on existing configured entity
         await axios.post('/portal-admin/reset-password', {
-          entityType,
+          entityType: apiEntityType,
           entityId: entity.id,
           password
         });
       } else {
         // Create new portal access
         await axios.post('/portal-admin/create', {
-          entityType,
+          entityType: apiEntityType,
           entityId: entity.id,
           username: username.trim().toLowerCase(),
           password,
-          portalRole
+          portalRole: lockedRole || portalRole
         });
       }
 
@@ -105,7 +114,7 @@ export default function PortalAccessModal({
     setError('');
     try {
       await axios.post('/portal-admin/toggle-access', {
-        entityType,
+        entityType: apiEntityType,
         entityId: entity.id,
         access: !hasAccess
       });
@@ -128,7 +137,7 @@ export default function PortalAccessModal({
               {isConfigured ? 'Manage Portal Access' : 'Grant Portal Access'}
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              {entity.name} • <span className="capitalize">{entityType}</span>
+              {entity.name} • <span className="capitalize">{lockedRole || entityType}</span>
             </p>
           </div>
           <button
@@ -200,7 +209,7 @@ export default function PortalAccessModal({
             />
           </div>
 
-          {!isConfigured && ['customer', 'supplier', 'party', 'vendor'].includes(entityType) && (
+          {!isConfigured && !lockedRole && ['customer', 'supplier', 'party', 'vendor'].includes(entityType) && (
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">
                 Portal Assigned Role

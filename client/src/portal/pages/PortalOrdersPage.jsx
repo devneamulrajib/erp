@@ -29,6 +29,17 @@ function StatusBadge({ status }) {
   );
 }
 
+function billAmounts(o) {
+  const total = Number(o.bill?.grandTotal ?? o.grandTotal) || 0;
+  const paid = Number(o.bill?.paid) || 0;
+  const due = o.bill ? Math.max(o.bill.due !== undefined && o.bill.due !== null ? Number(o.bill.due) || 0 : total - paid, 0) : total;
+  let state = 'Unpaid';
+  if (o.bill && total > 0 && due <= 0) state = 'Paid';
+  else if (paid > 0) state = 'Partial';
+  else if (o.paymentStatus === 'Paid') state = 'Paid';
+  return { total, paid, due, state };
+}
+
 function DeliveryBadge({ status }) {
   const map = {
     Pending: 'bg-slate-100 text-slate-600',
@@ -97,14 +108,16 @@ export default function PortalOrdersPage() {
                 <th className="px-4 py-3 text-left font-medium">Delivery</th>
                 <th className="px-4 py-3 text-left font-medium">Payment</th>
                 <th className="px-4 py-3 text-right font-medium">Grand Total</th>
+                <th className="px-4 py-3 text-right font-medium">Paid</th>
+                <th className="px-4 py-3 text-right font-medium">Due</th>
                 <th className="px-4 py-3 text-right font-medium">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr><td colSpan={7} className="text-center py-10 text-slate-400 text-sm">Loading…</td></tr>
+                <tr><td colSpan={9} className="text-center py-10 text-slate-400 text-sm">Loading…</td></tr>
               ) : orders.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-10 text-slate-400 text-sm">No purchase orders yet</td></tr>
+                <tr><td colSpan={9} className="text-center py-10 text-slate-400 text-sm">No purchase orders yet</td></tr>
               ) : orders.map((o) => {
                 const needsAck = o.status === 'Submitted' || o.status === 'Sent to Supplier';
                 const canShip = o.status === 'Acknowledged' && o.deliveryStatus === 'Pending';
@@ -112,6 +125,7 @@ export default function PortalOrdersPage() {
                 const hasInvoice = !!o.convertedToBillId;
                 const canConfirmPayment = o.paymentStatus === 'Paid' && !o.supplierPaymentConfirmedAt;
                 const hasAnyAction = needsAck || canShip || canDeliver || hasInvoice || canConfirmPayment;
+                const amt = billAmounts(o);
                 return (
                   <tr key={o.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="px-4 py-3 font-mono text-xs text-slate-600">{o.code}</td>
@@ -119,15 +133,19 @@ export default function PortalOrdersPage() {
                     <td className="px-4 py-3"><StatusBadge status={o.status} /></td>
                     <td className="px-4 py-3"><DeliveryBadge status={o.deliveryStatus} /></td>
                     <td className="px-4 py-3">
-                      {o.paymentStatus === 'Paid' ? (
+                      {amt.state === 'Paid' ? (
                         <span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-medium">
                           <BadgeCheck size={12} /> Paid{o.supplierPaymentConfirmedAt ? ' · Confirmed' : ''}
                         </span>
+                      ) : amt.state === 'Partial' ? (
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-600/10">Partial</span>
                       ) : (
                         <span className="text-xs text-slate-400">Unpaid</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right font-medium text-slate-800">{Number(o.grandTotal).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right font-medium text-emerald-600">{o.bill ? amt.paid.toLocaleString() : '-'}</td>
+                    <td className={`px-4 py-3 text-right font-medium ${o.bill && amt.due > 0 ? 'text-rose-600' : 'text-slate-400'}`}>{o.bill ? amt.due.toLocaleString() : '-'}</td>
                     <td className="px-4 py-3 text-right relative">
                       <button
                         onClick={() => setOpenId(openId === o.id ? null : o.id)}

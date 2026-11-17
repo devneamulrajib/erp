@@ -57,6 +57,10 @@ router.get('/:id', portalAuth, requireRole('supplier', 'vendor'), async (req, re
 // deliver it, at what qty, and at what rate. Unavailable items are kept in
 // the quotation with available=false, quotedRate=0, offeredQty=0 so admin
 // can see what was declined.
+//
+// The same endpoint also handles edits: while the requisition is still Open,
+// a supplier can re-submit a response that is Submitted or NeedsCorrection.
+// Accepted / Rejected responses are final.
 router.post('/:id/quotation', portalAuth, requireRole('supplier', 'vendor'), async (req, res) => {
   try {
     const requisition = await MaterialRequisition.findOne({
@@ -71,8 +75,10 @@ router.post('/:id/quotation', portalAuth, requireRole('supplier', 'vendor'), asy
     const existing = await MaterialRequisitionQuotation.findOne({
       where: { materialRequisitionId: requisition.id, supplierId: req.portalUser.customerId },
     });
-    if (existing && existing.status !== 'NeedsCorrection') {
-      return res.status(409).json({ message: 'You have already submitted a quotation for this requisition' });
+    if (existing && !['Submitted', 'NeedsCorrection'].includes(existing.status)) {
+      return res.status(409).json({
+        message: `This response is already ${existing.status.toLowerCase()} and can no longer be edited`,
+      });
     }
 
     const { validUntil, notes, items } = req.body;
@@ -154,7 +160,9 @@ router.post('/:id/quotation', portalAuth, requireRole('supplier', 'vendor'), asy
 
     await notifyAdmin(
       'MaterialRequisitionQuotation',
-      `Quotation submitted for requisition ${requisition.code}`,
+      existing
+        ? `Quotation updated for requisition ${requisition.code}`
+        : `Quotation submitted for requisition ${requisition.code}`,
       'MaterialRequisition',
       requisition.id
     );
