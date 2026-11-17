@@ -7,14 +7,19 @@ const Expense = require('../models/Expense');
 const Voucher = require('../models/Voucher');
 const Sale = require('../models/Sale');
 const ProjectManager = require('../models/ProjectManager');
+const Area = require('../models/Area');
 
 function generateCode() {
   return 'P' + Math.floor(1000000 + Math.random() * 9000000);
 }
 
 function formatDuration(startDate, endDate) {
-  const from = startDate ? new Date(startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
-  const to = endDate ? new Date(endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+  const from = startDate
+    ? new Date(startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    : 'N/A';
+  const to = endDate
+    ? new Date(endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    : 'TBD (Ongoing)';
   return `From: ${from} To: ${to}`;
 }
 
@@ -29,10 +34,25 @@ router.get('/next-code', auth, async (req, res) => {
 
 router.get('/options', auth, async (req, res) => {
   try {
-    const managers = await ProjectManager.findAll({ order: [['name', 'ASC']] });
+    const [managers, areaRows, projectRows] = await Promise.all([
+      ProjectManager.findAll({ order: [['name', 'ASC']] }),
+      Area.findAll().catch(() => []),
+      Project.findAll({ attributes: ['area'] }).catch(() => []),
+    ]);
+
+    const areaSet = new Set();
+    areaRows.forEach((a) => {
+      const label = (a.name || a.areaName || a.title || a.area || '').trim();
+      if (label) areaSet.add(label);
+    });
+    projectRows.forEach((p) => {
+      const label = (p.area || '').trim();
+      if (label) areaSet.add(label);
+    });
+
     res.json({
       statuses: ['Active', 'Inactive', 'Complete', 'On Proposed'],
-      areas: [],
+      areas: Array.from(areaSet).sort((a, b) => a.localeCompare(b)),
       projectManagers: managers.map((m) => ({ id: m.id, name: m.name })),
     });
   } catch (err) {

@@ -82,12 +82,15 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
       mobile, email, nid, address, businessName, buyerReference, creditLimit, dueDate,
     } = req.body;
 
-    if (!chartOfGroup || !code || !name) {
+    // Chart of group is optional for suppliers only; every other contact
+    // type (Customer, Investor, Others) still requires it.
+    const groupOptional = contactType === 'Supplier';
+    if ((!chartOfGroup && !groupOptional) || !code || !name) {
       return res.status(400).json({ message: 'Chart of group, code and name are required' });
     }
 
     const created = await ChartOfAccount.create({
-      chartOfGroupId: chartOfGroup,
+      chartOfGroupId: chartOfGroup || null,
       code,
       name,
       openingBalance: openingBalance || 0,
@@ -119,7 +122,11 @@ router.put('/:id', auth, upload.single('image'), async (req, res) => {
     fields.forEach((key) => {
       if (req.body[key] !== undefined) item[key] = req.body[key];
     });
-    if (req.body.chartOfGroup !== undefined) item.chartOfGroupId = req.body.chartOfGroup;
+    // Only touch the group when the client actually sends a value, so
+    // editing a supplier without the field never clears an existing group.
+    if (req.body.chartOfGroup !== undefined && req.body.chartOfGroup !== '') {
+      item.chartOfGroupId = req.body.chartOfGroup;
+    }
     if (req.file) item.image = `/uploads/contacts/${req.file.filename}`;
 
     await item.save();

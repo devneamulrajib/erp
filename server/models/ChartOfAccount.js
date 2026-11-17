@@ -2,7 +2,9 @@ const { DataTypes } = require('sequelize');
 const sequelize = require('../config/db');
 
 const ChartOfAccount = sequelize.define('ChartOfAccount', {
-  chartOfGroupId: { type: DataTypes.INTEGER, allowNull: false },
+  // Nullable so Supplier accounts can be saved without a chart of group.
+  // The route still requires it for every other contact type.
+  chartOfGroupId: { type: DataTypes.INTEGER, allowNull: true },
   code: { type: DataTypes.STRING, allowNull: false, unique: true },
   name: { type: DataTypes.STRING, allowNull: false },
   openingBalance: { type: DataTypes.FLOAT, defaultValue: 0 },

@@ -3,16 +3,15 @@ import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
 import PortalAccessModal from '../components/PortalAccessModal';
-import { getChartOfGroupOptions } from '../api/chartOfGroup';
 import {
   getContacts, getNextContactCode, createContact, updateContact, deleteContact,
 } from '../api/contactAccounts';
-import { Pencil, Trash2, User, Search, Plus, LayoutGrid, Building2, Eye, Mail, Phone, MapPin, CreditCard, Calendar, KeyRound, Users, ListFilter, X } from 'lucide-react';
+import { Pencil, Trash2, Search, Plus, LayoutGrid, Building2, Eye, Mail, Phone, MapPin, KeyRound, Users } from 'lucide-react';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const EMPTY_FORM = {
   code: '', name: '', businessName: '', email: '', mobile: '',
-  address: '', creditLimit: '', dueDate: '', chartOfGroup: '',
+  address: '',
 };
 
 function SummaryCard({ label, value, icon, tone, onClick, active }) {
@@ -43,8 +42,6 @@ function SummaryCard({ label, value, icon, tone, onClick, active }) {
 
 export default function SupplierAccountsPage() {
   const [items, setItems] = useState([]);
-  const [groupOptions, setGroupOptions] = useState([]);
-  const [groupFilter, setGroupFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
@@ -62,22 +59,16 @@ export default function SupplierAccountsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await getContacts('Supplier', groupFilter ? { chartOfGroup: groupFilter } : {});
+      const { data } = await getContacts('Supplier');
       setItems(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load suppliers', err);
     } finally {
       setLoading(false);
     }
-  }, [groupFilter]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    getChartOfGroupOptions()
-      .then((data) => setGroupOptions(Array.isArray(data) ? data : []))
-      .catch(console.error);
-  }, []);
 
   useEffect(() => {
     setPage(1);
@@ -93,8 +84,6 @@ export default function SupplierAccountsPage() {
     () => filtered.slice((page - 1) * pageSize, page * pageSize),
     [filtered, page, pageSize]
   );
-
-  const activeGroupName = groupOptions.find((g) => String(g.id) === String(groupFilter))?.name;
 
   async function openAddModal() {
     setEditingId(null);
@@ -114,9 +103,6 @@ export default function SupplierAccountsPage() {
       email: item.email || '',
       mobile: item.mobile || '',
       address: item.address || '',
-      creditLimit: item.creditLimit ?? '',
-      dueDate: item.dueDate ? item.dueDate.slice(0, 10) : '',
-      chartOfGroup: item.chartOfGroup?.id || item.chartOfGroup || '',
     });
     setModalOpen(true);
   }
@@ -135,7 +121,7 @@ export default function SupplierAccountsPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.name || !form.chartOfGroup) return;
+    if (!form.name) return;
     setSaving(true);
     setError('');
     try {
@@ -194,71 +180,27 @@ export default function SupplierAccountsPage() {
           </button>
         </div>
 
-        {/* Summary strip + Chart of Group filter, combined into one row */}
-        <div className="flex flex-col lg:flex-row gap-3 mb-6">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 flex-1">
-            <SummaryCard
-              label="Total Suppliers"
-              value={items.length}
-              icon={<Users size={16} />}
-              tone="indigo"
-              active={!groupFilter}
-              onClick={groupFilter ? () => setGroupFilter('') : undefined}
-            />
-            <SummaryCard
-              label="Matching Search"
-              value={filtered.length}
-              icon={<Search size={16} />}
-              tone="emerald"
-            />
-            <SummaryCard
-              label="Showing"
-              value={`${pageRows.length} / ${filtered.length}`}
-              icon={<LayoutGrid size={16} />}
-              tone="violet"
-            />
-          </div>
-
-          <div className="lg:w-64 shrink-0 bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-col justify-center">
-            <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400 uppercase tracking-wide mb-1.5">
-              <ListFilter size={12} /> Chart Of Group
-            </label>
-            <div className="relative">
-              <select
-                value={groupFilter}
-                onChange={(e) => setGroupFilter(e.target.value)}
-                className="w-full border border-slate-200 rounded-lg pl-3 pr-8 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition appearance-none"
-              >
-                <option value="">All groups</option>
-                {groupOptions.map((g) => (
-                  <option key={g.id} value={g.id}>{g.name}</option>
-                ))}
-              </select>
-              {groupFilter && (
-                <button
-                  type="button"
-                  onClick={() => setGroupFilter('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  title="Clear filter"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          </div>
+        {/* Summary strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+          <SummaryCard
+            label="Total Suppliers"
+            value={items.length}
+            icon={<Users size={16} />}
+            tone="indigo"
+          />
+          <SummaryCard
+            label="Matching Search"
+            value={filtered.length}
+            icon={<Search size={16} />}
+            tone="emerald"
+          />
+          <SummaryCard
+            label="Showing"
+            value={`${pageRows.length} / ${filtered.length}`}
+            icon={<LayoutGrid size={16} />}
+            tone="violet"
+          />
         </div>
-
-        {activeGroupName && (
-          <div className="flex items-center gap-2 mb-4 text-xs text-slate-500">
-            <span>Filtering by:</span>
-            <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full font-medium ring-1 ring-inset ring-indigo-600/10">
-              {activeGroupName}
-              <button onClick={() => setGroupFilter('')} className="hover:text-indigo-800">
-                <X size={11} />
-              </button>
-            </span>
-          </div>
-        )}
 
         {/* Table panel */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -299,18 +241,17 @@ export default function SupplierAccountsPage() {
                   <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Phone</th>
                   <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Email</th>
                   <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Address</th>
-                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Under</th>
                   <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="text-center py-16 text-slate-400 text-sm">Loading...</td>
+                    <td colSpan={8} className="text-center py-16 text-slate-400 text-sm">Loading...</td>
                   </tr>
                 ) : pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="text-center py-16">
+                    <td colSpan={8} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <LayoutGrid size={28} strokeWidth={1.5} />
                         <p className="text-sm">No suppliers found. Try adjusting your search, or add one.</p>
@@ -340,9 +281,6 @@ export default function SupplierAccountsPage() {
                       <td className="px-5 py-3.5 text-slate-700">{item.email || '-'}</td>
                       <td className="px-5 py-3.5 text-slate-700 max-w-[160px] truncate" title={item.address || ''}>
                         {item.address || '-'}
-                      </td>
-                      <td className="px-5 py-3.5 text-slate-700 max-w-[140px] truncate" title={item.chartOfGroup?.name || ''}>
-                        {item.chartOfGroup?.name || '-'}
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center justify-end gap-1.5">
@@ -488,41 +426,6 @@ export default function SupplierAccountsPage() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4 mt-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Credit Limit</label>
-              <input
-                type="number"
-                placeholder="Enter Credit Limit"
-                value={form.creditLimit}
-                onChange={(e) => setForm((f) => ({ ...f, creditLimit: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Due Date</label>
-              <input
-                type="date"
-                value={form.dueDate}
-                onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
-              />
-            </div>
-          </div>
-          <div className="mt-4">
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">Under</label>
-            <select
-              required
-              value={form.chartOfGroup}
-              onChange={(e) => setForm((f) => ({ ...f, chartOfGroup: e.target.value }))}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
-            >
-              <option value="">Select One Option</option>
-              {groupOptions.map((g) => (
-                <option key={g.id} value={g.id}>{g.name}</option>
-              ))}
-            </select>
-          </div>
           <div className="flex justify-end gap-2 pt-6 mt-6 border-t border-slate-100">
             <button
               type="button"
@@ -584,27 +487,6 @@ export default function SupplierAccountsPage() {
                 <div>
                   <div className="text-xs text-slate-400 mb-0.5">Business/Organization</div>
                   <div className="text-sm text-slate-800">{viewItem.businessName || '-'}</div>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <CreditCard size={15} className="text-slate-400 mt-0.5" />
-                <div>
-                  <div className="text-xs text-slate-400 mb-0.5">Credit Limit</div>
-                  <div className="text-sm text-slate-800">{viewItem.creditLimit ?? '-'}</div>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <Calendar size={15} className="text-slate-400 mt-0.5" />
-                <div>
-                  <div className="text-xs text-slate-400 mb-0.5">Due Date</div>
-                  <div className="text-sm text-slate-800">{viewItem.dueDate ? viewItem.dueDate.slice(0, 10) : '-'}</div>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <Building2 size={15} className="text-slate-400 mt-0.5" />
-                <div>
-                  <div className="text-xs text-slate-400 mb-0.5">Chart Of Group (Under)</div>
-                  <div className="text-sm text-slate-800">{viewItem.chartOfGroup?.name || '-'}</div>
                 </div>
               </div>
             </div>

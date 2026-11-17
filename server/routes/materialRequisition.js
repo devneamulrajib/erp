@@ -39,16 +39,33 @@ function computeSubtotal(items) {
   return items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
 }
 
-const listInclude = [
+const baseInclude = [
   { model: ChartOfAccount, as: 'supplier', attributes: ['name'] },
   { model: Project, as: 'project', attributes: ['name'] },
   { model: Site, as: 'site', attributes: ['name'] },
   { model: MaterialRequisitionApproval, as: 'approvals' },
-  { model: MaterialRequisitionQuotation, as: 'quotations', attributes: ['id', 'status'] },
 ];
 
+// List page: item names + every quotation's supplier name, amount and status.
+const listInclude = [
+  ...baseInclude,
+  {
+    model: MaterialRequisitionQuotation,
+    as: 'quotations',
+    attributes: ['id', 'status', 'supplierId', 'subtotal', 'validUntil'],
+    include: [{ model: ChartOfAccount, as: 'supplier', attributes: ['name'] }],
+  },
+  {
+    model: MaterialRequisitionItem,
+    as: 'items',
+    attributes: ['id', 'itemName', 'demandQty', 'unit'],
+  },
+];
+
+// Detail page: unchanged shape (light quotations + full items).
 const detailInclude = [
-  ...listInclude,
+  ...baseInclude,
+  { model: MaterialRequisitionQuotation, as: 'quotations', attributes: ['id', 'status'] },
   { model: MaterialRequisitionItem, as: 'items' },
 ];
 
@@ -213,13 +230,29 @@ router.post('/:id/quotations/:quotationId/reject', auth, async (req, res) => {
 
 router.post('/:id/quotations/:quotationId/request-correction', auth, async (req, res) => {
   try {
+    const requisition = await MaterialRequisition.findByPk(req.params.id);
+    if (!requisition) return res.status(404).json({ message: 'Requisition not found' });
+
     const quotation = await MaterialRequisitionQuotation.findOne({
-      where: { id: req.params.quotationId, materialRequisitionId: req.params.id },
+      where: { id: req.params.quotationId, materialRequisitionId: requisition.id },
     });
     if (!quotation) return res.status(404).json({ message: 'Quotation not found' });
+
+    const note = (req.body.note || '').trim();
     quotation.status = 'NeedsCorrection';
-    quotation.correctionNote = req.body.note || null;
+    quotation.correctionNote = note || null;
     await quotation.save();
+
+    // Notification.message is a 255-char column, so keep the text short.
+    const message = `Correction requested on ${requisition.code}${note ? `: ${note}` : ''}`.slice(0, 250);
+    await notifyAdmin.notifySupplier(
+      quotation.supplierId,
+      'requisition_correction',
+      message,
+      'MaterialRequisition',
+      requisition.id,
+    );
+
     res.json(quotation);
   } catch (err) {
     sendError(res, err);

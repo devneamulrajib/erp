@@ -10,7 +10,25 @@ function supportsHover() {
   return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 }
 
-export default function MenuNode({ item, depth = 0, onNavigate }) {
+// Own count + counts of every descendant, so a parent like "Adjustment"
+// lights up when something inside it has a new item.
+function sumItemCounts(item, counts) {
+  let total = counts[item.key] || 0;
+  if (Array.isArray(item.children)) {
+    item.children.forEach((child) => {
+      total += sumItemCounts(child, counts);
+    });
+  }
+  return total;
+}
+
+export default function MenuNode({
+  item,
+  depth = 0,
+  onNavigate,
+  badgeCount = 0,
+  itemBadgeCounts = {},
+}) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -28,6 +46,9 @@ export default function MenuNode({ item, depth = 0, onNavigate }) {
   const Icon = item.icon;
   const isActive = item.route && location.pathname === item.route;
   const isHighlight = Boolean(item.highlight || item.key === 'office-budget');
+
+  // Top-level uses the module count; submenu items use their own/descendant count.
+  const count = isTopLevel ? Number(badgeCount) || 0 : sumItemCounts(item, itemBadgeCounts);
 
   useEffect(() => {
     return () => {
@@ -189,6 +210,8 @@ export default function MenuNode({ item, depth = 0, onNavigate }) {
                   hover:from-blue-100 hover:to-indigo-100
                   hover:border-blue-300
                 `
+              : count > 0
+              ? 'bg-rose-50/70 text-[#252525] font-semibold hover:bg-rose-50'
               : 'bg-transparent text-[#252525] font-medium hover:bg-[#f3f3f3]'
           }
         `}
@@ -211,6 +234,33 @@ export default function MenuNode({ item, depth = 0, onNavigate }) {
 
         {/* LABEL */}
         <span className="truncate">{item.label}</span>
+
+        {/* NEW-ITEM COUNT BADGE */}
+        {count > 0 && (
+          <span
+            title={`${count} new`}
+            className={`
+              flex
+              shrink-0
+              items-center
+              justify-center
+              rounded-full
+              bg-rose-500
+              font-bold
+              leading-none
+              text-white
+              ${
+                isTopLevel
+                  ? 'h-[18px] min-w-[18px] px-1 text-[10px] ring-2 ring-white'
+                  : 'h-[18px] min-w-[18px] px-1.5 text-[10px]'
+              }
+            `}
+          >
+            <span className="relative flex items-center justify-center">
+              {count > 9 ? '9+' : count}
+            </span>
+          </span>
+        )}
 
         {/* HIGHLIGHT PILL BADGE FOR SUBMENU */}
         {!isTopLevel && isHighlight && !isActive && (
@@ -311,6 +361,7 @@ export default function MenuNode({ item, depth = 0, onNavigate }) {
                 item={child}
                 depth={depth + 1}
                 onNavigate={onNavigate}
+                itemBadgeCounts={itemBadgeCounts}
               />
             ))}
           </div>

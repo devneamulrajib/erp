@@ -13,6 +13,14 @@ const includes = [
   { model: PurchaseOrderBoqItem, as: 'boqItems' },
   { model: Project, as: 'project', attributes: ['name'] },
   { model: Site, as: 'site', attributes: ['name'] },
+  // Bill carries the running paid / due amounts and the payment history,
+  // so the supplier sees partial payments too.
+  {
+    model: Bill,
+    as: 'bill',
+    attributes: ['id', 'code', 'grandTotal', 'paid', 'due', 'status'],
+    include: [{ model: BillPayment, attributes: ['id', 'paymentMethod', 'chequeReceiptNo', 'amount', 'date'] }],
+  },
 ];
 
 router.get('/', portalAuth, requireRole('supplier', 'vendor'), async (req, res) => {
@@ -60,6 +68,91 @@ router.get('/invoices/list', portalAuth, requireRole('supplier', 'vendor'), asyn
     }));
 
     res.json(merged);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Supplier's earnings track record: every payment the company has made against
+// this supplier's invoices, plus totals and a month-by-month breakdown.
+// Optional ?from=YYYY-MM-DD&to=YYYY-MM-DD only narrows the payment list.
+// (Must stay above '/:id' so "earnings" isn't treated as an order id.)
+router.get('/earnings', portalAuth, requireRole('supplier', 'vendor'), async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+    const orders = await PurchaseOrder.findAll({
+      where: { supplierId: req.portalUser.customerId, convertedToBillId: { [Op.ne]: null } },
+      attributes: ['id', 'code', 'convertedToBillId'],
+    });
+    const billIds = orders.map((o) => o.convertedToBillId);
+
+    const empty = {
+      summary: {
+        totalInvoiced: 0, totalReceived: 0, outstanding: 0, paymentsCount: 0,
+        lastPaymentDate: null, rangeTotal: 0, rangeCount: 0,
+      },
+      monthly: [],
+      payments: [],
+    };
+    if (billIds.length === 0) return res.json(empty);
+
+    const [bills, payRows] = await Promise.all([
+      Bill.findAll({ where: { id: billIds }, attributes: ['id', 'code', 'grandTotal', 'paid', 'due'] }),
+      BillPayment.findAll({ where: { billId: billIds }, order: [['date', 'DESC'], ['id', 'DESC']] }),
+    ]);
+
+    const billById = Object.fromEntries(bills.map((b) => [b.id, b]));
+    const orderByBillId = Object.fromEntries(orders.map((o) => [o.convertedToBillId, o]));
+
+    const allPayments = payRows.map((p) => ({
+      id: p.id,
+      date: p.date,
+      amount: round2(p.amount),
+      method: p.paymentMethod,
+      chequeReceiptNo: p.chequeReceiptNo || null,
+      billCode: billById[p.billId]?.code || null,
+      purchaseOrderId: orderByBillId[p.billId]?.id || null,
+      purchaseOrderCode: orderByBillId[p.billId]?.code || null,
+    }));
+
+    // All-time figures (not affected by the date filter)
+    const totalInvoiced = bills.reduce((s, b) => s + (Number(b.grandTotal) || 0), 0);
+    const totalReceived = allPayments.reduce((s, p) => s + p.amount, 0);
+    const outstanding = bills.reduce((s, b) => s + Math.max(Number(b.due) || 0, 0), 0);
+
+    const monthlyMap = {};
+    allPayments.forEach((p) => {
+      const key = String(p.date || '').slice(0, 7); // YYYY-MM
+      if (!/^\d{4}-\d{2}$/.test(key)) return;
+      monthlyMap[key] = (monthlyMap[key] || 0) + p.amount;
+    });
+    const monthly = Object.keys(monthlyMap).sort().map((month) => ({ month, received: round2(monthlyMap[month]) }));
+
+    // Date-filtered list (dates are stored as YYYY-MM-DD strings, so string compare works)
+    const payments = allPayments.filter((p) => {
+      const d = p.date || '';
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    });
+
+    const dates = allPayments.map((p) => p.date).filter(Boolean).sort();
+
+    res.json({
+      summary: {
+        totalInvoiced: round2(totalInvoiced),
+        totalReceived: round2(totalReceived),
+        outstanding: round2(outstanding),
+        paymentsCount: allPayments.length,
+        lastPaymentDate: dates.length ? dates[dates.length - 1] : null,
+        rangeTotal: round2(payments.reduce((s, p) => s + p.amount, 0)),
+        rangeCount: payments.length,
+      },
+      monthly,
+      payments,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

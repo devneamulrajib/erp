@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { TOP_MODULES } from './navConfig';
 import MenuNode from './MenuNode';
 
-export default function ModuleNav({ badgeCounts = {} }) {
+export default function ModuleNav({ badgeCounts = {}, itemBadgeCounts = {} }) {
   const [resetKey, setResetKey] = useState(0);
   const wrapperRef = useRef(null);
 
@@ -72,6 +72,7 @@ export default function ModuleNav({ badgeCounts = {} }) {
             depth={0}
             onNavigate={closeAll}
             badgeCount={badgeCounts[mod.key]}
+            itemBadgeCounts={itemBadgeCounts}
           />
         ))}
       </div>

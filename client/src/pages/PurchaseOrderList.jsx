@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import {
@@ -27,6 +28,23 @@ function genTxnId() {
 const inputCls = 'w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition';
 const labelCls = 'block text-xs font-medium text-slate-500 mb-1.5';
 
+/* Draws popups directly on <body>, above the floating nav (z-[99999]),
+   and locks page scrolling while a popup is open. */
+function ModalShell({ children }) {
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  return createPortal(
+    <div className="fixed inset-0 z-[1000000] flex items-center justify-center bg-black/40 p-4">
+      {children}
+    </div>,
+    document.body
+  );
+}
+
 function Badge({ label, tone = 'slate' }) {
   const tones = {
     slate: 'bg-slate-100 text-slate-600 ring-slate-500/10',
@@ -52,7 +70,25 @@ function deliveryTone(status) {
   return 'slate';
 }
 function paymentTone(status) {
-  return status === 'Paid' ? 'emerald' : 'rose';
+  if (status === 'Paid') return 'emerald';
+  if (status === 'Partial') return 'amber';
+  return 'rose';
+}
+
+/* Payment state derived from the bill's paid / due amounts, so a part-paid
+   order shows as "Partial" instead of "Unpaid". */
+function billDue(bill) {
+  if (!bill) return 0;
+  const total = num(bill.grandTotal);
+  const due = bill.due !== undefined && bill.due !== null ? num(bill.due) : total - num(bill.paid);
+  return Math.max(due, 0);
+}
+function paymentState(bill, fallback = 'Unpaid') {
+  if (!bill) return fallback;
+  const total = num(bill.grandTotal);
+  if (total > 0 && billDue(bill) <= 0) return 'Paid';
+  if (num(bill.paid) > 0) return 'Partial';
+  return 'Unpaid';
 }
 
 /* Colorful summary stat card — same language used on Material Requisition List */
@@ -130,7 +166,7 @@ function PurchaseOrderOverviewModal({ orderId, initialRow, onClose, onEdit }) {
   const items = data?.items || [];
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+    <ModalShell>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[85vh] overflow-y-auto p-6 relative">
         <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors">
           <X size={16} />
@@ -143,7 +179,10 @@ function PurchaseOrderOverviewModal({ orderId, initialRow, onClose, onEdit }) {
           <h2 className="text-lg font-semibold text-slate-800">Purchase Order Overview</h2>
           {data && <Badge label={data.status || 'Submitted'} tone={statusTone(data.status)} />}
           {data && <Badge label={data.deliveryStatus || 'Pending'} tone={deliveryTone(data.deliveryStatus)} />}
-          {data && <Badge label={data.paymentStatus || 'Unpaid'} tone={paymentTone(data.paymentStatus)} />}
+          {data && (() => {
+            const st = paymentState(data.bill, data.paymentStatus || 'Unpaid');
+            return <Badge label={st} tone={paymentTone(st)} />;
+          })()}
         </div>
         <p className="text-sm text-slate-500 mb-4 ml-10">
           {(data?.code || initialRow?.code) || '-'} — {(data?.titleOfWork || initialRow?.titleOfWork) || 'Purchase Order'}
@@ -214,7 +253,18 @@ function PurchaseOrderOverviewModal({ orderId, initialRow, onClose, onEdit }) {
                 {data?.deliveryConfirmedAt && <p>Delivery confirmed {new Date(data.deliveryConfirmedAt).toLocaleDateString()}</p>}
                 {data?.supplierPaymentConfirmedAt && <p>Supplier confirmed payment receipt {new Date(data.supplierPaymentConfirmedAt).toLocaleDateString()}</p>}
               </div>
-              <p className="text-sm font-semibold text-slate-800">Grand Total: ৳{num(data?.grandTotal ?? data?.subtotal).toLocaleString()}</p>
+              <div className="text-right">
+                <p className="text-sm font-semibold text-slate-800">Grand Total: ৳{num(data?.grandTotal ?? data?.subtotal).toLocaleString()}</p>
+                {data?.bill && (
+                  <p className="text-xs mt-1">
+                    <span className="text-emerald-600 font-medium">Paid ৳{num(data.bill.paid).toLocaleString()}</span>
+                    <span className="text-slate-300 mx-1.5">|</span>
+                    <span className={billDue(data.bill) > 0 ? 'text-rose-600 font-medium' : 'text-emerald-600 font-medium'}>
+                      Due ৳{billDue(data.bill).toLocaleString()}
+                    </span>
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-2">
@@ -234,7 +284,7 @@ function PurchaseOrderOverviewModal({ orderId, initialRow, onClose, onEdit }) {
           </>
         )}
       </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -264,13 +314,29 @@ function BillPaymentModal({ billId, orderId, onClose, onPaymentRecorded }) {
 
   const items = bill?.BillLineItems || bill?.items || [];
   const payments = bill?.BillPayments || bill?.payments || [];
-  const due = num(bill?.due);
-  const isPaid = due <= 0 && num(bill?.grandTotal) > 0;
+  const due = billDue(bill);
+  const grandTotal = num(bill?.grandTotal);
+  const paidSoFar = num(bill?.paid);
+  const payState = paymentState(bill);
+  const isPaid = payState === 'Paid';
+  const paidPct = grandTotal > 0 ? Math.min(100, Math.round((paidSoFar / grandTotal) * 100)) : 0;
+  const remainingAfter = Math.max(due - num(payAmount), 0);
+
+  // Running balance after each payment (history is in the order recorded)
+  let running = grandTotal;
+  const historyRows = payments.map((p) => {
+    running -= num(p.amount);
+    return { ...p, balance: Math.max(running, 0) };
+  });
 
   async function handleAddPayment(e) {
     e.preventDefault();
     if (num(payAmount) <= 0) {
       setError('Enter a payment amount greater than 0');
+      return;
+    }
+    if (num(payAmount) > due + 0.001) {
+      setError(`Payment can't be more than the due amount (৳${due.toLocaleString()})`);
       return;
     }
     setSubmitting(true);
@@ -317,7 +383,7 @@ function BillPaymentModal({ billId, orderId, onClose, onPaymentRecorded }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+    <ModalShell>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[88vh] overflow-y-auto p-6 relative">
         <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors">
           <X size={16} />
@@ -328,7 +394,7 @@ function BillPaymentModal({ billId, orderId, onClose, onPaymentRecorded }) {
             <Wallet size={15} />
           </span>
           <h2 className="text-lg font-semibold text-slate-800">Invoice & Payment</h2>
-          {bill && <Badge label={isPaid ? 'Paid' : 'Unpaid'} tone={isPaid ? 'emerald' : 'rose'} />}
+          {bill && <Badge label={payState} tone={paymentTone(payState)} />}
         </div>
         <p className="text-sm text-slate-500 mb-4 ml-10">{bill?.code || '-'}</p>
 
@@ -367,11 +433,17 @@ function BillPaymentModal({ billId, orderId, onClose, onPaymentRecorded }) {
             </div>
 
             {/* Totals breakdown — this is the running spend tracker for this order */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
               <OverviewField label="Subtotal" value={`৳${num(bill.subtotal).toLocaleString()}`} />
-              <OverviewField label="Grand Total" value={`৳${num(bill.grandTotal).toLocaleString()}`} />
-              <OverviewField label="Paid" value={<span className="text-emerald-600 font-semibold">৳{num(bill.paid).toLocaleString()}</span>} />
+              <OverviewField label="Grand Total" value={`৳${grandTotal.toLocaleString()}`} />
+              <OverviewField label="Paid" value={<span className="text-emerald-600 font-semibold">৳{paidSoFar.toLocaleString()}</span>} />
               <OverviewField label="Due" value={<span className={due > 0 ? 'text-rose-600 font-semibold' : 'text-emerald-600 font-semibold'}>৳{due.toLocaleString()}</span>} />
+            </div>
+            <div className="mb-5">
+              <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                <div className="h-full bg-emerald-500 transition-all" style={{ width: `${paidPct}%` }} />
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">{paidPct}% paid</div>
             </div>
 
             {/* Payment history */}
@@ -384,18 +456,20 @@ function BillPaymentModal({ billId, orderId, onClose, onPaymentRecorded }) {
                       <th className="text-left px-3 py-2 font-medium text-[10px] uppercase tracking-wide">Method</th>
                       <th className="text-left px-3 py-2 font-medium text-[10px] uppercase tracking-wide">Cheque No</th>
                       <th className="text-right px-3 py-2 font-medium text-[10px] uppercase tracking-wide">Amount</th>
+                      <th className="text-right px-3 py-2 font-medium text-[10px] uppercase tracking-wide">Balance Due</th>
                       <th className="text-left px-3 py-2 font-medium text-[10px] uppercase tracking-wide">Date</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {payments.length === 0 ? (
-                      <tr><td colSpan={4} className="text-center py-6 text-slate-400">No payments recorded yet</td></tr>
+                    {historyRows.length === 0 ? (
+                      <tr><td colSpan={5} className="text-center py-6 text-slate-400">No payments recorded yet</td></tr>
                     ) : (
-                      payments.map((p, i) => (
+                      historyRows.map((p, i) => (
                         <tr key={p.id || i}>
                           <td className="px-3 py-2 text-slate-700">{p.paymentMethod}</td>
                           <td className="px-3 py-2 text-slate-500">{p.chequeReceiptNo || '—'}</td>
-                          <td className="px-3 py-2 text-right font-medium text-slate-800">৳{num(p.amount).toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right font-medium text-emerald-700">৳{num(p.amount).toLocaleString()}</td>
+                          <td className={`px-3 py-2 text-right font-medium ${p.balance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>৳{p.balance.toLocaleString()}</td>
                           <td className="px-3 py-2 text-slate-500">{p.date}</td>
                         </tr>
                       ))
@@ -423,9 +497,22 @@ function BillPaymentModal({ billId, orderId, onClose, onPaymentRecorded }) {
                     </label>
                   </div>
                   <div>
-                    <label className={labelCls}>Amount</label>
-                    <input type="number" min="0" value={payAmount} onChange={(e) => setPayAmount(e.target.value)}
+                    <div className="flex items-center justify-between">
+                      <label className={labelCls}>Amount</label>
+                      <button type="button" onClick={() => setPayAmount(String(due))}
+                        className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700 mb-1.5">
+                        Pay full due
+                      </button>
+                    </div>
+                    <input type="number" min="0" max={due} step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)}
                       placeholder={`Up to ৳${due.toLocaleString()}`} className={inputCls} />
+                    <p className="text-[11px] mt-1.5 text-slate-500">
+                      {num(payAmount) > 0
+                        ? (num(payAmount) > due
+                          ? <span className="text-rose-600">More than the due amount</span>
+                          : <>Remaining after this payment: <span className={remainingAfter > 0 ? 'text-rose-600 font-medium' : 'text-emerald-600 font-medium'}>৳{remainingAfter.toLocaleString()}</span></>)
+                        : <>Partial payments are fine — pay any amount up to ৳{due.toLocaleString()}.</>}
+                    </p>
                   </div>
                   <div>
                     <label className={labelCls}>Cheque / Receipt No</label>
@@ -438,7 +525,7 @@ function BillPaymentModal({ billId, orderId, onClose, onPaymentRecorded }) {
                 </div>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || num(payAmount) <= 0 || num(payAmount) > due}
                   className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg disabled:opacity-50 transition-colors"
                 >
                   <Plus size={14} /> {submitting ? 'Recording…' : 'Record Payment'}
@@ -453,7 +540,7 @@ function BillPaymentModal({ billId, orderId, onClose, onPaymentRecorded }) {
           </>
         ) : null}
       </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -544,7 +631,7 @@ export default function PurchaseOrderList() {
   async function handleCreateBill(row) {
     setCreatingBillId(row.id);
     try {
-      const result = await createBillFromPurchaseOrder(row.id);
+      await createBillFromPurchaseOrder(row.id);
       const refreshed = await getPurchaseOrder(row.id);
       setRows((prev) => prev.map((r) => (r.id === row.id ? refreshed : r)));
       setPayingRow(refreshed);
@@ -587,8 +674,9 @@ export default function PurchaseOrderList() {
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const pendingConfirmCount = rows.filter((r) => r.deliveryStatus === 'Delivered' && !r.deliveryConfirmedAt).length;
-  const unpaidCount = rows.filter((r) => r.paymentStatus !== 'Paid').length;
+  const unpaidCount = rows.filter((r) => paymentState(r.bill, r.paymentStatus || 'Unpaid') !== 'Paid').length;
   const totalSpent = rows.reduce((sum, r) => sum + num(r.bill?.paid), 0);
+  const totalDue = rows.reduce((sum, r) => sum + (r.bill ? billDue(r.bill) : 0), 0);
 
   return (
     <div className="min-h-screen w-full bg-slate-50 text-left">
@@ -620,12 +708,13 @@ export default function PurchaseOrderList() {
         )}
 
         {/* Summary strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
           <StatCard icon={ClipboardList} label="Total Orders" value={rows.length} theme="indigo" />
           <StatCard icon={Search} label="Matching Search" value={filtered.length} theme="sky" />
           <StatCard icon={Truck} label="Awaiting Delivery Confirm" value={pendingConfirmCount} theme="amber" />
-          <StatCard icon={Wallet} label="Unpaid" value={unpaidCount} theme="rose" />
+          <StatCard icon={Wallet} label="Not Fully Paid" value={unpaidCount} theme="rose" />
           <StatCard icon={Banknote} label="Total Spent" value={`৳${totalSpent.toLocaleString()}`} theme="emerald" />
+          <StatCard icon={Wallet} label="Total Due" value={`৳${totalDue.toLocaleString()}`} theme="rose" />
         </div>
 
         {/* Filters — collapsed behind a toggle button */}
@@ -717,7 +806,7 @@ export default function PurchaseOrderList() {
               <thead>
                 <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
                   {['ID', 'Project', 'Title', 'Supplier', 'Code', 'Ref', 'Date', 'Sub Total',
-                    'Grand Total', 'Status', 'Delivery', 'Payment', 'Invoice', 'By'].map((h) => (
+                    'Grand Total', 'Paid', 'Due', 'Status', 'Delivery', 'Payment', 'Invoice', 'By'].map((h) => (
                     <th key={h} className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">{h}</th>
                   ))}
                   <th className="px-2 py-2.5 text-right font-medium text-[11px] uppercase tracking-wide">Action</th>
@@ -725,10 +814,10 @@ export default function PurchaseOrderList() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={15} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
+                  <tr><td colSpan={17} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
                 ) : paged.length === 0 ? (
                   <tr>
-                    <td colSpan={15} className="text-center py-16">
+                    <td colSpan={17} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <ClipboardList size={28} strokeWidth={1.5} />
                         <p className="text-sm">No entries found. Try adjusting your filters, or create a new order.</p>
@@ -749,19 +838,22 @@ export default function PurchaseOrderList() {
                         <td className="px-2 py-2.5 text-slate-600">{row.date}</td>
                         <td className="px-2 py-2.5 text-slate-600">{num(row.subtotal).toLocaleString()}</td>
                         <td className="px-2 py-2.5 font-semibold text-slate-800">{num(row.grandTotal).toLocaleString()}</td>
+                        <td className="px-2 py-2.5 font-medium text-emerald-600">
+                          {row.bill ? num(row.bill.paid).toLocaleString() : '-'}
+                        </td>
+                        <td className={`px-2 py-2.5 font-medium ${row.bill && billDue(row.bill) > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                          {row.bill ? billDue(row.bill).toLocaleString() : '-'}
+                        </td>
                         <td className="px-2 py-2.5"><Badge label={row.status || 'Submitted'} tone={statusTone(row.status)} /></td>
                         <td className="px-2 py-2.5">
                           <Badge label={row.deliveryStatus || 'Pending'} tone={deliveryTone(row.deliveryStatus)} />
                           {row.deliveryConfirmedAt && <div className="text-[10px] text-emerald-600 mt-1">✓ Confirmed</div>}
                         </td>
                         <td className="px-2 py-2.5">
-                          <Badge label={row.paymentStatus || 'Unpaid'} tone={paymentTone(row.paymentStatus)} />
-                          {row.bill && (
-                            <div className="text-[10px] text-slate-500 mt-1">
-                              ৳{num(row.bill.paid).toLocaleString()} / ৳{num(row.bill.grandTotal).toLocaleString()}
-                              {num(row.bill.due) > 0 && <span className="text-rose-500"> (due ৳{num(row.bill.due).toLocaleString()})</span>}
-                            </div>
-                          )}
+                          {(() => {
+                            const st = paymentState(row.bill, row.paymentStatus || 'Unpaid');
+                            return <Badge label={st} tone={paymentTone(st)} />;
+                          })()}
                         </td>
                         <td className="px-2 py-2.5">
                           {row.convertedToBillId ? (

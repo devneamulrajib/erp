@@ -59,26 +59,36 @@ function computeTotals(body, items) {
 
 // Keeps the linked PurchaseOrder's payment status in sync whenever a Bill
 // created from a PO (see purchaseOrder.js -> generateBillFromOrder) is saved.
-// A PO is considered Paid once its linked bill's due amount hits zero.
+// A PO is 'Paid' once its linked bill's due amount hits zero, 'Partial' while
+// some (but not all) of it has been paid, and 'Unpaid' otherwise.
 async function syncPurchaseOrderPaymentStatus(bill) {
   const { PurchaseOrder } = require('../models/associations');
   const order = await PurchaseOrder.findOne({ where: { convertedToBillId: bill.id } });
   if (!order) return;
 
   const isPaid = Number(bill.due) <= 0 && Number(bill.grandTotal) > 0;
-  const nextStatus = isPaid ? 'Paid' : 'Unpaid';
+  const isPartial = !isPaid && Number(bill.paid) > 0;
+  const nextStatus = isPaid ? 'Paid' : isPartial ? 'Partial' : 'Unpaid';
   if (order.paymentStatus === nextStatus) return;
 
   order.paymentStatus = nextStatus;
   order.paidAt = isPaid ? new Date() : null;
   await order.save();
 
+  const notifyAdmin = require('../utils/notify');
   if (isPaid) {
-    const notifyAdmin = require('../utils/notify');
     await notifyAdmin.notifySupplier(
       order.supplierId,
       'PaymentRecorded',
       `Payment recorded for order ${order.code}. Please confirm receipt.`,
+      'PurchaseOrder',
+      order.id
+    );
+  } else if (isPartial) {
+    await notifyAdmin.notifySupplier(
+      order.supplierId,
+      'PaymentRecorded',
+      `Partial payment of ${Number(bill.paid).toLocaleString()} recorded for order ${order.code}. Remaining due: ${Number(bill.due).toLocaleString()}.`,
       'PurchaseOrder',
       order.id
     );
@@ -286,6 +296,19 @@ router.put('/:id', auth, async (req, res) => {
   try {
     const bill = await Bill.findByPk(req.params.id);
     if (!bill) return res.status(404).json({ message: 'Not found' });
+
+    // Reject overpayment before anything is changed in the database.
+    if (req.body.payments !== undefined) {
+      const preItems = req.body.items !== undefined
+        ? cleanItems(req.body.items)
+        : await BillLineItem.findAll({ where: { billId: bill.id } });
+      const pre = computeTotals(req.body, preItems);
+      if (pre.paid > pre.grandTotal + 0.01) {
+        return res.status(400).json({
+          message: `Total payments (${pre.paid.toLocaleString()}) can't exceed the bill total (${pre.grandTotal.toLocaleString()})`,
+        });
+      }
+    }
 
     const directFields = {
       date: req.body.date,
