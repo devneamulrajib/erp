@@ -4,10 +4,11 @@ import {
   Phone, Mail, CalendarDays, Landmark, ListChecks, CalendarCheck, LogOut, ChevronRight, KeyRound, Loader2, CheckCircle2,
 } from 'lucide-react';
 import { getEmployeeProfile, changePassword } from '../api/portalEmployee';
-import { getPortalUser, portalLogout } from '../api/portalAuth';
+import { portalLogout } from '../api/portalAuth';
 import PortalLayout from '../components/PortalLayout';
 import BottomSheet from '../components/BottomSheet';
 import PasswordField from '../components/PasswordField';
+import EmployeeIdCard from '../components/EmployeeIdCard';
 
 const TAP = '[-webkit-tap-highlight-color:transparent] touch-manipulation';
 
@@ -122,7 +123,6 @@ function ChangePasswordSheet({ open, onClose }) {
 }
 
 export default function PortalEmployeeProfilePage() {
-  const user = getPortalUser();
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [error, setError] = useState('');
@@ -132,9 +132,6 @@ export default function PortalEmployeeProfilePage() {
   useEffect(() => {
     getEmployeeProfile().then(setProfile).catch(() => setError('Could not load your profile.'));
   }, []);
-
-  const name = profile?.name || user?.name || '';
-  const initials = (name || '?').trim().split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
   const logout = () => {
     portalLogout();
@@ -147,22 +144,7 @@ export default function PortalEmployeeProfilePage() {
 
       {error && <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>}
 
-      <div className="bg-white border border-slate-200 rounded-3xl p-5 flex items-center gap-4 mb-4">
-        <div className="w-16 h-16 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-xl font-bold shrink-0">
-          {initials}
-        </div>
-        <div className="min-w-0">
-          <p className="text-lg font-bold text-slate-900 truncate">{name || '—'}</p>
-          <p className="text-sm text-slate-500 truncate">
-            {profile ? `${profile.designation || 'Employee'} · ${profile.department || '-'}` : ' '}
-          </p>
-          {profile?.code && (
-            <span className="inline-block mt-1.5 text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-500 rounded px-1.5 py-0.5">
-              ID {profile.code}
-            </span>
-          )}
-        </div>
-      </div>
+      {(profile || !error) && <EmployeeIdCard profile={profile} />}
 
       <div className="bg-white border border-slate-200 rounded-3xl divide-y divide-slate-100 mb-2">
         <InfoRow icon={<Phone size={16} />} label="Phone" value={profile?.phone} />

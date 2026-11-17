@@ -166,6 +166,9 @@ const Attendance = require('./Attendance');
 const Task = require('./Task');
 const TaskProgressUpdate = require('./TaskProgressUpdate');
 const TaskTimeLog = require('./TaskTimeLog');
+const TaskSubtask = require('./TaskSubtask');
+const TaskMessage = require('./TaskMessage');
+const TaskMessageAttachment = require('./TaskMessageAttachment');
 const PaySlip = require('./PaySlip');
 const SalaryDeduction = require('./SalaryDeduction');
 
@@ -201,6 +204,16 @@ Employee.hasMany(TaskTimeLog, { as: 'timeLogs', foreignKey: 'employeeId', onDele
 TaskTimeLog.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
 Employee.hasMany(TaskProgressUpdate, { as: 'taskProgressUpdates', foreignKey: 'employeeId', onDelete: 'CASCADE' });
 TaskProgressUpdate.belongsTo(Employee, { as: 'employee', foreignKey: 'employeeId' });
+
+// ---- New Task Subtasks, Messages & Attachments ----
+Task.hasMany(TaskSubtask, { as: 'subtasks', foreignKey: 'taskId', onDelete: 'CASCADE' });
+TaskSubtask.belongsTo(Task, { as: 'task', foreignKey: 'taskId' });
+
+Task.hasMany(TaskMessage, { as: 'messages', foreignKey: 'taskId', onDelete: 'CASCADE' });
+TaskMessage.belongsTo(Task, { as: 'task', foreignKey: 'taskId' });
+
+TaskMessage.hasMany(TaskMessageAttachment, { as: 'attachments', foreignKey: 'messageId', onDelete: 'CASCADE' });
+TaskMessageAttachment.belongsTo(TaskMessage, { as: 'message', foreignKey: 'messageId' });
 
 // ---- PaySlip / SalaryDeduction (Payroll) ----
 OfficeExpense.hasOne(PaySlip, { foreignKey: 'officeExpenseId' });
@@ -894,6 +907,9 @@ module.exports = {
   Task,
   TaskProgressUpdate,
   TaskTimeLog,
+  TaskSubtask,
+  TaskMessage,
+  TaskMessageAttachment,
   PaySlip,
   SalaryDeduction,
   PortalRequest,

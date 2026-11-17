@@ -3,8 +3,12 @@
 const router = require('express').Router();
 const { Op } = require('sequelize');
 const sequelize = require('../config/db');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const {
   Employee, Task, TaskProgressUpdate, TaskTimeLog, Project, Attendance,
+  TaskSubtask, TaskMessage, TaskMessageAttachment,
 } = require('../models/associations');
 const { notifyAdmin } = require('../utils/notify');
 const {
@@ -14,6 +18,7 @@ const {
 const STATUSES = ['To Do', 'In Progress', 'On Hold', 'Done', 'Cancelled'];
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'];
 const CLOSED = ['Done', 'Cancelled'];
+const SUBTASK_STATUSES = ['To Do', 'In Progress', 'Done'];
 
 const me = (req) => req.portalUser.customerId;
 const safeNotify = async (...args) => { try { await notifyAdmin(...args); } catch (e) { /* ignore */ } };
@@ -30,12 +35,54 @@ async function loadOwnTask(req, res, id) {
 function withWorked(task, logs) {
   const mine = logs.filter((l) => l.taskId === task.id);
   const running = mine.find((l) => !l.endedAt);
+  const priorWorkedSeconds = mine
+    .filter((l) => l.endedAt)
+    .reduce((s, l) => s + Math.max(0, Math.round((new Date(l.endedAt) - new Date(l.startedAt)) / 1000)), 0);
   return {
     ...task.toJSON(),
     workedMinutes: minutesOf(mine),
+    priorWorkedSeconds,
     running: !!running,
     runningSince: running ? running.startedAt : null,
   };
+}
+
+const uploadDir = path.join(__dirname, '../uploads/tasks');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, unique + path.extname(file.originalname));
+  },
+});
+const uploadTaskFiles = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } });
+
+async function syncTaskVariance(TaskTimeLog, task, transaction) {
+  if (!task.estimatedMinutes) {
+    task.timeSavedSeconds = null;
+    task.timeOverrunSeconds = null;
+    return;
+  }
+  const logs = await TaskTimeLog.findAll({ where: { taskId: task.id }, transaction });
+  const now = new Date();
+  const workedSeconds = logs.reduce((s, l) => s + Math.max(0, Math.round((new Date(l.endedAt || now) - new Date(l.startedAt)) / 1000)), 0);
+  const allotted = task.estimatedMinutes * 60;
+  if (workedSeconds > allotted) {
+    task.timeOverrunSeconds = workedSeconds - allotted;
+    task.timeSavedSeconds = null;
+  } else {
+    task.timeSavedSeconds = allotted - workedSeconds;
+    task.timeOverrunSeconds = null;
+  }
+}
+
+async function recalculateSubtaskProgress(task) {
+  const subs = await TaskSubtask.findAll({ where: { taskId: task.id } });
+  if (!subs.length) return;
+  const done = subs.filter((s) => s.isCompleted).length;
+  task.progress = Math.round((done / subs.length) * 100);
+  await task.save();
 }
 
 /* ---------- List / create ---------- */
@@ -48,13 +95,24 @@ router.get('/', async (req, res) => {
 
     const tasks = await Task.findAll({
       where,
-      include: [{ model: Project, as: 'project', attributes: ['id', 'name'], required: false }],
+      include: [
+        { model: Project, as: 'project', attributes: ['id', 'name'], required: false },
+        { model: TaskSubtask, as: 'subtasks', attributes: ['id', 'isCompleted'] },
+      ],
       order: [['createdAt', 'DESC']],
     });
     const logs = tasks.length
       ? await TaskTimeLog.findAll({ where: { taskId: tasks.map((t) => t.id) } })
       : [];
-    res.json(tasks.map((t) => withWorked(t, logs)));
+    res.json(tasks.map((t) => {
+      const worked = withWorked(t, logs);
+      const subs = t.subtasks || [];
+      return {
+        ...worked,
+        subtasksTotal: subs.length,
+        subtasksDone: subs.filter((s) => s.isCompleted).length,
+      };
+    }));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -62,7 +120,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { title, description, projectId, priority, dueDate, estimatedMinutes } = req.body;
+    const { title, description, projectId, priority, dueDate, estimatedMinutes, subtasks } = req.body;
     if (!title || !String(title).trim()) return res.status(400).json({ message: 'Title is required' });
     if (dueDate && !isValidDateStr(dueDate)) return res.status(400).json({ message: 'Invalid due date' });
     const emp = await Employee.findByPk(me(req), { attributes: ['id', 'name', 'code'] });
@@ -80,21 +138,37 @@ router.post('/', async (req, res) => {
       dueDate: dueDate || null,
       estimatedMinutes: Number(estimatedMinutes) > 0 ? Math.round(Number(estimatedMinutes)) : null,
     });
+
+    if (Array.isArray(subtasks) && subtasks.length) {
+      await TaskSubtask.bulkCreate(
+        subtasks.filter(Boolean).map((st, i) => ({
+          taskId: task.id,
+          title: String(st).trim().slice(0, 250),
+          createdByType: 'employee',
+          createdById: emp.id,
+          createdByName: emp.name,
+          sortOrder: i,
+        }))
+      );
+    }
     res.status(201).json(task);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-/* ---------- Timer state / work log (declared before /:id) ---------- */
+/* ---------- Timer state / work log ---------- */
 
 router.get('/running', async (req, res) => {
   try {
     const log = await TaskTimeLog.findOne({
       where: { employeeId: me(req), endedAt: null },
-      include: [{ model: Task, as: 'task', attributes: ['id', 'title', 'status', 'progress'] }],
+      include: [{ model: Task, as: 'task', attributes: ['id', 'title', 'status', 'progress', 'estimatedMinutes'] }],
     });
-    res.json(log || null);
+    if (!log) return res.json(null);
+    const priorLogs = await TaskTimeLog.findAll({ where: { taskId: log.taskId, endedAt: { [Op.ne]: null } } });
+    const priorWorkedSeconds = priorLogs.reduce((s, l) => s + Math.max(0, Math.round((new Date(l.endedAt) - new Date(l.startedAt)) / 1000)), 0);
+    res.json({ ...log.toJSON(), priorWorkedSeconds });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -119,7 +193,6 @@ router.get('/worklog', async (req, res) => {
   }
 });
 
-// Manual time entry: last 2 days only, reason required, tagged "manual".
 router.post('/time/manual', async (req, res) => {
   try {
     const { taskId, startedAt, endedAt, note } = req.body;
@@ -149,6 +222,8 @@ router.post('/time/manual', async (req, res) => {
       taskId: task.id, employeeId: me(req), startedAt: start, endedAt: end,
       source: 'manual', note: String(note).trim().slice(0, 500),
     });
+    await syncTaskVariance(TaskTimeLog, task);
+    await task.save();
     res.status(201).json(log);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -161,12 +236,25 @@ router.get('/:id', async (req, res) => {
   try {
     const task = await loadOwnTask(req, res, req.params.id);
     if (!task) return;
-    const [logs, updates, project] = await Promise.all([
+    const [logs, updates, project, subtasks, messages] = await Promise.all([
       TaskTimeLog.findAll({ where: { taskId: task.id }, order: [['startedAt', 'DESC']] }),
       TaskProgressUpdate.findAll({ where: { taskId: task.id }, order: [['createdAt', 'DESC']] }),
       task.projectId ? Project.findByPk(task.projectId, { attributes: ['id', 'name'] }) : null,
+      TaskSubtask.findAll({ where: { taskId: task.id }, order: [['sortOrder', 'ASC'], ['id', 'ASC']] }),
+      TaskMessage.findAll({
+        where: { taskId: task.id },
+        include: [{ model: TaskMessageAttachment, as: 'attachments' }],
+        order: [['createdAt', 'ASC'], ['id', 'ASC']],
+      }),
     ]);
-    res.json({ ...withWorked(task, logs), project, logs, progressUpdates: updates });
+    res.json({
+      ...withWorked(task, logs),
+      project,
+      logs,
+      progressUpdates: updates,
+      subtasks,
+      messages,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -179,7 +267,6 @@ router.patch('/:id', async (req, res) => {
     const { status, title, description, priority, dueDate, estimatedMinutes } = req.body;
     const ownTask = task.createdByType === 'employee';
 
-    // Only tasks the employee created can have their details edited.
     if (ownTask) {
       if (title !== undefined) {
         if (!String(title).trim()) return res.status(400).json({ message: 'Title is required' });
@@ -202,6 +289,9 @@ router.patch('/:id', async (req, res) => {
       if (status === 'Cancelled' && !ownTask) {
         return res.status(403).json({ message: 'Only admin can cancel an assigned task' });
       }
+      if (status !== 'To Do' && status !== 'Cancelled' && !task.confirmedAt) {
+        task.confirmedAt = new Date();
+      }
       if (status === 'Done') {
         task.progress = 100;
         task.completedAt = new Date();
@@ -217,6 +307,7 @@ router.patch('/:id', async (req, res) => {
       if (CLOSED.includes(task.status) || task.status === 'On Hold') {
         await stopRunningLogs(TaskTimeLog, me(req), { taskId: task.id, transaction: t });
       }
+      await syncTaskVariance(TaskTimeLog, task, t);
       await task.save({ transaction: t });
     });
 
@@ -248,6 +339,7 @@ router.post('/:id/progress', async (req, res) => {
     });
     task.progress = percent;
     if (task.status === 'To Do' && percent > 0) {
+      task.confirmedAt = task.confirmedAt || new Date();
       task.status = 'In Progress';
       task.startedAt = task.startedAt || new Date();
     }
@@ -258,13 +350,69 @@ router.post('/:id/progress', async (req, res) => {
   }
 });
 
-/* ---------- Timer ---------- */
+/* ---------- Confirm & Timer ---------- */
+
+router.post('/:id/confirm', async (req, res) => {
+  try {
+    const task = await loadOwnTask(req, res, req.params.id);
+    if (!task) return;
+    if (CLOSED.includes(task.status)) return res.status(400).json({ message: 'This task is closed' });
+
+    const emp = await Employee.findByPk(me(req), { attributes: ['id', 'name', 'code', 'status'] });
+    if (!emp || emp.status !== 'Active') return res.status(403).json({ message: 'Account is not active' });
+
+    const today = todayStr();
+    const att = await Attendance.findAll({ where: { employeeId: me(req), date: today }, order: [['id', 'DESC']] });
+    if (att[0] && att[0].status !== 'Present') {
+      return res.status(400).json({ message: `Today is recorded as ${att[0].status}. You can't start a timer.` });
+    }
+    if (att.some((r) => r.checkOutAt)) {
+      return res.status(400).json({ message: 'You have already checked out today.' });
+    }
+
+    const startNow = req.body?.start !== false;
+    const result = await sequelize.transaction(async (t) => {
+      await Employee.findByPk(me(req), { transaction: t, lock: t.LOCK.UPDATE });
+      const now = new Date();
+      if (!task.confirmedAt) task.confirmedAt = now;
+
+      let log = null;
+      if (startNow) {
+        await stopRunningLogs(TaskTimeLog, me(req), { transaction: t });
+        if (task.status !== 'In Progress') {
+          task.status = 'In Progress';
+          task.completedAt = null;
+        }
+        task.startedAt = task.startedAt || now;
+        log = await TaskTimeLog.create(
+          { taskId: task.id, employeeId: me(req), startedAt: now, source: 'timer' },
+          { transaction: t }
+        );
+      }
+      await task.save({ transaction: t });
+      return { task, log };
+    });
+
+    await safeNotify(
+      'TaskConfirmed',
+      truncate(`${emp.name} (${emp.code}) confirmed & started: ${task.title}`, 250),
+      'Task',
+      task.id,
+    );
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 router.post('/:id/start', async (req, res) => {
   try {
     const task = await loadOwnTask(req, res, req.params.id);
     if (!task) return;
     if (CLOSED.includes(task.status)) return res.status(400).json({ message: 'This task is closed' });
+    if (!task.confirmedAt) {
+      return res.status(400).json({ message: 'Please confirm this task first to start the timer.' });
+    }
 
     const emp = await Employee.findByPk(me(req), { attributes: ['id', 'status'] });
     if (!emp || emp.status !== 'Active') return res.status(403).json({ message: 'Account is not active' });
@@ -279,7 +427,6 @@ router.post('/:id/start', async (req, res) => {
     }
 
     const log = await sequelize.transaction(async (t) => {
-      // Lock the employee row so two parallel starts can't both pass.
       await Employee.findByPk(me(req), { transaction: t, lock: t.LOCK.UPDATE });
       await stopRunningLogs(TaskTimeLog, me(req), { transaction: t });
       if (task.status !== 'In Progress') {
@@ -303,10 +450,165 @@ router.post('/:id/stop', async (req, res) => {
   try {
     const task = await loadOwnTask(req, res, req.params.id);
     if (!task) return;
-    const stopped = await sequelize.transaction((t) =>
-      stopRunningLogs(TaskTimeLog, me(req), { taskId: task.id, transaction: t }));
+    const stopped = await sequelize.transaction(async (t) => {
+      const n = await stopRunningLogs(TaskTimeLog, me(req), { taskId: task.id, transaction: t });
+      if (n) {
+        await syncTaskVariance(TaskTimeLog, task, t);
+        await task.save({ transaction: t });
+      }
+      return n;
+    });
     if (!stopped) return res.status(400).json({ message: 'No timer running on this task' });
-    res.json({ stopped });
+    res.json({ stopped, task });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/* ---------- Subtasks ---------- */
+
+router.post('/:id/subtasks', async (req, res) => {
+  try {
+    const task = await loadOwnTask(req, res, req.params.id);
+    if (!task) return;
+    if (CLOSED.includes(task.status)) return res.status(400).json({ message: 'This task is closed' });
+    const title = String(req.body.title || '').trim();
+    if (!title) return res.status(400).json({ message: 'Subtask title is required' });
+
+    const emp = await Employee.findByPk(me(req), { attributes: ['id', 'name'] });
+    const count = await TaskSubtask.count({ where: { taskId: task.id } });
+    const sub = await TaskSubtask.create({
+      taskId: task.id,
+      title: title.slice(0, 250),
+      description: req.body.description || null,
+      createdByType: 'employee',
+      createdById: emp?.id || me(req),
+      createdByName: emp?.name || 'Employee',
+      sortOrder: count,
+    });
+    await recalculateSubtaskProgress(task);
+    res.status(201).json(sub);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.patch('/:id/subtasks/:subtaskId', async (req, res) => {
+  try {
+    const task = await loadOwnTask(req, res, req.params.id);
+    if (!task) return;
+    const sub = await TaskSubtask.findOne({ where: { id: req.params.subtaskId, taskId: task.id } });
+    if (!sub) return res.status(404).json({ message: 'Subtask not found' });
+
+    const emp = await Employee.findByPk(me(req), { attributes: ['id', 'name'] });
+    if (req.body.title !== undefined && sub.createdByType === 'employee') {
+      const t = String(req.body.title).trim();
+      if (!t) return res.status(400).json({ message: 'Subtask title cannot be empty' });
+      sub.title = t.slice(0, 250);
+    }
+    if (req.body.status && SUBTASK_STATUSES.includes(req.body.status)) {
+      sub.status = req.body.status;
+      sub.isCompleted = req.body.status === 'Done';
+    } else if (req.body.isCompleted !== undefined) {
+      sub.isCompleted = !!req.body.isCompleted;
+      sub.status = sub.isCompleted ? 'Done' : 'To Do';
+    }
+    if (sub.isCompleted && !sub.completedAt) {
+      sub.completedAt = new Date();
+      sub.completedByType = 'employee';
+      sub.completedByName = emp?.name || 'Employee';
+    } else if (!sub.isCompleted) {
+      sub.completedAt = null;
+      sub.completedByType = null;
+      sub.completedByName = null;
+    }
+    await sub.save();
+    await recalculateSubtaskProgress(task);
+    res.json(sub);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.delete('/:id/subtasks/:subtaskId', async (req, res) => {
+  try {
+    const task = await loadOwnTask(req, res, req.params.id);
+    if (!task) return;
+    const sub = await TaskSubtask.findOne({ where: { id: req.params.subtaskId, taskId: task.id } });
+    if (!sub) return res.status(404).json({ message: 'Subtask not found' });
+    if (sub.createdByType !== 'employee' && task.createdByType !== 'employee') {
+      return res.status(403).json({ message: 'Only admin can delete admin-created subtasks' });
+    }
+    await sub.destroy();
+    await recalculateSubtaskProgress(task);
+    res.json({ message: 'Deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/* ---------- Conversation & File Sharing ---------- */
+
+router.get('/:id/messages', async (req, res) => {
+  try {
+    const task = await loadOwnTask(req, res, req.params.id);
+    if (!task) return;
+    const messages = await TaskMessage.findAll({
+      where: { taskId: task.id },
+      include: [{ model: TaskMessageAttachment, as: 'attachments' }],
+      order: [['createdAt', 'ASC'], ['id', 'ASC']],
+    });
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/:id/messages', uploadTaskFiles.array('files', 10), async (req, res) => {
+  try {
+    const task = await loadOwnTask(req, res, req.params.id);
+    if (!task) return;
+    const text = String(req.body.message || '').trim();
+    const files = req.files || [];
+    if (!text && !files.length) return res.status(400).json({ message: 'Enter a message or attach a file' });
+
+    const emp = await Employee.findByPk(me(req), { attributes: ['id', 'name', 'code'] });
+    const created = await sequelize.transaction(async (t) => {
+      const msg = await TaskMessage.create({
+        taskId: task.id,
+        senderType: 'employee',
+        senderId: emp?.id || me(req),
+        senderName: emp?.name || 'Employee',
+        message: text || null,
+      }, { transaction: t });
+
+      if (files.length) {
+        await TaskMessageAttachment.bulkCreate(
+          files.map((f) => ({
+            messageId: msg.id,
+            taskId: task.id,
+            fileName: f.originalname,
+            filePath: `/uploads/tasks/${f.filename}`,
+            mimeType: f.mimetype,
+            fileSize: f.size,
+          })),
+          { transaction: t }
+        );
+      }
+      return msg;
+    });
+
+    const full = await TaskMessage.findByPk(created.id, {
+      include: [{ model: TaskMessageAttachment, as: 'attachments' }],
+    });
+
+    await safeNotify(
+      'TaskMessage',
+      truncate(`${emp?.name} (${emp?.code}) commented on "${task.title}": ${text || `${files.length} file(s)`}`, 250),
+      'Task',
+      task.id,
+    );
+    res.status(201).json(full);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
