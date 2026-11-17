@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Square, Timer, ListChecks } from 'lucide-react';
-import { getRunning, stopTimer, fmtClock } from '../api/portalTasks';
+import { getRunning, stopTimer, fmtClock, fmtMinutes } from '../api/portalTasks';
 
 const TAP = '[-webkit-tap-highlight-color:transparent] touch-manipulation';
 
-// Live "currently working on" card. Server timestamps are the source of truth;
-// the ticking clock is just now - startedAt.
 export default function TaskTimerCard() {
-  const [running, setRunning] = useState(undefined); // undefined = loading, null = none
+  const [running, setRunning] = useState(undefined);
   const [now, setNow] = useState(Date.now());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -55,23 +53,37 @@ export default function TaskTimerCard() {
         </span>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-slate-900">No task timer running</p>
-          <p className="text-xs text-slate-500">Open your tasks to start working</p>
+          <p className="text-xs text-slate-500">Open your tasks to confirm & start working</p>
         </div>
       </Link>
     );
   }
 
-  const secs = (now - new Date(running.startedAt).getTime()) / 1000;
+  const sessionSecs = Math.max(0, (now - new Date(running.startedAt).getTime()) / 1000);
+  const totalSecs = (running.priorWorkedSeconds || 0) + sessionSecs;
+  const allottedSecs = running.task?.estimatedMinutes ? running.task.estimatedMinutes * 60 : null;
+  const crossed = allottedSecs !== null && totalSecs > allottedSecs;
+  const displaySecs = allottedSecs !== null ? Math.abs(allottedSecs - totalSecs) : totalSecs;
+
   return (
-    <div className="bg-slate-900 text-white rounded-2xl p-4">
-      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-300 mb-1">
-        <Timer size={14} /> Working now
+    <div className={`text-white rounded-2xl p-4 ${crossed ? 'bg-red-700' : 'bg-slate-900'}`}>
+      <div className={`flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide mb-1 ${crossed ? 'text-red-100' : 'text-emerald-300'}`}>
+        <Timer size={14} /> {crossed ? 'Time crossed!' : 'Working now'}
       </div>
       <Link to={`/portal/employee/tasks/${running.taskId}`} className="block text-sm font-semibold truncate">
         {running.task?.title}
       </Link>
       <div className="flex items-center justify-between mt-3">
-        <span className="text-3xl font-bold tabular-nums">{fmtClock(secs)}</span>
+        <div>
+          <span className="text-3xl font-bold tabular-nums">
+            {crossed ? `+${fmtClock(displaySecs)}` : fmtClock(displaySecs)}
+          </span>
+          {allottedSecs !== null && (
+            <p className="text-[11px] text-white/70 mt-0.5">
+              {crossed ? 'Overtime' : 'Remaining'} · Timer {fmtMinutes(running.task.estimatedMinutes)}
+            </p>
+          )}
+        </div>
         <button
           type="button"
           onClick={handleStop}
@@ -81,7 +93,7 @@ export default function TaskTimerCard() {
           <Square size={14} /> {busy ? 'Stopping…' : 'Stop'}
         </button>
       </div>
-      {error && <p className="text-xs text-red-300 mt-2">{error}</p>}
+      {error && <p className="text-xs text-red-200 mt-2">{error}</p>}
     </div>
   );
 }

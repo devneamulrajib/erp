@@ -101,7 +101,7 @@ router.get('/profile', async (req, res) => {
     const employee = await Employee.findByPk(req.portalUser.customerId, {
       attributes: [
         'id', 'name', 'code', 'designation', 'department', 'phone', 'email',
-        'joiningDate', 'bankName', 'bankAccountNo', 'status',
+        'joiningDate', 'bankName', 'bankAccountNo', 'status', 'bloodGroup', 'photo',
       ],
     });
     if (!employee) return res.status(404).json({ message: 'Not found' });

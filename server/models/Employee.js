@@ -12,6 +12,10 @@ const Employee = sequelize.define('Employee', {
   email: { type: DataTypes.STRING },
   joiningDate: { type: DataTypes.DATEONLY },
 
+  // ID card
+  bloodGroup: { type: DataTypes.STRING(5) },
+  photo: { type: DataTypes.STRING },
+
   // Salary Structure
   basicSalary: { type: DataTypes.FLOAT, defaultValue: 0 },
   houseRent: { type: DataTypes.FLOAT, defaultValue: 0 },
