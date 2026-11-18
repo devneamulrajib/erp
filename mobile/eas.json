@@ -1,0 +1,32 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": false,
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "development",
+        "EXPO_PUBLIC_API_URL": "http://10.0.2.2:5000/api",
+        "EXPO_PUBLIC_WEB_URL": "http://10.0.2.2:5173"
+      },
+      "android": { "buildType": "apk" },
+      "ios": { "simulator": true }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "ios": { "simulator": false }
+    },
+    "production": {
+      "autoIncrement": false,
+      "android": { "buildType": "app-bundle" },
+      "ios": {}
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
