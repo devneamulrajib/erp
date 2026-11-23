@@ -1,5 +1,8 @@
 const router = require('express').Router();
 const { Op } = require('sequelize');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { portalAuth, requireRole } = require('../middleware/portalAuth');
 const { Employee, EmployeeAdvance, LeaveRequest, Attendance } = require('../models/associations');
 const { notifyAdmin } = require('../utils/notify');
@@ -94,6 +97,30 @@ function nextMonth() {
   return { year, month };
 }
 
+/* ---------- Photo upload ---------- */
+const photoStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, '../uploads/employee-photos');
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
+    cb(null, `emp_${req.portalUser.customerId}_${Date.now()}${ext}`);
+  },
+});
+
+const photoUpload = multer({
+  storage: photoStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (req, file, cb) => {
+    const allowed = /jpeg|jpg|png|webp/;
+    const extOk = allowed.test(path.extname(file.originalname).toLowerCase());
+    const mimeOk = allowed.test(file.mimetype);
+    cb(null, extOk && mimeOk);
+  },
+});
+
 /* ---------- Profile ---------- */
 
 router.get('/profile', async (req, res) => {
@@ -106,6 +133,33 @@ router.get('/profile', async (req, res) => {
     });
     if (!employee) return res.status(404).json({ message: 'Not found' });
     res.json(employee);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/profile/photo', photoUpload.single('photo'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No valid image uploaded (jpg, png, webp up to 5 MB)' });
+
+    const employee = await Employee.findByPk(req.portalUser.customerId);
+    if (!employee) return res.status(404).json({ message: 'Not found' });
+
+    // Optional: remove previous photo file
+    if (employee.photo) {
+      try {
+        const oldPath = path.join(__dirname, '..', employee.photo.replace(/^\//, ''));
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      } catch (_) { /* ignore cleanup errors */ }
+    }
+
+    const photoPath = `/uploads/employee-photos/${req.file.filename}`;
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const photoUrl = `${baseUrl}${photoPath}`;
+
+    await employee.update({ photo: photoUrl });
+
+    res.json({ message: 'Photo updated', photo: photoUrl });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

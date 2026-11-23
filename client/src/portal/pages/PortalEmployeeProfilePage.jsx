@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Phone, Mail, CalendarDays, Landmark, ListChecks, CalendarCheck, LogOut, ChevronRight, KeyRound, Loader2, CheckCircle2,
+  Phone, Mail, CalendarDays, Landmark, ListChecks, CalendarCheck, LogOut, ChevronRight, KeyRound, Loader2, CheckCircle2, Camera,
 } from 'lucide-react';
-import { getEmployeeProfile, changePassword } from '../api/portalEmployee';
+import { getEmployeeProfile, changePassword, uploadEmployeePhoto } from '../api/portalEmployee';
 import { portalLogout } from '../api/portalAuth';
 import PortalLayout from '../components/PortalLayout';
 import BottomSheet from '../components/BottomSheet';
@@ -128,6 +128,9 @@ export default function PortalEmployeeProfilePage() {
   const [error, setError] = useState('');
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const fileRef = useRef(null);
 
   useEffect(() => {
     getEmployeeProfile().then(setProfile).catch(() => setError('Could not load your profile.'));
@@ -138,6 +141,22 @@ export default function PortalEmployeeProfilePage() {
     navigate('/portal/login');
   };
 
+  const handlePhotoSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadError('');
+    try {
+      const result = await uploadEmployeePhoto(file);
+      setProfile((p) => (p ? { ...p, photo: result.photo } : p));
+    } catch (err) {
+      setUploadError(err?.response?.data?.message || 'Could not upload photo. Please try again.');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
   return (
     <PortalLayout>
       <h1 className="text-2xl font-bold text-slate-900 tracking-tight mb-4">Profile</h1>
@@ -145,6 +164,28 @@ export default function PortalEmployeeProfilePage() {
       {error && <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>}
 
       {(profile || !error) && <EmployeeIdCard profile={profile} />}
+
+      <div className="flex justify-center mb-4">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={handlePhotoSelect}
+        />
+        <button
+          type="button"
+          disabled={uploading}
+          onClick={() => fileRef.current?.click()}
+          className={`inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 active:bg-slate-50 disabled:opacity-60 ${TAP}`}
+        >
+          {uploading ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
+          {uploading ? 'Uploading…' : 'Change photo'}
+        </button>
+      </div>
+      {uploadError && (
+        <p className="text-center text-sm text-red-600 mb-4">{uploadError}</p>
+      )}
 
       <div className="bg-white border border-slate-200 rounded-3xl divide-y divide-slate-100 mb-2">
         <InfoRow icon={<Phone size={16} />} label="Phone" value={profile?.phone} />
