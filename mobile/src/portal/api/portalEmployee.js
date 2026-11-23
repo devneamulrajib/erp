@@ -6,6 +6,15 @@ export async function getEmployeeProfile() {
   return res.data;
 }
 
+export async function uploadEmployeePhoto(uri, name = 'photo.jpg', type = 'image/jpeg') {
+  const formData = new FormData();
+  formData.append('photo', { uri, name, type });
+  const res = await portalApi.post('/employee/profile/photo', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data; // { message, photo }
+}
+
 export async function getEmployeeAttendance(month) {
   const res = await portalApi.get('/employee/attendance', { params: month ? { month } : {} });
   return res.data;

@@ -1,8 +1,9 @@
 // Port of PortalEmployeeProfilePage.jsx (+ EmployeeIdCard.jsx)
 import { useState } from 'react';
 import { Alert, Image, Text, View } from 'react-native';
-import { LogOut, KeyRound } from 'lucide-react-native';
-import { getEmployeeProfile, changePassword } from '../../portal/api/portalEmployee';
+import { LogOut, KeyRound, Camera } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { getEmployeeProfile, changePassword, uploadEmployeePhoto } from '../../portal/api/portalEmployee';
 import { useAuth } from '../../context/AuthContext';
 import { Button, Card, ErrorBox, H2, Input, KV, Loading, Notice, Row, Screen, Sub, useAsync } from '../../components/ui';
 import { colors } from '../../theme';
@@ -18,6 +19,33 @@ export default function EmployeeProfileScreen() {
   const [busy, setBusy] = useState(false);
   const [pwError, setPwError] = useState('');
   const [pwOk, setPwOk] = useState('');
+  const [uploading, setUploading] = useState(false);
+
+  async function pickAndUploadPhoto() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission needed', 'Please allow access to your photos to change your profile picture.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    setUploading(true);
+    try {
+      await uploadEmployeePhoto(asset.uri, asset.fileName || 'photo.jpg', asset.mimeType || 'image/jpeg');
+      await refresh();
+    } catch (err) {
+      Alert.alert('Upload failed', errMsg(err, 'Could not upload photo'));
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function submitPassword() {
     setPwError(''); setPwOk('');
@@ -51,6 +79,14 @@ export default function EmployeeProfileScreen() {
         <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>{p.name}</Text>
         <Text style={{ color: '#cbd5e1', fontSize: 13 }}>{[p.designation, p.department].filter(Boolean).join(' · ')}</Text>
         {p.code ? <Text style={{ color: '#fcd34d', fontSize: 12, marginTop: 4, fontWeight: '700' }}>ID {p.code}</Text> : null}
+        <View style={{ height: 12 }} />
+        <Button
+          title={uploading ? 'Uploading…' : 'Change photo'}
+          loading={uploading}
+          icon={<Camera size={16} color="#fff" />}
+          onPress={pickAndUploadPhoto}
+          disabled={uploading}
+        />
       </Card>
       <Card style={{ marginBottom: 14 }}>
         <H2>Details</H2>
