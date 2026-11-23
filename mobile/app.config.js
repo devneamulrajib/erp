@@ -14,7 +14,7 @@ module.exports = {
     name: IS_DEV ? 'Trikon ERP (Dev)' : 'Trikon ERP',
     slug: 'trikon-erp',
     scheme: 'trikonerp',
-    version: '1.0.1',
+    version: '1.0.3',
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'light',
@@ -35,7 +35,7 @@ module.exports = {
     },
     android: {
       package: IS_DEV ? 'com.trikon.erp.dev' : 'com.trikon.erp',
-      versionCode: 2,
+      versionCode: 3,
       adaptiveIcon: {
         backgroundColor: '#FFFFFF',
         foregroundImage: './assets/android-icon-foreground.png',
@@ -70,7 +70,9 @@ module.exports = {
       apiUrl: API_URL,
       webUrl: WEB_URL,
       appVariant: IS_DEV ? 'development' : 'production',
-      // eas: { projectId: '<fill in after `npx eas-cli init`>' },
+      eas: {
+        projectId: '41b61dd2-886c-4ed0-82c6-4acedd531a56',
+      },
     },
   },
 };

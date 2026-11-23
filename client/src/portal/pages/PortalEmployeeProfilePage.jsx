@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Phone, Mail, CalendarDays, Landmark, ListChecks, CalendarCheck, LogOut, ChevronRight, KeyRound, Loader2, CheckCircle2, Camera,
+  Phone, Mail, CalendarDays, Landmark, ListChecks, CalendarCheck, LogOut, ChevronRight, KeyRound, Loader2, CheckCircle2, Camera, IdCard,
 } from 'lucide-react';
 import { getEmployeeProfile, changePassword, uploadEmployeePhoto } from '../api/portalEmployee';
 import { portalLogout } from '../api/portalAuth';
@@ -128,6 +128,7 @@ export default function PortalEmployeeProfilePage() {
   const [error, setError] = useState('');
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showIdCard, setShowIdCard] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const fileRef = useRef(null);
@@ -163,7 +164,21 @@ export default function PortalEmployeeProfilePage() {
 
       {error && <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-4">{error}</div>}
 
-      {(profile || !error) && <EmployeeIdCard profile={profile} />}
+      {(profile || !error) && (
+        <button
+          type="button"
+          onClick={() => setShowIdCard(true)}
+          disabled={!profile}
+          className={`w-full mb-3 rounded-3xl bg-slate-900 text-white px-4 py-4 flex items-center gap-3 active:bg-slate-700 disabled:opacity-60 ${TAP}`}
+        >
+          <span className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0"><IdCard size={20} /></span>
+          <span className="flex-1 min-w-0 text-left">
+            <span className="block text-sm font-semibold truncate">{profile?.name || 'Loading…'}</span>
+            <span className="block text-xs text-white/70">View ID card</span>
+          </span>
+          <ChevronRight size={18} className="text-white/50 shrink-0" />
+        </button>
+      )}
 
       <div className="flex justify-center mb-4">
         <input
@@ -212,6 +227,10 @@ export default function PortalEmployeeProfilePage() {
       >
         <LogOut size={16} /> Log out
       </button>
+
+      <BottomSheet open={showIdCard} onClose={() => setShowIdCard(false)} title="My ID card">
+        <EmployeeIdCard profile={profile} />
+      </BottomSheet>
 
       <ChangePasswordSheet open={showPassword} onClose={() => setShowPassword(false)} />
 
