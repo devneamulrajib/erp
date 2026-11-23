@@ -1,16 +1,16 @@
 import api from './axios';
 
 export const getCategories = (params) =>
-  api.get('/categories', { params }).then((res) => res.data);
+  api.get('/category', { params }).then((res) => res.data);
 
 export const getNextCategoryCode = () =>
-  api.get('/categories/next-code').then((res) => res.data);
+  api.get('/category/next-code').then((res) => res.data);
 
 export const createCategory = (data) =>
-  api.post('/categories', data).then((res) => res.data);
+  api.post('/category', data).then((res) => res.data);
 
 export const updateCategory = (id, data) =>
-  api.put(`/categories/${id}`, data).then((res) => res.data);
+  api.put(`/category/${id}`, data).then((res) => res.data);
 
 export const deleteCategory = (id) =>
-  api.delete(`/categories/${id}`).then((res) => res.data);
+  api.delete(`/category/${id}`).then((res) => res.data);
