@@ -10,16 +10,26 @@ import TimeFilterTabs from '../components/TimeFilterTabs';
 import PendingVoucherPanel from '../components/PendingVoucherPanel';
 import {
   Users, Truck, PackageSearch, Wrench, ShoppingBag, ShoppingCart,
-  RefreshCw, AlertCircle, Clock3, TrendingUp,
+  RefreshCw, AlertCircle, Clock3, TrendingUp, Boxes, Plus, ClipboardList, FileBarChart, ArrowLeftRight,
 } from 'lucide-react';
+import { DashboardHero, KpiCard, QuickLinks, heroButton } from '../components/dashboard/DashboardKit';
 
 const STAT_CARDS = [
-  { key: 'customers', label: "Customer's", icon: Users },
-  { key: 'suppliers', label: "Supplier's", icon: Truck },
-  { key: 'materialReq', label: 'Material Req.', icon: PackageSearch },
-  { key: 'serviceReq', label: 'Service Req.', icon: Wrench },
-  { key: 'purchases', label: 'Purchases', icon: ShoppingBag },
-  { key: 'sales', label: 'Sales', icon: ShoppingCart },
+  { key: 'customers', label: 'Customers', icon: Users, accent: 'emerald', to: '/accounts-module/customer-accounts' },
+  { key: 'suppliers', label: 'Suppliers', icon: Truck, accent: 'blue', to: '/accounts-module/supplier-accounts' },
+  { key: 'materialReq', label: 'Material Req.', icon: PackageSearch, accent: 'amber', to: '/requisition-module/material-requisition-list' },
+  { key: 'serviceReq', label: 'Service Req.', icon: Wrench, accent: 'sky', to: '/requisition-module/service-work-requisition-list' },
+  { key: 'purchases', label: 'Purchases', icon: ShoppingBag, accent: 'violet', to: '/inventory-module/purchase-list' },
+  { key: 'sales', label: 'Sales', icon: ShoppingCart, accent: 'rose', to: '/billing/item_sale_list' },
+];
+
+const QUICK_LINKS = [
+  { label: 'New Purchase', to: '/inventory-module/purchase', icon: Plus, accent: 'violet' },
+  { label: 'Purchase Orders', to: '/procurement-module/purchase-order-list', icon: ClipboardList, accent: 'indigo' },
+  { label: 'Items', to: '/inventory-module/products/item-entry', icon: Boxes, accent: 'emerald' },
+  { label: 'Material Usage', to: '/inventory-module/material_usage', icon: PackageSearch, accent: 'amber' },
+  { label: 'Stock Transfer', to: '/inventory-module/stock_adjustment_list', icon: ArrowLeftRight, accent: 'sky' },
+  { label: 'Stock Report', to: '/inventory-module/reports/stock', icon: FileBarChart, accent: 'rose' },
 ];
 
 const SECTIONS = ['summary', 'overflow', 'purchaseChart', 'purchaseConsumption', 'vouchers'];
@@ -56,18 +66,6 @@ function emptyState(section) {
 
 function Skeleton({ className = '' }) {
   return <div className={`animate-pulse rounded-lg bg-slate-200/70 ${className}`} />;
-}
-
-function StatCardSkeleton() {
-  return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-4">
-      <div className="flex items-center justify-between mb-4">
-        <Skeleton className="h-3 w-20" />
-        <Skeleton className="h-7 w-7 rounded-lg" />
-      </div>
-      <Skeleton className="h-7 w-16" />
-    </div>
-  );
 }
 
 function ChartSkeleton() {
@@ -240,51 +238,57 @@ export default function InventoryDashboard() {
       <InventoryTopNav />
 
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
-        {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
-          <div>
-            <Breadcrumb items={[{ label: 'Home', to: '/dashboard' }, { label: 'Inventory Dashboard' }]} />
-            <h1 className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">Inventory Dashboard</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Overview of stock, purchases, sales, and pending vouchers</p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {lastUpdated && (
-              <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400">
-                <Clock3 size={13} />
-                <span>Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-              </div>
-            )}
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="inline-flex items-center gap-2 h-10 px-3.5 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-60 transition"
-            >
-              <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
-              <span className="hidden sm:inline">{refreshing ? 'Refreshing...' : 'Refresh'}</span>
-            </button>
-          </div>
+        <Breadcrumb items={[{ label: 'Home', to: '/dashboard' }, { label: 'Inventory Dashboard' }]} />
+        <div className="mt-2 mb-5">
+          <DashboardHero
+            tone="blue"
+            icon={Boxes}
+            eyebrow="Inventory Module"
+            title="Inventory Dashboard"
+            subtitle="Stock, purchases, sales, requisitions and pending vouchers at a glance."
+            stats={loading.summary || errors.summary ? [] : [
+              { label: 'Purchases', value: formatNumber(summary?.purchases) },
+              { label: 'Sales', value: formatNumber(summary?.sales) },
+              { label: 'Pending Vouchers', value: formatNumber(vouchers.length) },
+            ]}
+            actions={
+              <>
+                <button onClick={handleRefresh} disabled={refreshing} className={heroButton}>
+                  <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+                  {refreshing ? 'Refreshing...' : 'Refresh'}
+                </button>
+                {lastUpdated && (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-white/70">
+                    <Clock3 size={13} />
+                    Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </>
+            }
+          />
         </div>
 
         {/* Summary strip */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-          {loading.summary
-            ? STAT_CARDS.map(({ key }) => <StatCardSkeleton key={key} />)
-            : STAT_CARDS.map(({ key, label, icon: Icon }) => (
-              <div key={key} className="bg-white rounded-2xl border border-slate-200 p-4 hover:border-slate-300 hover:shadow-md transition">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">{label}</span>
-                  <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
-                    <Icon size={14} className="text-indigo-500" />
-                  </div>
-                </div>
-                {errors.summary ? (
-                  <button onClick={() => retrySection('summary')} className="text-xs text-red-500 hover:underline">Retry</button>
-                ) : (
-                  <div className="text-xl font-semibold text-slate-900 font-mono">{formatNumber(summary?.[key])}</div>
-                )}
-              </div>
-            ))}
+          {STAT_CARDS.map(({ key, ...card }) => (
+            <KpiCard
+              key={key}
+              {...card}
+              value={formatNumber(summary?.[key])}
+              loading={loading.summary}
+              error={!!errors.summary}
+            />
+          ))}
+        </div>
+        {errors.summary && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-rose-100 bg-rose-50 px-4 py-2.5 text-xs text-rose-700">
+            <span className="flex items-center gap-2"><AlertCircle size={14} /> Summary couldn't load: {errors.summary}</span>
+            <button onClick={() => retrySection('summary')} className="font-semibold hover:underline">Retry</button>
+          </div>
+        )}
+
+        <div className="mb-5">
+          <QuickLinks items={QUICK_LINKS} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">

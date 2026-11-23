@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   CalendarCheck, CalendarX, CalendarDays, ArrowRight, Banknote, ListChecks,
   Loader2, Check, Clock, Download, ChevronLeft, ChevronRight,
+  ClipboardList, NotebookPen, IdCard, RefreshCw, AlertCircle,
 } from 'lucide-react';
 import {
   getEmployeeProfile,
@@ -230,28 +231,101 @@ export default function PortalEmployeeDashboard() {
   const loadAttendance = () =>
     getAttendanceSummary({ view: 'month' }).then(setAttendance).catch(() => {});
 
-  useEffect(() => {
+  const [photoFailed, setPhotoFailed] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    setError('');
     Promise.all([getEmployeeProfile(), getAttendanceSummary({ view: 'month' })])
       .then(([p, a]) => { setProfile(p); setAttendance(a); })
       .catch(() => setError('Could not load your dashboard right now.'))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
   }, []);
+
+  const initials = (profile?.name || user?.name || '?')
+    .split(' ')
+    .map((w) => w[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
   return (
     <PortalLayout>
-      {loading && <DashboardSkeleton />}
+      {loading && !profile && <DashboardSkeleton />}
       {error && (
-        <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-5">{error}</div>
+        <div className="flex items-center justify-between gap-3 bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-5">
+          <span className="flex items-center gap-2"><AlertCircle size={15} /> {error}</span>
+          <button
+            type="button"
+            onClick={load}
+            className={`inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 py-2 ${TAP}`}
+          >
+            <RefreshCw size={13} /> Retry
+          </button>
+        </div>
       )}
 
       {profile && (
         <>
-          <div className="mb-4 md:mb-6">
-            <p className="text-xs font-medium text-slate-400 mb-1">{todayLabel}</p>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Welcome back, {firstName}</h1>
-            <p className="text-sm text-slate-400 mt-0.5">
-              {profile.designation || 'Employee'} · {profile.department || '-'}
-            </p>
+          {/* Hero */}
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-800 text-white p-5 md:p-6 mb-4 md:mb-6 shadow-lg shadow-slate-900/10">
+            <div className="pointer-events-none absolute -right-12 -top-16 w-48 h-48 rounded-full bg-emerald-400/20 blur-2xl" />
+            <div className="relative flex items-center gap-4">
+              <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-white/15 border border-white/20 overflow-hidden flex items-center justify-center text-lg font-bold shrink-0">
+                {profile.photo && !photoFailed ? (
+                  <img src={profile.photo} alt="" className="w-full h-full object-cover object-top" onError={() => setPhotoFailed(true)} />
+                ) : (
+                  initials
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-white/60">{todayLabel}</p>
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight truncate">Welcome back, {firstName}</h1>
+                <p className="text-sm text-white/70 truncate">
+                  {profile.designation || 'Employee'} · {profile.department || '-'}
+                </p>
+              </div>
+            </div>
+            <div className="relative mt-4 grid grid-cols-3 gap-2">
+              <div className="rounded-2xl bg-white/10 border border-white/15 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/60">Present</p>
+                <p className="text-lg font-bold">{attendance?.counts?.present || 0}</p>
+              </div>
+              <div className="rounded-2xl bg-white/10 border border-white/15 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/60">Absent</p>
+                <p className="text-lg font-bold">{attendance?.counts?.absent || 0}</p>
+              </div>
+              <div className="rounded-2xl bg-white/10 border border-white/15 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/60">Leave</p>
+                <p className="text-lg font-bold">{attendance?.counts?.leave || 0}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick links */}
+          <div className="grid grid-cols-4 gap-2 mb-4 md:mb-6">
+            {[
+              { to: '/portal/employee/tasks', label: 'Tasks', icon: ClipboardList, tint: 'bg-indigo-50 text-indigo-600' },
+              { to: '/portal/employee/work-log', label: 'Work Log', icon: NotebookPen, tint: 'bg-sky-50 text-sky-600' },
+              { to: '/portal/employee/attendance', label: 'Attendance', icon: CalendarCheck, tint: 'bg-emerald-50 text-emerald-600' },
+              { to: '/portal/employee/profile', label: 'ID Card', icon: IdCard, tint: 'bg-amber-50 text-amber-600' },
+            ].map(({ to, label, icon: Icon, tint }) => (
+              <Link
+                key={to}
+                to={to}
+                className={`flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2.5 bg-white border border-slate-200 rounded-2xl py-3 md:px-3 min-h-[72px] md:min-h-[56px] active:bg-slate-50 hover:shadow-sm transition ${TAP}`}
+              >
+                <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${tint}`}>
+                  <Icon size={18} />
+                </span>
+                <span className="text-[11px] md:text-sm font-semibold text-slate-700">{label}</span>
+              </Link>
+            ))}
           </div>
 
           {/*

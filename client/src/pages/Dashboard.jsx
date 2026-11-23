@@ -26,9 +26,9 @@ import {
 } from 'lucide-react';
 import api from '../api/axios';
 import Topbar from '../components/Topbar';
-import ExpenseDonut from '../components/ExpenseDonut';
 import InflowOutflowChart from '../components/InflowOutflowChart';
-import CommentsTable from '../components/CommentsTable';
+import { DashboardHero, Skeleton, heroButton, heroButtonSolid } from '../components/dashboard/DashboardKit';
+import { greeting, currentStaffUser } from '../components/dashboard/dashboardUtils';
 
 const RANGES = [
   { key: '30d', label: '30 Days' },
@@ -55,6 +55,7 @@ export default function Dashboard() {
   const [vouchers, setVouchers] = useState([]);
   const [comments, setComments] = useState([]);
   const [officeOverview, setOfficeOverview] = useState(null);
+  const [projectSummary, setProjectSummary] = useState(null);
   const [range, setRange] = useState('12m');
   const [approvingId, setApprovingId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -74,6 +75,7 @@ export default function Dashboard() {
       api.get('/dashboard/pending-vouchers').then((r) => setVouchers(Array.isArray(r.data) ? r.data : [])).catch(() => setVouchers([])),
       api.get('/dashboard/comments').then((r) => setComments(Array.isArray(r.data) ? r.data : [])).catch(() => setComments([])),
       api.get('/dashboard/office-overview').then((r) => setOfficeOverview(r.data)).catch(() => setOfficeOverview(null)),
+      api.get('/dashboard/project-summary').then((r) => setProjectSummary(r.data)).catch(() => setProjectSummary(null)),
     ];
     await Promise.all(requests);
     if (showRefresh) setRefreshing(false);
@@ -118,6 +120,8 @@ export default function Dashboard() {
       : 0;
 
   const netPosition = Number(summary?.receipt || 0) - Number(summary?.expenses || 0);
+  const runningProjects = projectSummary?.runningProject ?? projects.length;
+  const firstName = (currentStaffUser()?.name || '').split(' ')[0] || 'there';
 
   async function handleApproveVoucher(id) {
     if (!id) return;
@@ -164,7 +168,7 @@ export default function Dashboard() {
     return (
       <div className="min-h-screen bg-[#f0f5f2]">
         <Topbar />
-        <div className="flex min-h-[60vh] flex-col items-center justify-center">
+        <div className={summaryError ? 'flex min-h-[60vh] flex-col items-center justify-center' : ''}>
           {summaryError ? (
             <>
               <div className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-rose-100 text-rose-600">
@@ -180,10 +184,7 @@ export default function Dashboard() {
               </button>
             </>
           ) : (
-            <>
-              <div className="size-10 animate-spin rounded-full border-[3px] border-[#174d36]/20 border-t-[#174d36]" />
-              <p className="mt-4 text-sm font-medium text-slate-500">Loading your business overview…</p>
-            </>
+            <DashboardSkeleton />
           )}
         </div>
       </div>
@@ -194,71 +195,50 @@ export default function Dashboard() {
     <div className="min-h-screen bg-[#f0f5f2] text-slate-800">
       <Topbar />
 
-      {/* HEADER CONTROL BAR */}
-      <div className="sticky top-0 z-20 border-b border-emerald-100/80 bg-white/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="flex items-center gap-4">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-[#174d36]">
-                Executive Command Center
-              </p>
-              <p className="text-sm font-semibold text-slate-700">
-                {new Date().toLocaleDateString('en-GB', {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                })}
-              </p>
-            </div>
-
-            <div className="hidden h-8 w-px bg-slate-200 sm:block" />
-
-            <div className="flex rounded-xl bg-slate-100 p-1">
-              {RANGES.map((item) => (
-                <button
-                  key={item.key}
-                  onClick={() => setRange(item.key)}
-                  className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
-                    range === item.key
-                      ? 'bg-[#174d36] text-white shadow-md'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => loadDashboard(true)}
-              disabled={refreshing}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:border-emerald-300 hover:text-[#174d36] disabled:opacity-60"
-            >
-              <RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
-            <button
-              onClick={handleExportReport}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 shadow-sm hover:border-emerald-300 hover:text-[#174d36]"
-            >
-              <Download className="size-3.5" />
-              Export
-            </button>
-            <button
-              onClick={() => navigate('/requisition-module/material-requisition-add')}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#174d36] to-[#2a9d8f] px-4 py-2 text-xs font-bold text-white shadow-lg shadow-emerald-700/25"
-            >
-              <Plus className="size-3.5" />
-              New Requisition
-            </button>
-          </div>
-        </div>
-      </div>
-
       <main className="mx-auto max-w-[1500px] space-y-4 p-4">
+        {/* ===== HERO ===== */}
+        <DashboardHero
+          tone="emerald"
+          icon={ShieldCheck}
+          eyebrow={`Executive Command Center · ${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })}`}
+          title={`${greeting()}, ${firstName}`}
+          subtitle="Treasury, cash flow, projects and approvals across Trikon in one place."
+          stats={[
+            { label: 'Treasury', value: money(banks.total) },
+            { label: 'Net Position', value: money(netPosition) },
+            { label: 'Running Projects', value: number(runningProjects) },
+            { label: 'Pending Approvals', value: number(vouchers.length) },
+          ]}
+          actions={
+            <>
+              <div className="flex rounded-xl border border-white/15 bg-white/10 p-1 backdrop-blur-sm">
+                {RANGES.map((item) => (
+                  <button
+                    key={item.key}
+                    onClick={() => setRange(item.key)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                      range === item.key ? 'bg-white text-[#174d36] shadow-md' : 'text-white/75 hover:text-white'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => loadDashboard(true)} disabled={refreshing} className={heroButton}>
+                <RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+              <button onClick={handleExportReport} className={heroButton}>
+                <Download className="size-3.5" />
+                Export
+              </button>
+              <button onClick={() => navigate('/requisition-module/material-requisition-add')} className={heroButtonSolid}>
+                <Plus className="size-3.5" />
+                New Requisition
+              </button>
+            </>
+          }
+        />
 
         {/* ===== TOP STRIP ===== */}
         <div className="grid grid-cols-12 gap-4">
@@ -276,7 +256,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <button
-                onClick={() => navigate('/accounts-module')}
+                onClick={() => navigate('/accounts-module/bank-accounts')}
                 className="rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-[#174d36] hover:bg-emerald-100"
               >
                 Manage →
@@ -333,7 +313,7 @@ export default function Dashboard() {
                 </span>
               </div>
               <p className="mt-3 text-2xl font-bold tabular-nums text-slate-900">{money(summary.receipt)}</p>
-              <p className="mt-1 text-[11px] text-slate-500">Collected this period</p>
+              <p className="mt-1 text-[11px] text-slate-500">All-time collected</p>
             </div>
 
             <div className="rounded-2xl border border-rose-100 bg-white p-4 shadow-sm">
@@ -346,7 +326,7 @@ export default function Dashboard() {
                 </span>
               </div>
               <p className="mt-3 text-2xl font-bold tabular-nums text-slate-900">{money(summary.expenses)}</p>
-              <p className="mt-1 text-[11px] text-slate-500">Recorded this period</p>
+              <p className="mt-1 text-[11px] text-slate-500">All-time recorded</p>
             </div>
 
             <div className="col-span-2 rounded-2xl border border-slate-100 bg-gradient-to-r from-white via-white to-emerald-50/40 p-4 shadow-sm">
@@ -380,12 +360,12 @@ export default function Dashboard() {
               <div className="flex size-9 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
                 <Building2 className="size-4" />
               </div>
-              <p className="mt-3 text-2xl font-bold text-slate-900">{projects.length}</p>
-              <p className="text-[11px] font-medium text-slate-500">Active Projects</p>
+              <p className="mt-3 text-2xl font-bold text-slate-900">{number(runningProjects)}</p>
+              <p className="text-[11px] font-medium text-slate-500">Running Projects</p>
             </button>
 
             <button
-              onClick={() => navigate('/crm-module/lead')}
+              onClick={() => navigate('/inventory-module/flat')}
               className="flex flex-col items-start rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-white p-4 text-left shadow-sm transition hover:shadow-md"
             >
               <div className="flex size-9 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
@@ -396,7 +376,7 @@ export default function Dashboard() {
             </button>
 
             <button
-              onClick={() => navigate('/accounts-module')}
+              onClick={() => navigate('/requisition-module/material-requisition-list')}
               className="flex flex-col items-start rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50 to-white p-4 text-left shadow-sm transition hover:shadow-md"
             >
               <div className="flex size-9 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
@@ -407,7 +387,7 @@ export default function Dashboard() {
             </button>
 
             <button
-              onClick={() => navigate('/accounts-module')}
+              onClick={() => navigate('/accounts-module/approval-center')}
               className="flex flex-col items-start rounded-2xl border border-rose-100 bg-gradient-to-br from-rose-50 to-white p-4 text-left shadow-sm transition hover:shadow-md"
             >
               <div className="flex size-9 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
@@ -728,7 +708,7 @@ export default function Dashboard() {
                   <span className="text-xs font-semibold text-slate-700">Projects</span>
                 </button>
                 <button
-                  onClick={() => navigate('/accounts-module')}
+                  onClick={() => navigate('/dashboard/accounts')}
                   className="flex items-center gap-2.5 rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-3 text-left transition hover:bg-violet-50"
                 >
                   <div className="flex size-8 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
@@ -873,5 +853,22 @@ export default function Dashboard() {
         </div>
       </main>
     </div>
+  );
+}
+function DashboardSkeleton() {
+  return (
+    <main className="mx-auto max-w-[1500px] space-y-4 p-4" aria-busy="true" aria-label="Loading dashboard">
+      <Skeleton className="h-44 w-full rounded-3xl" />
+      <div className="grid grid-cols-12 gap-4">
+        <Skeleton className="col-span-12 h-64 rounded-2xl sm:col-span-5 lg:col-span-4" />
+        <Skeleton className="col-span-12 h-64 rounded-2xl sm:col-span-7 lg:col-span-5" />
+        <Skeleton className="col-span-12 h-64 rounded-2xl lg:col-span-3" />
+      </div>
+      <div className="grid grid-cols-12 gap-4">
+        {[0, 1, 2].map((i) => (
+          <Skeleton key={i} className="col-span-12 h-80 rounded-2xl lg:col-span-4" />
+        ))}
+      </div>
+    </main>
   );
 }

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Wallet, ArrowRight, ShoppingCart, Clock, FileCheck2,
   MessageSquarePlus, CreditCard, FileBarChart, LifeBuoy,
-  Receipt, CheckCircle2,
+  Receipt, CheckCircle2, RefreshCw, AlertCircle, Sparkles,
 } from 'lucide-react';
 import { getPortalDashboard } from '../api/portalDashboard';
 import { getPortalUser } from '../api/portalAuth';
@@ -17,15 +17,15 @@ function invoiceStatus(inv) {
   return { label: 'Unpaid', tone: 'bg-slate-100 text-slate-600', icon: Receipt, iconTone: 'bg-slate-100 text-slate-500' };
 }
 
-function VelocityCard({ label, value, icon, footer, to }) {
+function VelocityCard({ label, value, icon, footer, to, tint = 'bg-slate-100 text-slate-500' }) {
   return (
     <Link
       to={to}
-      className="block bg-white border border-slate-200 rounded-xl p-3 md:p-4 hover:border-slate-300 hover:shadow-sm transition-all"
+      className="block bg-white border border-slate-200 rounded-xl p-3 md:p-4 hover:border-slate-300 hover:shadow-md hover:-translate-y-0.5 transition-all"
     >
       <div className="flex items-center justify-between mb-2">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-        <span className="text-slate-300">{icon}</span>
+        <span className={`w-7 h-7 rounded-lg flex items-center justify-center ${tint}`}>{icon}</span>
       </div>
       <p className="text-xl md:text-2xl font-bold text-slate-900 leading-none mb-1.5">{value}</p>
       {footer}
@@ -50,11 +50,17 @@ export default function PortalDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
+    setError('');
     getPortalDashboard()
       .then(setData)
       .catch(() => setError('Could not load your dashboard right now.'))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
   }, []);
 
   const isSupplierOrVendor = user?.role === 'supplier' || user?.role === 'vendor';
@@ -77,22 +83,52 @@ export default function PortalDashboard() {
 
   return (
     <PortalLayout>
-      {loading && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 text-sm text-slate-500">
-          Loading your dashboard…
-        </div>
-      )}
+      {loading && !data && <PortalDashboardSkeleton />}
 
       {error && (
-        <div className="bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-5">{error}</div>
+        <div className="flex items-center justify-between gap-3 bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl px-4 py-3 mb-5">
+          <span className="flex items-center gap-2"><AlertCircle size={15} /> {error}</span>
+          <button
+            type="button"
+            onClick={load}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 hover:underline"
+          >
+            <RefreshCw size={13} /> Retry
+          </button>
+        </div>
       )}
 
       {data && (
         <>
-          {/* Date + welcome */}
-          <p className="text-xs font-medium text-slate-400 mb-1">{todayLabel}</p>
-          <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight mb-1">Welcome back, {firstName}</h1>
-          <p className="text-sm text-slate-400 mb-5 md:mb-6">Here's your account overview</p>
+          {/* Hero: date + welcome + headline numbers */}
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-800 text-white p-5 md:p-6 mb-5 md:mb-6 shadow-lg shadow-slate-900/10">
+            <div className="pointer-events-none absolute -right-12 -top-16 w-48 h-48 rounded-full bg-emerald-400/20 blur-2xl" />
+            <div className="relative flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/60">
+                  <Sparkles size={12} /> {todayLabel} · {isSupplierOrVendor ? 'Supplier portal' : 'Customer portal'}
+                </p>
+                <h1 className="mt-1.5 text-xl md:text-2xl font-bold tracking-tight">Welcome back, {firstName}</h1>
+                <p className="mt-0.5 text-sm text-white/70">Here's your account overview</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5 md:flex">
+                <div className="rounded-2xl bg-white/10 border border-white/15 px-4 py-2.5 md:min-w-[140px]">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/60">Outstanding</p>
+                  <p className="text-lg font-bold">৳{Number(data.cards.outstandingBalance || 0).toLocaleString()}</p>
+                </div>
+                <div className="rounded-2xl bg-white/10 border border-white/15 px-4 py-2.5 md:min-w-[140px]">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/60">
+                    {isSupplierOrVendor ? 'Received' : 'Pending requests'}
+                  </p>
+                  <p className="text-lg font-bold">
+                    {isSupplierOrVendor
+                      ? `৳${Number(data.cards.paidAmount || 0).toLocaleString()}`
+                      : Number(data.cards.pendingRequests || 0).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Desktop: balance + activity side by side. Mobile: stacked, original order. */}
           <div className="md:grid md:grid-cols-3 md:gap-6 md:items-start">
@@ -153,12 +189,14 @@ export default function PortalDashboard() {
                   label="Orders"
                   value={data.cards.totalOrders}
                   icon={<ShoppingCart size={14} />}
+                  tint="bg-sky-50 text-sky-600"
                   to={ordersTo}
                 />
                 <VelocityCard
                   label="Requests"
                   value={data.cards.pendingRequests}
                   icon={<Clock size={14} />}
+                  tint="bg-amber-50 text-amber-600"
                   to={requestsTo}
                   footer={data.cards.pendingRequests > 0 ? (
                     <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 rounded px-1.5 py-0.5">Pending</span>
@@ -168,6 +206,7 @@ export default function PortalDashboard() {
                   label="Quotes"
                   value={data.cards.pendingQuotations}
                   icon={<FileCheck2 size={14} />}
+                  tint="bg-emerald-50 text-emerald-600"
                   to={quotesTo}
                 />
               </div>
@@ -268,5 +307,22 @@ export default function PortalDashboard() {
         </>
       )}
     </PortalLayout>
+  );
+}
+
+function PortalDashboardSkeleton() {
+  return (
+    <div className="animate-pulse space-y-4" aria-busy="true">
+      <div className="h-32 bg-slate-200 rounded-3xl" />
+      <div className="md:grid md:grid-cols-3 md:gap-6 space-y-4 md:space-y-0">
+        <div className="h-48 bg-slate-200 rounded-2xl" />
+        <div className="md:col-span-2 grid grid-cols-3 gap-2.5 md:gap-4">
+          <div className="h-24 bg-slate-200 rounded-xl" />
+          <div className="h-24 bg-slate-200 rounded-xl" />
+          <div className="h-24 bg-slate-200 rounded-xl" />
+        </div>
+      </div>
+      <div className="h-40 bg-slate-200 rounded-2xl" />
+    </div>
   );
 }

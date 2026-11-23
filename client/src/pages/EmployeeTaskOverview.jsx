@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, RefreshCw, Timer } from 'lucide-react';
+import { RefreshCw, Timer, Activity, UserCheck, ListTodo, AlarmClock, Plus } from 'lucide-react';
+import { DashboardHero, KpiCard, Panel, Skeleton, ErrorState, heroButton, heroButtonSolid } from '../components/dashboard/DashboardKit';
 import Topbar from '../components/Topbar';
 import { getTaskOverview, fmtMinutes, fmtClock, fmtTime } from '../api/task';
 
@@ -11,14 +12,6 @@ const ATT = {
   Holiday: 'bg-violet-50 text-violet-700',
 };
 
-function Stat({ label, value }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-slate-900">{value ?? 0}</p>
-    </div>
-  );
-}
 
 export default function EmployeeTaskOverview() {
   const [data, setData] = useState(null);
@@ -48,31 +41,43 @@ export default function EmployeeTaskOverview() {
     <div className="min-h-screen bg-slate-50">
       <Topbar />
       <main className="mx-auto max-w-[1300px] px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-5 flex items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Live Task Overview</h1>
-            <p className="text-sm text-slate-500">
-              Employees currently working on a task. Refreshes every 30 seconds{updated ? ` · updated ${fmtTime(updated)}` : ''}.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50">
-              <RefreshCw size={14} /> Refresh
-            </button>
-            <Link to="/hrm-module/tasks" className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">Assign task</Link>
-          </div>
+        <div className="mb-5">
+          <DashboardHero
+            tone="violet"
+            icon={Activity}
+            eyebrow="HRM · Live"
+            title="Live Task Overview"
+            subtitle={`Employees currently working on a task. Refreshes every 30 seconds${updated ? ` · updated ${fmtTime(updated)}` : ''}.`}
+            actions={
+              <>
+                <button onClick={load} className={heroButton}>
+                  <RefreshCw size={14} /> Refresh
+                </button>
+                <Link to="/hrm-module/tasks" className={heroButtonSolid}>
+                  <Plus size={14} /> Assign task
+                </Link>
+              </>
+            }
+          />
         </div>
 
-        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>}
-        {!data ? (
-          <div className="flex justify-center py-20 text-slate-400"><Loader2 className="animate-spin" /></div>
+        {error && data && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>}
+        {!data && error ? (
+          <Panel><ErrorState title="Could not load the overview" message={error} onRetry={load} /></Panel>
+        ) : !data ? (
+          <div className="space-y-4" aria-busy="true">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+            </div>
+            <Skeleton className="h-64 w-full rounded-xl" />
+          </div>
         ) : (
           <>
             <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-              <Stat label="Working now" value={data.totals.working} />
-              <Stat label="Present today" value={data.totals.present} />
-              <Stat label="Open tasks" value={data.totals.openTasks} />
-              <Stat label="Overdue" value={data.totals.overdue} />
+              <KpiCard label="Working now" icon={Timer} accent="emerald" value={data.totals.working ?? 0} />
+              <KpiCard label="Present today" icon={UserCheck} accent="sky" value={data.totals.present ?? 0} to="/hrm-module/attendance-log" />
+              <KpiCard label="Open tasks" icon={ListTodo} accent="violet" value={data.totals.openTasks ?? 0} to="/hrm-module/tasks" />
+              <KpiCard label="Overdue" icon={AlarmClock} accent="rose" value={data.totals.overdue ?? 0} to="/hrm-module/tasks" />
             </div>
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
               <table className="w-full text-left text-sm">

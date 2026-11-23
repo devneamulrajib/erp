@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   AlertCircle, BookOpen, ChevronRight, CreditCard, FileCheck2,
-  Landmark, PieChart, Receipt, RefreshCw, ShoppingCart, TrendingUp, WalletCards
+  Landmark, PieChart, Receipt, RefreshCw, ShoppingCart, TrendingUp, WalletCards,
+  ShieldCheck, Scale, FileSpreadsheet, Plus,
 } from 'lucide-react';
 
 import AccountsSubNav from '../components/AccountsSubNav';
@@ -12,16 +14,34 @@ import PendingChequeTable from '../components/PendingChequeTable';
 import PendingVoucherPanel from '../components/PendingVoucherPanel';
 import Topbar from '../components/Topbar';
 import api from '../api/axios';
+import { DashboardHero, KpiCard, QuickLinks, heroButton } from '../components/dashboard/DashboardKit';
+import { formatTaka, formatCount } from '../components/dashboard/dashboardUtils';
 
-// key, label, Icon, icon accent classes, fallback trend caption
-// (override per-card by adding `${key}Note` to the summary API response)
+// accounts-summary returns totalExpense as a Taka sum and the rest as record counts.
 const cards = [
-  ['totalExpense', 'Total Expense', WalletCards, 'bg-blue-50 text-blue-600 group-hover:bg-blue-600', 'vs budget'],
-  ['payment', 'Payment', CreditCard, 'bg-violet-50 text-violet-600 group-hover:bg-violet-600', 'scheduled today'],
-  ['sales', 'Sales', TrendingUp, 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600', 'MoM'],
-  ['purchases', 'Purchases', ShoppingCart, 'bg-amber-50 text-amber-600 group-hover:bg-amber-600', 'PO commitments'],
-  ['receipt', 'Receipt', Receipt, 'bg-fuchsia-50 text-fuchsia-600 group-hover:bg-fuchsia-600', 'collected'],
-  ['journal', 'Journal', BookOpen, 'bg-slate-100 text-slate-600 group-hover:bg-slate-700', 'Balanced ledger'],
+  { key: 'totalExpense', label: 'Total Expense', icon: WalletCards, accent: 'blue', money: true, to: '/accounts-module/expense_list' },
+  { key: 'payment', label: 'Payment Vouchers', icon: CreditCard, accent: 'violet', to: '/accounts-module/payment-list' },
+  { key: 'sales', label: 'Sales', icon: TrendingUp, accent: 'emerald', to: '/billing/item_sale_list' },
+  { key: 'purchases', label: 'Purchases', icon: ShoppingCart, accent: 'amber', to: '/inventory-module/purchase-list' },
+  { key: 'receipt', label: 'Receipt Vouchers', icon: Receipt, accent: 'rose', to: '/accounts-module/receipt-list' },
+  { key: 'journal', label: 'Journals', icon: BookOpen, accent: 'slate', to: '/accounts-module/journal_list' },
+];
+
+const RANGES = [
+  ['today', 'Today'],
+  ['weekly', 'Week'],
+  ['monthly', 'Month'],
+  ['yearly', 'Year'],
+  ['all', 'All'],
+];
+
+const QUICK_LINKS = [
+  { label: 'Payment Voucher', to: '/accounts-module/payment-list/add', icon: Plus, accent: 'violet' },
+  { label: 'Receipt Voucher', to: '/accounts-module/receipt-list/add', icon: Receipt, accent: 'rose' },
+  { label: 'Approval Center', to: '/accounts-module/approval-center', icon: ShieldCheck, accent: 'emerald' },
+  { label: 'General Ledger', to: '/accounts-module/reports/general-ledger', icon: BookOpen, accent: 'blue' },
+  { label: 'Trial Balance', to: '/accounts-module/reports/trial-balance', icon: Scale, accent: 'amber' },
+  { label: 'Balance Sheet', to: '/accounts-module/reports/balance-sheet', icon: FileSpreadsheet, accent: 'slate' },
 ];
 
 const emptyFlow = { labels: [], inflow: [], outflow: [] };
@@ -69,9 +89,11 @@ export default function AccountsDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [range, setRange] = useState('today');
 
   const loadDashboard = useCallback(async (refresh = false) => {
-    refresh ? setRefreshing(true) : setLoading(true);
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
     setError(null);
 
     try {
@@ -79,7 +101,7 @@ export default function AccountsDashboard() {
         summaryRes, banksRes, vouchersRes,
         expenseRes, flowRes, chequesRes
       ] = await Promise.all([
-        api.get('/dashboard/accounts-summary'),
+        api.get('/dashboard/accounts-summary', { params: { range } }),
         api.get('/dashboard/bank-balances'),
         api.get('/dashboard/pending-vouchers'),
         api.get('/dashboard/expense-chart'),
@@ -102,7 +124,7 @@ export default function AccountsDashboard() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [range]);
 
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
@@ -149,77 +171,71 @@ export default function AccountsDashboard() {
       <AccountsSubNav />
 
       <main className="mx-auto max-w-[1550px] px-4 py-5 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-          <div>
-            <div className="mb-2 flex items-center gap-1 text-[11px] font-medium text-slate-400">
-              <span>Home</span><ChevronRight size={12}/><span>Accounting</span>
-              <ChevronRight size={12}/><span className="font-semibold text-slate-600">Dashboard</span>
-            </div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-                Accounts Overview
-              </h1>
-              <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-600">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                LiveLedger
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-slate-500">
-              Monitor your real-time financial activity, balances, cash movement and pending vouchers.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {lastUpdated && (
-              <span className="hidden items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-500 sm:flex">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                Updated <b className="text-slate-700">
-                  {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </b>
-              </span>
-            )}
-            <button
-              onClick={() => loadDashboard(true)}
-              disabled={refreshing}
-              className="flex h-10 items-center gap-2 rounded-xl bg-slate-900 px-4 text-xs font-bold text-white transition hover:bg-blue-600 disabled:opacity-60"
-            >
-              <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''}/>
-              {refreshing ? 'Refreshing' : 'Refresh'}
-            </button>
-          </div>
+        <div className="mb-3 flex items-center gap-1 text-[11px] font-medium text-slate-400">
+          <Link to="/dashboard" className="hover:text-slate-600">Home</Link><ChevronRight size={12}/><span>Accounting</span>
+          <ChevronRight size={12}/><span className="font-semibold text-slate-600">Dashboard</span>
         </div>
 
-        {/* KPI */}
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-          {cards.map(([key, label, Icon, iconClasses, fallbackNote], i) => {
-            const note = summary?.[`${key}Note`] || fallbackNote;
-            return (
-              <div
-                key={key}
-                className="group rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_5px_20px_rgba(15,23,42,.04)] transition hover:-translate-y-0.5 hover:shadow-lg"
-              >
-                <div className="mb-4 flex items-center justify-between">
-                  <div className={`flex h-9 w-9 items-center justify-center rounded-xl transition group-hover:text-white ${iconClasses}`}>
-                    <Icon size={16}/>
-                  </div>
-                  <span className="text-[10px] font-bold text-slate-300">0{i + 1}</span>
-                </div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
-                {loading
-                  ? <Skeleton className="mt-2 h-7 w-20"/>
-                  : (
-                    <>
-                      <p className="mt-1 text-xl font-extrabold tabular-nums text-slate-900">
-                        ${Number(summary?.[key] ?? 0).toLocaleString()}
-                      </p>
-                      {note && <p className="mt-0.5 text-[10px] font-medium text-slate-400">{note}</p>}
-                    </>
-                  )
-                }
+        <DashboardHero
+          tone="blue"
+          icon={Landmark}
+          eyebrow="Accounting · LiveLedger"
+          title="Accounts Overview"
+          subtitle="Monitor balances, cash movement, cheques and pending vouchers in real time."
+          stats={loading ? [] : [
+            { label: 'Bank Balance', value: formatTaka(banks.total) },
+            { label: 'Net Cash Flow · 12m', value: formatTaka(netFlow) },
+            { label: 'Pending Cheques', value: formatCount(cheques.length) },
+          ]}
+          actions={
+            <>
+              <div className="flex rounded-xl border border-white/15 bg-white/10 p-1 backdrop-blur-sm">
+                {RANGES.map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setRange(key)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                      range === key ? 'bg-white text-blue-700 shadow-md' : 'text-white/75 hover:text-white'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
-            );
-          })}
+              <button onClick={() => loadDashboard(true)} disabled={refreshing} className={heroButton}>
+                <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''}/>
+                {refreshing ? 'Refreshing' : 'Refresh'}
+              </button>
+              {lastUpdated && (
+                <span className="text-[11px] text-white/70">
+                  Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </>
+          }
+        />
+
+        {error && summary && (
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-rose-100 bg-rose-50 px-4 py-2.5 text-xs text-rose-700">
+            <AlertCircle size={14}/> {error}
+          </div>
+        )}
+
+        {/* KPI */}
+        <div className="my-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+          {cards.map(({ key, money, ...card }) => (
+            <KpiCard
+              key={key}
+              {...card}
+              loading={loading}
+              value={money ? formatTaka(summary?.[key]) : formatCount(summary?.[key])}
+              hint={`${RANGES.find(([k]) => k === range)?.[1] || ''}${money ? '' : ' · records'}`}
+            />
+          ))}
+        </div>
+
+        <div className="mb-5">
+          <QuickLinks items={QUICK_LINKS} />
         </div>
 
         {/* Dashboard */}
@@ -264,7 +280,7 @@ export default function AccountsDashboard() {
                         <span className="text-slate-500">
                           Primary cost driver: <b className="text-slate-700">{topExpense.name}</b>
                         </span>
-                        <button className="font-bold text-blue-600 hover:underline">View ledger →</button>
+                        <Link to="/accounts-module/reports/general-ledger" className="font-bold text-blue-600 hover:underline">View ledger →</Link>
                       </div>
                     )}
                   </>

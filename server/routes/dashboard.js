@@ -12,6 +12,10 @@ const { Comment, CommentAttachment, BudgetCategory, MonthlyBudget, OfficeExpense
 const ChartOfAccount = require('../models/ChartOfAccount');
 const Sale = require('../models/Sale');
 const Purchase = require('../models/Purchase');
+const MaterialRequisition = require('../models/MaterialRequisition');
+const ServiceRequisition = require('../models/ServiceRequisition');
+const MaterialUsage = require('../models/MaterialUsage');
+const Task = require('../models/Task');
 
 // Helper: date range for a TimeFilterTabs-style range key
 function getRangeBounds(range) {
@@ -49,20 +53,65 @@ function monthsForRange(range) {
   }
 }
 
+// Prefer ?range=30d|6m|12m; fall back to ?months=1|6|12 (what the main
+// dashboard sends). monthsForRange() defaults to 12, so it must only be used
+// when a range was actually given, or ?months would always be ignored.
+function monthsFromQuery(query = {}) {
+  if (query.range) return monthsForRange(query.range);
+  const m = Number(query.months);
+  return Number.isFinite(m) && m > 0 ? Math.min(m, 60) : 12;
+}
+
+// Read-only helpers so a missing table/column returns 0 instead of a 500.
+const safeCount = (Model, options) => (Model ? Model.count(options).catch(() => 0) : Promise.resolve(0));
+const safeSum = (Model, field, options) =>
+  (Model ? Model.sum(field, options).then((v) => Number(v) || 0).catch(() => 0) : Promise.resolve(0));
+
+// Last N calendar months as 'YYYY-MM' keys plus short labels, oldest first.
+function lastMonths(n) {
+  const keys = [];
+  const labels = [];
+  const now = new Date();
+  for (let i = n - 1; i >= 0; i -= 1) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    labels.push(d.toLocaleString('en-US', { month: 'short' }));
+  }
+  return { keys, labels };
+}
+
+// Sums `field` per createdAt month for the last N months.
+async function monthlyTotals(Model, field, n) {
+  const { keys } = lastMonths(n);
+  const since = new Date();
+  since.setMonth(since.getMonth() - (n - 1), 1);
+  since.setHours(0, 0, 0, 0);
+  const rows = await Model.findAll({
+    attributes: [
+      [fn('DATE_FORMAT', col('createdAt'), '%Y-%m'), 'month'],
+      [fn('SUM', col(field)), 'total'],
+    ],
+    where: { createdAt: { [Op.gte]: since } },
+    group: [literal('month')],
+    raw: true,
+  }).catch(() => []);
+  const byMonth = Object.fromEntries(rows.map((r) => [r.month, Number(r.total) || 0]));
+  return keys.map((k) => byMonth[k] || 0);
+}
+
 // Top stat cards: Expenses / Material Req / Service Req / Sales / Purchases / Receipt
 router.get('/summary', auth, async (req, res) => {
   try {
-    const expenses = await Expense.sum('amount') || 0;
-    const receipt = await Voucher.sum('amount', { where: { type: 'Receipt' } }) || 0;
+    const [expenses, receipt, materialReq, serviceReq, sales, purchases] = await Promise.all([
+      Expense.sum('amount').then((v) => v || 0),
+      Voucher.sum('amount', { where: { type: 'Receipt' } }).then((v) => v || 0),
+      safeCount(MaterialRequisition),
+      safeCount(ServiceRequisition),
+      safeSum(Sale, 'grandTotal'),
+      safeSum(Purchase, 'grandTotal'),
+    ]);
 
-    res.json({
-      expenses,
-      materialReq: 0, // TODO: wire up once MaterialRequisition is converted
-      serviceReq: 0,  // TODO: wire up once ServiceRequisition is converted
-      sales: 0,       // TODO: wire up once Sale is converted
-      purchases: 0,   // TODO: wire up once Purchase is converted
-      receipt,
-    });
+    res.json({ expenses, materialReq, serviceReq, sales, purchases, receipt });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -120,7 +169,7 @@ router.get('/projects', auth, async (req, res) => {
 // dashboard's 30 Days / 6 Months / 12 Months toggle actually changes the window.
 router.get('/expense-chart', auth, async (req, res) => {
   try {
-    const months = monthsForRange(req.query.range) || Number(req.query.months) || 12;
+    const months = monthsFromQuery(req.query);
     const since = new Date();
     since.setMonth(since.getMonth() - months);
 
@@ -151,7 +200,7 @@ router.get('/expense-chart', auth, async (req, res) => {
 // Inflow vs Outflow bar chart. Accepts ?months=1|6|12 (defaults to 12).
 router.get('/inflow-outflow', auth, async (req, res) => {
   try {
-    const months = monthsForRange(req.query.range) || Number(req.query.months) || 12;
+    const months = monthsFromQuery(req.query);
     const since = new Date();
     since.setMonth(since.getMonth() - months);
 
@@ -390,18 +439,16 @@ router.get('/office-overview', auth, async (req, res) => {
 
 router.get('/project-summary', auth, async (req, res) => {
   try {
-    const totalProject = await Project.count();
-    const runningProject = await Project.count({ where: { status: 'Active' } });
-    const unsoldFlatLand = await Property.count({ where: { sold: false } });
+    const [totalProject, runningProject, unsoldFlatLand, materialReq, serviceReq, task] = await Promise.all([
+      Project.count(),
+      Project.count({ where: { status: 'Active' } }),
+      Property.count({ where: { sold: false } }),
+      safeCount(MaterialRequisition),
+      safeCount(ServiceRequisition),
+      safeCount(Task),
+    ]);
 
-    res.json({
-      totalProject,
-      runningProject,
-      materialReq: 0, // TODO
-      serviceReq: 0,  // TODO
-      task: 0,        // TODO: no task model yet
-      unsoldFlatLand,
-    });
+    res.json({ totalProject, runningProject, materialReq, serviceReq, task, unsoldFlatLand });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -437,17 +484,16 @@ router.get('/project-progress', auth, async (req, res) => {
 
 router.get('/inventory-summary', auth, async (req, res) => {
   try {
-    const customers = await ChartOfAccount.count({ where: { contactType: 'Customer' } });
-    const suppliers = await ChartOfAccount.count({ where: { contactType: 'Supplier' } });
+    const [customers, suppliers, materialReq, serviceReq, purchases, sales] = await Promise.all([
+      ChartOfAccount.count({ where: { contactType: 'Customer' } }),
+      ChartOfAccount.count({ where: { contactType: 'Supplier' } }),
+      safeCount(MaterialRequisition),
+      safeCount(ServiceRequisition),
+      safeCount(Purchase),
+      safeCount(Sale),
+    ]);
 
-    res.json({
-      customers,
-      suppliers,
-      materialReq: 0, // TODO
-      serviceReq: 0,  // TODO
-      purchases: 0,   // TODO
-      sales: 0,       // TODO
-    });
+    res.json({ customers, suppliers, materialReq, serviceReq, purchases, sales });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -457,12 +503,33 @@ router.get('/overflow-material', auth, async (req, res) => {
   res.json([]); // TODO: no Materials/BOQ usage model yet
 });
 
+// Purchase grand total per month (by createdAt) for the last 12 months.
 router.get('/purchase-chart', auth, async (req, res) => {
-  res.json({ labels: [], values: [] }); // TODO: wire up once Purchase is converted
+  try {
+    const { labels } = lastMonths(12);
+    const values = await monthlyTotals(Purchase, 'grandTotal', 12);
+    if (!values.some((v) => v > 0)) return res.json({ labels: [], values: [] });
+    res.json({ labels, values });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
+// Purchases vs material usage (grand totals per createdAt month, last 6 months).
 router.get('/purchase-vs-consumption', auth, async (req, res) => {
-  res.json({ labels: [], purchase: [], consumption: [] }); // TODO: wire up once Purchase/MaterialUsage are converted
+  try {
+    const { labels } = lastMonths(6);
+    const [purchase, consumption] = await Promise.all([
+      monthlyTotals(Purchase, 'grandTotal', 6),
+      monthlyTotals(MaterialUsage, 'grandTotal', 6),
+    ]);
+    if (![...purchase, ...consumption].some((v) => v > 0)) {
+      return res.json({ labels: [], purchase: [], consumption: [] });
+    }
+    res.json({ labels, purchase, consumption });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 module.exports = router;
