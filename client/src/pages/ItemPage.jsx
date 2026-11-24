@@ -199,6 +199,12 @@ export default function ItemPage() {
         setNewMode((m) => ({ ...m, brand: false }));
       }
 
+      // "No brand" must go to the API as null, never '' (MySQL turns '' into 0,
+      // which breaks the brands foreign key). Empty prices go as 0.
+      payload.brand = payload.brand ? payload.brand : null;
+      payload.purchasePrice = Number(payload.purchasePrice) || 0;
+      payload.salePrice = Number(payload.salePrice) || 0;
+
       if (editingId) {
         await updateItem(editingId, payload);
       } else {

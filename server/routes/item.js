@@ -71,10 +71,15 @@ router.put('/:id', auth, async (req, res) => {
     if (!item) return res.status(404).json({ message: 'Not found' });
 
     if (req.body.category !== undefined) item.categoryId = req.body.category;
-    if (req.body.brand !== undefined) item.brandId = req.body.brand;
-    const fields = ['name', 'unit', 'purchasePrice', 'salePrice', 'code'];
+    // Empty / 0 brand means "no brand": store NULL, otherwise MySQL saves 0 and
+    // the items -> brands foreign key rejects the update.
+    if (req.body.brand !== undefined) item.brandId = req.body.brand || null;
+    const fields = ['name', 'unit', 'code'];
     fields.forEach((key) => {
       if (req.body[key] !== undefined) item[key] = req.body[key];
+    });
+    ['purchasePrice', 'salePrice'].forEach((key) => {
+      if (req.body[key] !== undefined) item[key] = Number(req.body[key]) || 0;
     });
 
     await item.save();
