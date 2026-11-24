@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import { getServiceItems } from '../api/serviceItem';
+import { getContacts } from '../api/contactAccounts';
 import {
   getServiceRequisition,
   getNextServiceRequisitionCode,
@@ -24,8 +25,6 @@ import {
   Layers,
   Info,
 } from 'lucide-react';
-
-const SUPPLIER_ENDPOINT = '/chart-of-accounts';
 
 function num(v) {
   const n = Number(v);
@@ -68,6 +67,9 @@ export default function ServiceRequisitionPage() {
   const [requiredByDate, setRequiredByDate] = useState('');
   const [priority, setPriority] = useState('normal');
   const [supplier, setSupplier] = useState('');
+  // The contractor saved on an existing requisition, kept selectable even if it is
+  // not a Supplier contact (older records could point at any ledger).
+  const [savedSupplier, setSavedSupplier] = useState(null);
   const [selectedServiceItemId, setSelectedServiceItemId] = useState('');
 
   const [rows, setRows] = useState([]);
@@ -84,7 +86,9 @@ export default function ServiceRequisitionPage() {
     api.get('/projects').then((res) => setProjects(asList(res))).catch(() => {});
     api.get('/sites').then((res) => setSites(asList(res))).catch(() => {});
     getServiceItems().then(setServiceItems).catch(() => {});
-    api.get(SUPPLIER_ENDPOINT).then((res) => setSuppliers(asList(res))).catch(() => {});
+    // Contractors are Supplier contacts in Chart of Accounts (supplierId belongs to
+    // ChartOfAccount), same as Contractor Bill. Loading every ledger was too much.
+    getContacts('Supplier').then((res) => setSuppliers(asList(res))).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -105,6 +109,7 @@ export default function ServiceRequisitionPage() {
         setRequiredByDate((r.requiredByDate || '').slice(0, 10));
         setPriority(r.priority || 'normal');
         setSupplier(r.supplierId ? String(r.supplierId) : '');
+        setSavedSupplier(r.supplier && r.supplier.id ? r.supplier : null);
         setRemarks(r.remarks || '');
         setAttachments(Array.isArray(r.attachment) ? r.attachment : r.attachment ? [r.attachment] : []);
         setDiscount(r.discount ? String(r.discount) : '');
@@ -128,6 +133,11 @@ export default function ServiceRequisitionPage() {
     setProject(value);
     setSite('');
   }
+
+  const supplierOptions = useMemo(() => {
+    if (!savedSupplier || suppliers.some((s) => String(s.id) === String(savedSupplier.id))) return suppliers;
+    return [savedSupplier, ...suppliers];
+  }, [suppliers, savedSupplier]);
 
   const visibleSites = useMemo(() => {
     if (!project) return sites;
@@ -567,7 +577,7 @@ export default function ServiceRequisitionPage() {
                   className="w-full text-sm rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white"
                 >
                   <option value="">No preference / Open Tender</option>
-                  {suppliers.map((s) => (
+                  {supplierOptions.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
