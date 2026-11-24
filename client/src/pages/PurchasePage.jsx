@@ -4,7 +4,6 @@ import api from '../api/axios';
 import { getCustomers } from '../api/customer';
 import { getCategories } from '../api/category';
 import { getItems } from '../api/item';
-import { getChartOfAccounts } from '../api/chartOfAccounts';
 import {
   getPurchase, getNextPurchaseCode, getItemStockQty,
   createPurchase, updatePurchase,
@@ -34,7 +33,6 @@ export default function PurchasePage() {
 
   const [suppliers, setSuppliers] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [ledgers, setLedgers] = useState([]);
   const [sites, setSites] = useState([]);
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
@@ -83,9 +81,6 @@ export default function PurchasePage() {
     getCategories()
       .then((res) => setCategories(unwrap(res)))
       .catch(() => setCategories([]));
-    getChartOfAccounts()
-      .then((res) => setLedgers(unwrap(res)))
-      .catch(() => setLedgers([]));
   }, []);
 
   useEffect(() => {
@@ -183,8 +178,8 @@ export default function PurchasePage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
-    if (!supplier || !ledger) {
-      setError('Supplier and Ledger are required');
+    if (!supplier) {
+      setError('Supplier is required');
       return;
     }
     if (rows.length === 0) {
@@ -194,7 +189,10 @@ export default function PurchasePage() {
     setSubmitting(true);
     try {
       const payload = {
-        code, date, supplier, ledger, project, titleOfWork, task,
+        // Ledger is no longer asked for on this page. The server still expects
+        // one, so an edited purchase keeps its saved ledger and a new one gets
+        // the model's default ('Closing Stock'). Ledger isn't used for vouchers.
+        code, date, supplier, ledger: ledger || 'Closing Stock', project, titleOfWork, task,
         site, category,
         items: rows.map((r) => ({ ...r, amount: num(r.rate) * num(r.purchaseQty) })),
         discount: num(discount),
@@ -267,7 +265,7 @@ export default function PurchasePage() {
             <div className="min-w-0 space-y-5">
               {/* 1. Supplier & date */}
               <Panel icon={Truck} title="Supplier & date" subtitle="Who you bought from" accent="indigo">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <Field label="Date">
                     <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
                   </Field>
@@ -276,14 +274,6 @@ export default function PurchasePage() {
                       <option value="">Select supplier</option>
                       {suppliers.map((s) => (
                         <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Ledger" required>
-                    <select value={ledger} onChange={(e) => setLedger(e.target.value)} className="input">
-                      <option value="">Select ledger</option>
-                      {ledgers.map((l) => (
-                        <option key={l.id} value={l.id}>{l.name}</option>
                       ))}
                     </select>
                   </Field>
@@ -590,7 +580,7 @@ export default function PurchasePage() {
                   >
                     Cancel
                   </button>
-                  <p className="text-center text-[11px] text-slate-400">Supplier, Ledger and at least one item are required.</p>
+                  <p className="text-center text-[11px] text-slate-400">Supplier and at least one item are required.</p>
                 </div>
               </div>
             </aside>
