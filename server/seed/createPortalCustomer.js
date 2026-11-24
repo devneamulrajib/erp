@@ -8,8 +8,14 @@ async function run() {
     await sequelize.authenticate();
     console.log('Connected to database:', sequelize.config.database);
 
-    const email = 'portaltest@gmail.com'; // change if you want
-    const plainPassword = '***REMOVED***';
+    // Usage: PORTAL_PASSWORD=... node seed/createPortalCustomer.js [email] [password]
+    // (or pass the password as the 2nd argument). No password is stored in this file.
+    const email = process.argv[2] || process.env.PORTAL_EMAIL || 'portaltest@gmail.com';
+    const plainPassword = process.argv[3] || process.env.PORTAL_PASSWORD;
+    if (!plainPassword) {
+      console.error('Missing password. Run: node seed/createPortalCustomer.js <email> <password>  (or set PORTAL_PASSWORD)');
+      process.exit(1);
+    }
 
     const existing = await Customer.findOne({ where: { email } });
     if (existing) {
@@ -18,7 +24,7 @@ async function run() {
       existing.portalRole = existing.portalRole || 'customer';
       existing.createUser = true;
       await existing.save();
-      console.log(`Password updated for ${email}: ${plainPassword}`);
+      console.log(`Password updated for ${email}.`);
       process.exit(0);
     }
 
@@ -35,7 +41,6 @@ async function run() {
     console.log('New customer created:');
     console.log(`- id: ${customer.id}`);
     console.log(`- email: ${email}`);
-    console.log(`- password: ${plainPassword}`);
     process.exit(0);
   } catch (err) {
     console.error('Failed:', err);

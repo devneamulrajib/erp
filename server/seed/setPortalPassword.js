@@ -6,8 +6,14 @@ const Customer = require('../models/Customer');
 async function run() {
   await sequelize.authenticate();
 
-  const email = 'admin@gmail.com'; // change to a real customer email
-  const plainPassword = '***REMOVED***';
+  // Usage: node seed/setPortalPassword.js <customer-email> <password>
+  // (or set PORTAL_EMAIL / PORTAL_PASSWORD). No password is stored in this file.
+  const email = process.argv[2] || process.env.PORTAL_EMAIL;
+  const plainPassword = process.argv[3] || process.env.PORTAL_PASSWORD;
+  if (!email || !plainPassword) {
+    console.error('Missing email or password. Run: node seed/setPortalPassword.js <customer-email> <password>  (or set PORTAL_EMAIL / PORTAL_PASSWORD)');
+    process.exit(1);
+  }
 
   const customer = await Customer.findOne({ where: { email } });
   if (!customer) {
@@ -20,7 +26,7 @@ async function run() {
   customer.createUser = true; // enable portal access
   await customer.save();
 
-  console.log(`Portal password set for ${email}: ${plainPassword}`);
+  console.log(`Portal password set for ${email}.`);
   process.exit(0);
 }
 
