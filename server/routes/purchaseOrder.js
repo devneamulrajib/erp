@@ -48,6 +48,31 @@ const includes = [
   },
 ];
 
+// Summary cards of the PO list over the whole filtered set. One light query
+// (no line items), same rules as the client's billDue()/paymentState().
+async function purchaseOrderTotals(where) {
+  const list = await PurchaseOrder.findAll({
+    where,
+    attributes: ['id', 'deliveryStatus', 'deliveryConfirmedAt', 'paymentStatus'],
+    include: [{ model: Bill, as: 'bill', attributes: ['grandTotal', 'paid', 'due'] }],
+  });
+  const n = (v) => Number(v) || 0;
+  const billDue = (b) => (b ? Math.max(b.due !== undefined && b.due !== null ? n(b.due) : n(b.grandTotal) - n(b.paid), 0) : 0);
+  const paid = (o) => {
+    const b = o.bill;
+    if (!b) return (o.paymentStatus || 'Unpaid') === 'Paid';
+    return n(b.grandTotal) > 0 && billDue(b) <= 0;
+  };
+  let pendingConfirm = 0; let notFullyPaid = 0; let spent = 0; let due = 0;
+  for (const o of list) {
+    if (o.deliveryStatus === 'Delivered' && !o.deliveryConfirmedAt) pendingConfirm += 1;
+    if (!paid(o)) notFullyPaid += 1;
+    spent += n(o.bill && o.bill.paid);
+    due += billDue(o.bill);
+  }
+  return { pendingConfirm, notFullyPaid, spent, due };
+}
+
 router.get('/next-code', auth, async (req, res) => {
   res.json({ code: generateCode() });
 });
@@ -69,7 +94,7 @@ router.get('/', auth, async (req, res) => {
       where,
       include: includes,
       order: [['createdAt', 'DESC']],
-    }, req.query);
+    }, req.query, { totals: () => purchaseOrderTotals(where) });
 
     res.json(orders);
   } catch (err) {

@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
-const { Op } = require('sequelize');
+const { Op, fn, literal } = require('sequelize');
 const { Item, Category, Brand } = require('../models/associations');
 const { listOrPage } = require('../utils/paginate');
 const Asset = require('../models/Asset');
@@ -40,7 +40,17 @@ router.get('/', auth, async (req, res) => {
         { model: Brand, attributes: ['name'] },
       ],
       order: [['createdAt', 'DESC']],
-    }, req.query);
+    }, req.query, {
+      // Average margin % over items that have a sale price (same formula as ItemPage).
+      totals: async () => {
+        const row = await Item.findOne({
+          where: { ...where, salePrice: { [Op.gt]: 0 } },
+          attributes: [[fn('AVG', literal('(salePrice - COALESCE(purchasePrice, 0)) / salePrice * 100')), 'avgMargin']],
+          raw: true,
+        });
+        return { avgMargin: Number(row && row.avgMargin) || 0 };
+      },
+    });
 
     res.json(items);
   } catch (err) {

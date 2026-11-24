@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
-const { listOrPage } = require('../utils/paginate');
+const { listOrPage, sumColumns } = require('../utils/paginate');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -140,7 +140,7 @@ router.get('/', auth, async (req, res) => {
         { model: BillLineItem }, { model: BillPayment }, { model: BillApproval },
       ],
       order: [['createdAt', 'DESC']],
-    }, req.query);
+    }, req.query, { totals: () => sumColumns(Bill, where, ['grandTotal', 'paid', 'due']) });
 
     res.json(bills);
   } catch (err) {

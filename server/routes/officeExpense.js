@@ -7,7 +7,7 @@ const { Op } = require('sequelize');
 
 const sequelize = require('../config/db');
 const auth = require('../middleware/auth');
-const { listOrPage } = require('../utils/paginate');
+const { listOrPage, sumColumns } = require('../utils/paginate');
 const { requireAdmin } = require('../middleware/permissions');
 const {
   OfficeExpense,
@@ -163,6 +163,48 @@ function parseDay(value) {
 }
 
 const listInclude = [{ model: BudgetCategory, as: 'budgetCategory' }];
+
+// Summary for the Office Expense List when it loads one page at a time:
+// - amount / approved / pending / rejected over the filtered period
+// - months: every month's total over ALL expenses (trend chart, month jump)
+// - categories: category names used by any expense (filter dropdown)
+// tz = the browser's getTimezoneOffset() in minutes, so months match its view.
+async function officeExpenseTotals(where, tz) {
+  const offsetMs = (Number(tz) || 0) * 60 * 1000;
+  const [sums, statusRows, all] = await Promise.all([
+    sumColumns(OfficeExpense, where, ['amount']),
+    OfficeExpense.findAll({
+      where,
+      attributes: [[sequelize.fn('LOWER', sequelize.col('status')), 'status'], [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
+      group: [sequelize.fn('LOWER', sequelize.col('status'))],
+      raw: true,
+    }),
+    OfficeExpense.findAll({
+      attributes: ['date', 'amount'],
+      include: [{ model: BudgetCategory, as: 'budgetCategory', attributes: ['name'] }],
+      raw: true,
+      nest: true,
+    }),
+  ]);
+  const byStatus = Object.fromEntries(statusRows.map((r) => [r.status, Number(r.count) || 0]));
+  const monthMap = {};
+  const categories = new Set();
+  for (const r of all) {
+    if (r.budgetCategory && r.budgetCategory.name) categories.add(r.budgetCategory.name);
+    const d = new Date(new Date(r.date).getTime() - offsetMs);
+    if (Number.isNaN(d.getTime())) continue;
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    monthMap[key] = (monthMap[key] || 0) + (Number(r.amount) || 0);
+  }
+  return {
+    amount: sums.amount,
+    approved: byStatus.approved || 0,
+    pending: byStatus.pending || 0,
+    rejected: byStatus.rejected || 0,
+    months: Object.keys(monthMap).sort().map((key) => ({ key, total: monthMap[key] })),
+    categories: [...categories].sort(),
+  };
+}
 
 router.get('/next-code', auth, async (req, res) => {
   try {
@@ -328,7 +370,7 @@ router.get('/report', auth, async (req, res) => {
 // List expenses. `from` / `to` are YYYY-MM-DD and both days are included.
 router.get('/', auth, async (req, res) => {
   try {
-    const { budgetCategory, from, to } = req.query;
+    const { budgetCategory, from, to, fromTs, toTs } = req.query;
     const where = {};
     if (budgetCategory) where.budgetCategoryId = budgetCategory;
 
@@ -342,12 +384,21 @@ router.get('/', auth, async (req, res) => {
         where.date[Op.lt] = new Date(toDay.getFullYear(), toDay.getMonth(), toDay.getDate() + 1);
       }
     }
+    // Exact period bounds from the browser (its local midnight), sent by the
+    // Office Expense List page: fromTs inclusive, toTs exclusive.
+    const fromAt = fromTs ? new Date(fromTs) : null;
+    const toAt = toTs ? new Date(toTs) : null;
+    if ((fromAt && !Number.isNaN(fromAt.getTime())) || (toAt && !Number.isNaN(toAt.getTime()))) {
+      where.date = where.date || {};
+      if (fromAt && !Number.isNaN(fromAt.getTime())) where.date[Op.gte] = fromAt;
+      if (toAt && !Number.isNaN(toAt.getTime())) where.date[Op.lt] = toAt;
+    }
 
     const rows = await listOrPage(OfficeExpense, {
       where,
       include: listInclude,
       order: [['date', 'DESC'], ['id', 'DESC']],
-    }, req.query);
+    }, req.query, { totals: () => officeExpenseTotals(where, req.query.tz) });
     res.json(rows);
   } catch (err) {
     res.status(500).json({ message: err.message });

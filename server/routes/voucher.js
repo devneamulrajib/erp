@@ -5,7 +5,7 @@ const fs = require('fs');
 const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
 const { Voucher, VoucherEntry, VoucherApproval } = require('../models/associations');
-const { listOrPage } = require('../utils/paginate');
+const { listOrPage, sumColumns } = require('../utils/paginate');
 
 const uploadDir = path.join(__dirname, '..', 'uploads', 'vouchers');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -107,7 +107,16 @@ router.get('/', auth, async (req, res) => {
       where,
       include,
       order: [['date', 'DESC'], ['createdAt', 'DESC']],
-    }, req.query);
+    }, req.query, {
+      // Sum of voucher amounts over the whole filtered set (an account filter
+      // keeps only vouchers that have a line on that account).
+      totals: async () => {
+        if (!account) return sumColumns(Voucher, where, ['amount']);
+        const lines = await VoucherEntry.findAll({ where: { accountId: account }, attributes: ['voucherId'], raw: true });
+        const ids = [...new Set(lines.map((l) => l.voucherId))];
+        return sumColumns(Voucher, { ...where, id: { [Op.in]: ids.length ? ids : [0] } }, ['amount']);
+      },
+    });
     res.json(items);
   } catch (err) {
     console.error('GET /api/vouchers failed:', err);
