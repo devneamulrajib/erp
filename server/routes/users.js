@@ -132,6 +132,7 @@ router.put('/:id/role', auth, requireRole('superadmin', 'admin'), async (req, re
     }
 
     await User.update(updateFields, { where: { id: req.params.id } });
+    auth.clearUserCache(req.params.id); // new role applies on the next request
     const updated = await User.findByPk(req.params.id, { attributes: { exclude: ['password'] } });
     res.json(updated);
   } catch (err) {
@@ -153,6 +154,7 @@ router.put('/:id/status', auth, requireRole('superadmin', 'admin'), async (req, 
     }
 
     await User.update({ isActive: Boolean(isActive) }, { where: { id: req.params.id } });
+    auth.clearUserCache(req.params.id); // deactivation logs the user out right away
     res.json({ id: user.id, isActive: Boolean(isActive) });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -172,6 +174,7 @@ router.delete('/:id', auth, requireRole('superadmin', 'admin'), async (req, res)
     }
 
     await User.destroy({ where: { id: req.params.id } });
+    auth.clearUserCache(req.params.id);
     res.json({ message: 'User removed successfully' });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
