@@ -1,21 +1,27 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Pencil, Trash2, Plus, Package, FileText, FileSpreadsheet,
-  Search, ChevronLeft, ChevronRight, X, Boxes,
+  Search, ChevronLeft, ChevronRight, Boxes, Wallet, Tag, List,
 } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
 import { getItems, createItem, updateItem, deleteItem } from '../api/item';
-import { getCategories } from '../api/category';
-import { getBrands, getNextBrandCode, createBrand } from '../api/brand';
-import { getUnits } from '../api/unit';
+import { getCategories, createCategory } from '../api/category';
+import { getBrands, createBrand } from '../api/brand';
+import { getUnits, createUnit } from '../api/unit';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const EMPTY_FORM = {
   category: '', brand: '', name: '', unit: '', purchasePrice: '', salePrice: '',
 };
-const EMPTY_BRAND_FORM = { code: '', name: '' };
+const CATEGORY_TYPES = ['Material', 'Product', 'Service'];
+// Category, Unit and Brand can each be picked from the list or typed in as
+// new right inside the item form, so adding a product is one form / one save
+// instead of visiting the Category, Brand and Unit pages first.
+const EMPTY_NEW_MODE = { category: false, unit: false, brand: false };
+const EMPTY_NEW_ENTRY = { category: '', categoryType: 'Material', unit: '', brand: '' };
+const INPUT_CLS = 'w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition';
 
 // Deterministic accent color per category name, so the same category always
 // reads the same way across the table without needing a color field in the data.
@@ -55,9 +61,8 @@ export default function ItemPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
-  const [brandModalOpen, setBrandModalOpen] = useState(false);
-  const [brandForm, setBrandForm] = useState(EMPTY_BRAND_FORM);
-  const [savingBrand, setSavingBrand] = useState(false);
+  const [newMode, setNewMode] = useState(EMPTY_NEW_MODE);
+  const [newEntry, setNewEntry] = useState(EMPTY_NEW_ENTRY);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -107,6 +112,8 @@ export default function ItemPage() {
   function openAddModal() {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setNewMode(EMPTY_NEW_MODE);
+    setNewEntry(EMPTY_NEW_ENTRY);
     setFormError('');
     setModalOpen(true);
   }
@@ -121,6 +128,8 @@ export default function ItemPage() {
       purchasePrice: item.purchasePrice || '',
       salePrice: item.salePrice || '',
     });
+    setNewMode(EMPTY_NEW_MODE);
+    setNewEntry(EMPTY_NEW_ENTRY);
     setFormError('');
     setModalOpen(true);
   }
@@ -129,19 +138,67 @@ export default function ItemPage() {
     setModalOpen(false);
   }
 
+  function toggleNew(key) {
+    setNewMode((m) => ({ ...m, [key]: !m[key] }));
+    setFormError('');
+  }
+
+  function findByName(list, name) {
+    const wanted = name.trim().toLowerCase();
+    return list.find((x) => (x.name || '').trim().toLowerCase() === wanted);
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.category || !form.name || !form.unit) {
+    const newCategoryName = newEntry.category.trim();
+    const newUnitName = newEntry.unit.trim();
+    const newBrandName = newEntry.brand.trim();
+    const hasCategory = newMode.category ? !!newCategoryName : !!form.category;
+    const hasUnit = newMode.unit ? !!newUnitName : !!form.unit;
+    if (!hasCategory || !form.name || !hasUnit) {
       setFormError('Category, Item Name and Unit are required.');
+      return;
+    }
+    if (newMode.brand && !newBrandName) {
+      setFormError('Type the new brand name, or click "Pick existing".');
       return;
     }
     setSaving(true);
     setFormError('');
     try {
+      const payload = { ...form };
+
+      // Create any new category / unit / brand first (re-using an existing one
+      // with the same name), then save the item, all from this one Save click.
+      // Each one is locked into the form as soon as it exists, so a retry after
+      // an error never creates a duplicate.
+      if (newMode.category) {
+        const cat = findByName(categories, newCategoryName)
+          || await createCategory({ type: newEntry.categoryType, name: newCategoryName });
+        if (!categories.some((c) => c.id === cat.id)) setCategories((list) => [cat, ...list]);
+        payload.category = cat.id;
+        setForm((f) => ({ ...f, category: cat.id }));
+        setNewMode((m) => ({ ...m, category: false }));
+      }
+      if (newMode.unit) {
+        const unit = findByName(units, newUnitName) || await createUnit({ name: newUnitName });
+        if (!units.some((u) => u.id === unit.id)) setUnits((list) => [unit, ...list]);
+        payload.unit = unit.name;
+        setForm((f) => ({ ...f, unit: unit.name }));
+        setNewMode((m) => ({ ...m, unit: false }));
+      }
+      if (newMode.brand) {
+        const brand = findByName(brands, newBrandName) || await createBrand({ name: newBrandName });
+        if (!brands.some((b) => b.id === brand.id)) setBrands((list) => [brand, ...list]);
+        payload.brand = brand.id;
+        setForm((f) => ({ ...f, brand: brand.id }));
+        setNewMode((m) => ({ ...m, brand: false }));
+      }
+
       if (editingId) {
-        await updateItem(editingId, form);
+        await updateItem(editingId, payload);
       } else {
-        await createItem(form);
+        await createItem(payload);
       }
       setModalOpen(false);
       await load();
@@ -161,40 +218,6 @@ export default function ItemPage() {
     } catch (err) {
       console.error('Failed to delete item', err);
       alert('Could not delete this item. It may be used elsewhere.');
-    }
-  }
-
-  async function openBrandModal() {
-    try {
-      // getNextBrandCode() already resolves to the unwrapped data, e.g. { code: '...' }
-      const data = await getNextBrandCode();
-      setBrandForm({ code: data.code, name: '' });
-    } catch {
-      setBrandForm(EMPTY_BRAND_FORM);
-    }
-    setBrandModalOpen(true);
-  }
-
-  function closeBrandModal() {
-    setBrandModalOpen(false);
-  }
-
-  async function handleBrandSubmit(e) {
-    e.preventDefault();
-    if (!brandForm.name) return;
-    setSavingBrand(true);
-    try {
-      // createBrand()/getBrands() already resolve to unwrapped data, not axios responses
-      const newBrand = await createBrand(brandForm);
-      const freshBrands = await getBrands();
-      setBrands(freshBrands);
-      setForm((f) => ({ ...f, brand: newBrand.id }));
-      setBrandModalOpen(false);
-    } catch (err) {
-      console.error('Failed to save brand', err);
-      alert('Failed to save brand.');
-    } finally {
-      setSavingBrand(false);
     }
   }
 
@@ -428,69 +451,95 @@ export default function ItemPage() {
       </div>
 
       <Modal open={modalOpen} title={editingId ? 'Edit Item' : 'Add Item'} onClose={closeModal}>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="space-y-5">
           {formError && (
-            <div className="mb-4 text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+            <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
               {formError}
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-            <div>
+          <p className="text-xs text-slate-500 -mt-1">
+            Fill everything on this one form. Category, Unit or Brand not in the list yet?
+            Click <span className="font-medium text-indigo-600">+ New</span> and type it here, it is saved together with the item.
+          </p>
+
+          {/* 1. Item details */}
+          <FormSection icon={Package} title="Item details">
+            <div className="sm:col-span-2">
               <label className="block text-xs font-medium text-slate-500 mb-1.5">Item Name<span className="text-red-500 ml-0.5">*</span></label>
               <input
                 required
+                autoFocus
                 placeholder="e.g. Portland Cement"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+                className={INPUT_CLS}
               />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Category<span className="text-red-500 ml-0.5">*</span></label>
-              <select
-                required
-                value={form.category}
-                onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
-              >
-                <option value="">Select category</option>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Unit<span className="text-red-500 ml-0.5">*</span></label>
-              <select
-                required
-                value={form.unit}
-                onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
-              >
-                <option value="">Select unit</option>
-                {units.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Brand</label>
-              <div className="flex gap-2">
+            <PickOrCreateField
+              label="Category"
+              required
+              creating={newMode.category}
+              onToggle={() => toggleNew('category')}
+              select={(
                 <select
-                  value={form.brand}
-                  onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+                  required
+                  value={form.category}
+                  onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                  className={INPUT_CLS}
                 >
-                  <option value="">Select brand</option>
-                  {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  <option value="">Select category</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
-                <button
-                  type="button"
-                  onClick={openBrandModal}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 rounded-lg shrink-0 transition-colors"
-                  title="Add new brand"
+              )}
+              create={(
+                <div className="flex gap-2">
+                  <input
+                    placeholder="New category name"
+                    value={newEntry.category}
+                    onChange={(e) => setNewEntry((n) => ({ ...n, category: e.target.value }))}
+                    className={INPUT_CLS}
+                  />
+                  <select
+                    value={newEntry.categoryType}
+                    onChange={(e) => setNewEntry((n) => ({ ...n, categoryType: e.target.value }))}
+                    className="border border-slate-200 rounded-lg px-2 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition shrink-0"
+                    title="Category type"
+                  >
+                    {CATEGORY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              )}
+            />
+            <PickOrCreateField
+              label="Unit"
+              required
+              creating={newMode.unit}
+              onToggle={() => toggleNew('unit')}
+              select={(
+                <select
+                  required
+                  value={form.unit}
+                  onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
+                  className={INPUT_CLS}
                 >
-                  <Plus size={16} />
-                </button>
-              </div>
-            </div>
+                  <option value="">Select unit</option>
+                  {units.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
+                </select>
+              )}
+              create={(
+                <input
+                  placeholder="New unit, e.g. Bag, Kg, Pcs"
+                  value={newEntry.unit}
+                  onChange={(e) => setNewEntry((n) => ({ ...n, unit: e.target.value }))}
+                  className={INPUT_CLS}
+                />
+              )}
+            />
+          </FormSection>
+
+          {/* 2. Pricing */}
+          <FormSection icon={Wallet} title="Pricing" hint="Optional, you can fill it later">
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">Purchase Price</label>
               <input
@@ -498,7 +547,7 @@ export default function ItemPage() {
                 placeholder="0"
                 value={form.purchasePrice}
                 onChange={(e) => setForm((f) => ({ ...f, purchasePrice: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+                className={INPUT_CLS}
               />
             </div>
             <div>
@@ -508,10 +557,48 @@ export default function ItemPage() {
                 placeholder="0"
                 value={form.salePrice}
                 onChange={(e) => setForm((f) => ({ ...f, salePrice: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
+                className={INPUT_CLS}
               />
             </div>
-          </div>
+            {Number(form.salePrice) > 0 && (
+              <div className="sm:col-span-2 text-xs text-slate-500">
+                Profit per unit:{' '}
+                <span className={`font-semibold ${Number(form.salePrice) - (Number(form.purchasePrice) || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {money(Number(form.salePrice) - (Number(form.purchasePrice) || 0))}
+                  {' '}({(((Number(form.salePrice) - (Number(form.purchasePrice) || 0)) / Number(form.salePrice)) * 100).toFixed(1)}% margin)
+                </span>
+              </div>
+            )}
+          </FormSection>
+
+          {/* 3. Brand (optional) */}
+          <FormSection icon={Tag} title="Brand" hint="Optional">
+            <div className="sm:col-span-2">
+              <PickOrCreateField
+                label="Brand"
+                creating={newMode.brand}
+                onToggle={() => toggleNew('brand')}
+                select={(
+                  <select
+                    value={form.brand}
+                    onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
+                    className={INPUT_CLS}
+                  >
+                    <option value="">No brand</option>
+                    {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                )}
+                create={(
+                  <input
+                    placeholder="New brand name"
+                    value={newEntry.brand}
+                    onChange={(e) => setNewEntry((n) => ({ ...n, brand: e.target.value }))}
+                    className={INPUT_CLS}
+                  />
+                )}
+              />
+            </div>
+          </FormSection>
 
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
             <button
@@ -531,48 +618,6 @@ export default function ItemPage() {
           </div>
         </form>
       </Modal>
-
-      <Modal open={brandModalOpen} title="New Brand" onClose={closeBrandModal}>
-        <form onSubmit={handleBrandSubmit}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Code</label>
-              <input
-                value={brandForm.code}
-                readOnly
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-mono bg-slate-50 text-slate-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Name<span className="text-red-500 ml-0.5">*</span></label>
-              <input
-                required
-                placeholder="Brand name"
-                value={brandForm.name}
-                onChange={(e) => setBrandForm((f) => ({ ...f, name: e.target.value }))}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={closeBrandModal}
-              className="px-4 py-2.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={savingBrand}
-              className="px-4 py-2.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 shadow-sm shadow-indigo-600/20 transition-colors"
-            >
-              {savingBrand ? 'Saving…' : 'Add Brand'}
-            </button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 }
@@ -583,6 +628,42 @@ function SummaryCard({ label, value, accent }) {
       <div className={`absolute left-0 top-0 bottom-0 w-1 ${accent}`} />
       <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1 pl-2">{label}</div>
       <div className="text-2xl font-semibold text-slate-900 pl-2 tabular-nums">{value}</div>
+    </div>
+  );
+}
+function FormSection({ icon: Icon, title, hint, children }) {
+  return (
+    <section className="rounded-xl border border-slate-200 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
+          <Icon size={15} className="text-indigo-600" />
+        </div>
+        <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+        {hint && <span className="text-xs text-slate-400">{hint}</span>}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{children}</div>
+    </section>
+  );
+}
+
+function PickOrCreateField({ label, required, creating, onToggle, select, create }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <label className="block text-xs font-medium text-slate-500">
+          {label}
+          {required && <span className="text-red-500 ml-0.5">*</span>}
+          {creating && <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-600">new</span>}
+        </label>
+        <button
+          type="button"
+          onClick={onToggle}
+          className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700"
+        >
+          {creating ? <><List size={12} /> Pick existing</> : <><Plus size={12} /> New</>}
+        </button>
+      </div>
+      {creating ? create : select}
     </div>
   );
 }
