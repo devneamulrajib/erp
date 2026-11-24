@@ -2,6 +2,18 @@ const router = require('express').Router();
 const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
 const { Item, Category, Brand } = require('../models/associations');
+const Asset = require('../models/Asset');
+const PurchaseItem = require('../models/PurchaseItem');
+const PurchaseOrderItem = require('../models/PurchaseOrderItem');
+const MaterialRequisitionItem = require('../models/MaterialRequisitionItem');
+const MaterialUsageItem = require('../models/MaterialUsageItem');
+const StockTransferItem = require('../models/StockTransferItem');
+const SaleItem = require('../models/SaleItem');
+const WorkorderItem = require('../models/WorkorderItem');
+const ContractorWorkorderItem = require('../models/ContractorWorkorderItem');
+const ContractorBillItem = require('../models/ContractorBillItem');
+const LabourBillItem = require('../models/LabourBillItem');
+const { blockIfUsed } = require('../utils/deleteGuard');
 
 const TYPE_PREFIX = { Material: 'M', Product: 'P', Service: 'S' };
 
@@ -98,7 +110,23 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Item.destroy({ where: { id: req.params.id } });
+    // itemId is ON DELETE CASCADE on purchase order, requisition, stock
+    // transfer and asset lines - never delete an item that is in use.
+    const id = req.params.id;
+    if (await blockIfUsed(res, 'item', [
+      { model: PurchaseItem, where: { itemId: id }, label: 'purchase lines' },
+      { model: PurchaseOrderItem, where: { itemId: id }, label: 'purchase order lines' },
+      { model: MaterialRequisitionItem, where: { itemId: id }, label: 'material requisition lines' },
+      { model: MaterialUsageItem, where: { itemId: id }, label: 'material usage lines' },
+      { model: StockTransferItem, where: { itemId: id }, label: 'stock transfer lines' },
+      { model: SaleItem, where: { itemId: id }, label: 'sale lines' },
+      { model: WorkorderItem, where: { itemId: id }, label: 'work order lines' },
+      { model: ContractorWorkorderItem, where: { itemId: id }, label: 'contractor work order lines' },
+      { model: ContractorBillItem, where: { itemId: id }, label: 'contractor bill lines' },
+      { model: LabourBillItem, where: { itemId: id }, label: 'labour bill lines' },
+      { model: Asset, where: { itemId: id }, label: 'assets' },
+    ])) return;
+    const deleted = await Item.destroy({ where: { id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

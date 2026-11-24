@@ -227,7 +227,7 @@ export default function ItemPage() {
       await load();
     } catch (err) {
       console.error('Failed to delete item', err);
-      alert('Could not delete this item. It may be used elsewhere.');
+      alert(err.response?.data?.message || 'Could not delete this item. It may be used elsewhere.');
     }
   }
 

@@ -2,6 +2,9 @@ const router = require('express').Router();
 const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
 const Brand = require('../models/Brand');
+const Item = require('../models/Item');
+const BillItem = require('../models/BillItem');
+const { blockIfUsed } = require('../utils/deleteGuard');
 
 function generateCode() {
   return 'BR' + Math.floor(100000000 + Math.random() * 900000000);
@@ -61,7 +64,13 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Brand.destroy({ where: { id: req.params.id } });
+    // items.brandId is ON DELETE CASCADE - never delete a brand that is in use.
+    const id = req.params.id;
+    if (await blockIfUsed(res, 'brand', [
+      { model: Item, where: { brandId: id }, label: 'items' },
+      { model: BillItem, where: { brandId: id }, label: 'bill items' },
+    ])) return;
+    const deleted = await Brand.destroy({ where: { id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {

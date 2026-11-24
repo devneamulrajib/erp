@@ -126,7 +126,7 @@ export default function ItemMastersModal({ open, onClose, onChanged, initialTab 
       onChanged?.();
     } catch (err) {
       console.error(`Failed to delete ${tab}`, err);
-      alert(`Could not delete this ${cfg.single.toLowerCase()}. It may be used by items or other records.`);
+      alert(err.response?.data?.message || `Could not delete this ${cfg.single.toLowerCase()}. It may be used by items or other records.`);
     }
   }
 

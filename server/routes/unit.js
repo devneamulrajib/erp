@@ -2,6 +2,10 @@ const router = require('express').Router();
 const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
 const Unit = require('../models/Unit');
+const Item = require('../models/Item');
+const BillItem = require('../models/BillItem');
+const ServiceItem = require('../models/ServiceItem');
+const { blockIfUsed } = require('../utils/deleteGuard');
 
 function generateCode() {
   return 'C' + Math.floor(1000000 + Math.random() * 9000000);
@@ -63,8 +67,16 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Unit.destroy({ where: { id: req.params.id } });
-    if (!deleted) return res.status(404).json({ message: 'Not found' });
+    // unitId is ON DELETE CASCADE on bill/service items; items store the unit
+    // name as text. Never delete a unit that is in use.
+    const unit = await Unit.findByPk(req.params.id);
+    if (!unit) return res.status(404).json({ message: 'Not found' });
+    if (await blockIfUsed(res, 'unit', [
+      { model: Item, where: { unit: unit.name }, label: 'items' },
+      { model: BillItem, where: { unitId: unit.id }, label: 'bill items' },
+      { model: ServiceItem, where: { unitId: unit.id }, label: 'service items' },
+    ])) return;
+    await unit.destroy();
     res.json({ deleted: true });
   } catch (err) {
     res.status(500).json({ message: err.message });

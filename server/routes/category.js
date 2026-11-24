@@ -2,6 +2,18 @@ const router = require('express').Router();
 const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
 const Category = require('../models/Category');
+const Item = require('../models/Item');
+const BillItem = require('../models/BillItem');
+const ServiceItem = require('../models/ServiceItem');
+const Purchase = require('../models/Purchase');
+const PurchaseOrder = require('../models/PurchaseOrder');
+const MaterialRequisition = require('../models/MaterialRequisition');
+const MaterialUsage = require('../models/MaterialUsage');
+const StockTransfer = require('../models/StockTransfer');
+const ContractorBill = require('../models/ContractorBill');
+const ContractorWorkorder = require('../models/ContractorWorkorder');
+const LabourBill = require('../models/LabourBill');
+const { blockIfUsed } = require('../utils/deleteGuard');
 
 function generateCode() {
   return 'C' + Math.floor(1000000 + Math.random() * 9000000);
@@ -63,7 +75,23 @@ router.put('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const deleted = await Category.destroy({ where: { id: req.params.id } });
+    // categoryId is ON DELETE CASCADE on items and many transaction tables -
+    // never delete a category that is in use.
+    const id = req.params.id;
+    if (await blockIfUsed(res, 'category', [
+      { model: Item, where: { categoryId: id }, label: 'items' },
+      { model: BillItem, where: { categoryId: id }, label: 'bill items' },
+      { model: ServiceItem, where: { categoryId: id }, label: 'service items' },
+      { model: Purchase, where: { categoryId: id }, label: 'purchases' },
+      { model: PurchaseOrder, where: { categoryId: id }, label: 'purchase orders' },
+      { model: MaterialRequisition, where: { categoryId: id }, label: 'material requisitions' },
+      { model: MaterialUsage, where: { categoryId: id }, label: 'material usages' },
+      { model: StockTransfer, where: { categoryId: id }, label: 'stock transfers' },
+      { model: ContractorBill, where: { categoryId: id }, label: 'contractor bills' },
+      { model: ContractorWorkorder, where: { categoryId: id }, label: 'contractor work orders' },
+      { model: LabourBill, where: { categoryId: id }, label: 'labour bills' },
+    ])) return;
+    const deleted = await Category.destroy({ where: { id } });
     if (!deleted) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) {
