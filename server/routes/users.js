@@ -27,8 +27,10 @@ const { ROLE_PERMISSIONS } = require('../config/permissions');
       // Column already exists or table name doesn't match this casing
     }
 
+    // Only backfill missing values. Never touch isActive = 0 — that would
+    // re-activate every deactivated user each time the server restarts.
     try {
-      await sequelize.query(`UPDATE ${table} SET isActive = 1 WHERE isActive IS NULL OR isActive = 0`);
+      await sequelize.query(`UPDATE ${table} SET isActive = 1 WHERE isActive IS NULL`);
     } catch (err) {
       // Table does not match this casing or update not needed
     }
@@ -71,6 +73,9 @@ router.post('/', auth, requireRole('superadmin', 'admin'), async (req, res) => {
     if (!ROLE_PERMISSIONS[role]) {
       return res.status(400).json({ message: 'Invalid role' });
     }
+    if (role === 'superadmin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ message: 'Only a superadmin can create a superadmin' });
+    }
 
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
@@ -108,6 +113,11 @@ router.put('/:id/role', auth, requireRole('superadmin', 'admin'), async (req, re
     const { role, roles } = req.body;
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Admins cannot promote anyone to superadmin or change a superadmin's roles.
+    if (req.user.role !== 'superadmin' && (role === 'superadmin' || user.role === 'superadmin')) {
+      return res.status(403).json({ message: 'Only a superadmin can change superadmin roles' });
+    }
 
     const updateFields = {};
     if (role) {
