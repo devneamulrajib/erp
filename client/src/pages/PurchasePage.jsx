@@ -11,7 +11,10 @@ import {
 } from '../api/purchase';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
-import { Plus, Trash2 } from 'lucide-react';
+import {
+  Plus, Trash2, ShoppingCart, List, Truck, Package, Wallet, Receipt, Save, ChevronDown,
+} from 'lucide-react';
+import { Panel } from '../components/dashboard/DashboardKit';
 
 function num(v) {
   const n = Number(v);
@@ -60,6 +63,10 @@ export default function PurchasePage() {
   const [chequeReceiptNo, setChequeReceiptNo] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
 
+  // Rarely used fields stay folded away until needed
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [paymentsOpen, setPaymentsOpen] = useState(false);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -104,12 +111,16 @@ export default function PurchasePage() {
       setTask(p.task || '');
       setSite(p.site?.id || p.siteId || '');
       setCategory(p.category?.id || p.categoryId || '');
-      setRows(unwrap(p.PurchaseItems || p.items));
+      // Saved rows come back with itemId; the payload uses `item` (server maps
+      // item -> itemId), so keep it set or editing would drop the item link.
+      setRows(unwrap(p.PurchaseItems || p.items).map((r) => ({ ...r, item: r.item ?? r.itemId })));
       setDiscount(p.discount ?? '');
       setDeliveryCharge(p.deliveryCharge ?? '');
       setPaid(p.paid ?? '');
       setNote(p.note || '');
       setPayments(unwrap(p.PurchasePayments || p.payments));
+      if (p.projectId || p.titleOfWork || p.task || p.siteId) setMoreOpen(true);
+      if (unwrap(p.PurchasePayments || p.payments).length) setPaymentsOpen(true);
     }).catch((err) => {
       console.error(err);
       setError('Failed to load purchase.');
@@ -123,6 +134,7 @@ export default function PurchasePage() {
   const grandTotal = subtotal - num(discount) + num(deliveryCharge);
   const dueAmount = grandTotal - num(paid);
   const paymentsTotal = payments.reduce((sum, p) => sum + num(p.amount), 0);
+  const moreFilled = [project, titleOfWork, task, site].filter(Boolean).length;
 
   async function addItemRow() {
     const it = items.find((x) => x.id === Number(selectedItemId) || x.id === selectedItemId);
@@ -205,264 +217,386 @@ export default function PurchasePage() {
     }
   }
 
+  const inputSm = 'w-full min-w-[70px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm tabular-nums focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20';
+  const money = (v) => num(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
+
   return (
-    <div className="min-h-screen w-full bg-gray-50 text-left">
+    <div className="min-h-screen w-full bg-slate-50 text-left">
       <Topbar />
 
-      <div className="flex items-center justify-between pr-4">
-        <Breadcrumb
-          items={[
-            { label: 'Home', to: '/dashboard' },
-            { label: 'Inventory', to: '/inventory-module/purchase-list' },
-            { label: 'Purchase' },
-          ]}
-        />
-        <button
-          type="button"
-          onClick={() => navigate('/inventory-module/purchase-list')}
-          className="bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-md"
-        >
-          Purchase List
-        </button>
-      </div>
-
-      <form onSubmit={handleSubmit} className="px-4 pb-10">
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-4">{error}</div>}
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <Field label="Date">
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
-          </Field>
-          <Field label="Supplier" required>
-            <select value={supplier} onChange={(e) => setSupplier(e.target.value)} className="input">
-              <option value="">Select an option</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Ledger" required>
-            <select value={ledger} onChange={(e) => setLedger(e.target.value)} className="input">
-              <option value="">Select Ledger</option>
-              {ledgers.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Code">
-            <input value={code} readOnly className="input bg-gray-50" />
-          </Field>
-          <Field label="Project">
-            <select value={project} onChange={(e) => setProject(e.target.value)} className="input">
-              <option value="">Select Project</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Title/Name of Work">
-            <input value={titleOfWork} onChange={(e) => setTitleOfWork(e.target.value)} className="input" placeholder="Select Title/Name of Work" />
-          </Field>
-          <Field label="If Task">
-            <input value={task} onChange={(e) => setTask(e.target.value)} className="input" placeholder="Select Task" />
-          </Field>
-          <Field label="Site">
-            <select value={site} onChange={(e) => setSite(e.target.value)} className="input">
-              <option value="">Select Site</option>
-              {sites.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Category">
-            <select value={category} onChange={(e) => setCategory(e.target.value)} className="input">
-              <option value="">Select Category</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Select Item">
-            <div className="flex gap-2">
-              <select value={selectedItemId} onChange={(e) => setSelectedItemId(e.target.value)} className="input flex-1">
-                <option value="">Select Item</option>
-                {items.map((it) => (
-                  <option key={it.id} value={it.id}>{it.name}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={addItemRow}
-                disabled={!selectedItemId}
-                className="px-3 rounded-md bg-indigo-500 hover:bg-indigo-600 text-white disabled:opacity-50"
-                title="Add this item to the table below"
-              >
-                <Plus size={16} />
-              </button>
-            </div>
-            {items.length === 0 && (
-              <p className="text-xs text-gray-400 mt-1">No items found for this category.</p>
-            )}
-          </Field>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-md overflow-x-auto mb-4">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-indigo-500 text-white whitespace-nowrap">
-                {['Item Code', 'Item Name', 'Details', 'Unit', 'Quantity', 'Rate', 'Budget Qty',
-                  'Purchase Qty', 'Stock Qty', 'Amount', 'Action'].map((h) => (
-                  <th key={h} className="px-2 py-2 text-left font-medium">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr><td colSpan={11} className="text-center py-4 text-gray-400">No items added — select an item above and click +</td></tr>
-              ) : (
-                rows.map((r, i) => (
-                  <tr key={i} className="border-t border-gray-100">
-                    <td className="px-2 py-1.5">{r.itemCode}</td>
-                    <td className="px-2 py-1.5">{r.itemName}</td>
-                    <td className="px-2 py-1.5">
-                      <input value={r.details} onChange={(e) => updateRow(i, 'details', e.target.value)} className="w-full border border-gray-200 rounded px-2 py-1" />
-                    </td>
-                    <td className="px-2 py-1.5">{r.unit}</td>
-                    <td className="px-2 py-1.5">
-                      <input type="number" min="0" value={r.quantity} onChange={(e) => updateRow(i, 'quantity', e.target.value)} className="w-20 border border-gray-200 rounded px-2 py-1" />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input type="number" min="0" value={r.rate} onChange={(e) => updateRow(i, 'rate', e.target.value)} className="w-20 border border-gray-200 rounded px-2 py-1" />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input type="number" min="0" value={r.budgetQty} onChange={(e) => updateRow(i, 'budgetQty', e.target.value)} className="w-20 border border-gray-200 rounded px-2 py-1" />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input type="number" min="0" value={r.purchaseQty} onChange={(e) => updateRow(i, 'purchaseQty', e.target.value)} className="w-20 border border-gray-200 rounded px-2 py-1" />
-                    </td>
-                    <td className="px-2 py-1.5">{r.stockQty}</td>
-                    <td className="px-2 py-1.5 font-medium">{(num(r.rate) * num(r.purchaseQty)).toLocaleString()}</td>
-                    <td className="px-2 py-1.5">
-                      <button type="button" onClick={() => removeRow(i)} className="text-red-500 hover:text-red-700">
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))
+      <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6">
+        {/* Header */}
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <Breadcrumb
+              items={[
+                { label: 'Home', to: '/dashboard' },
+                { label: 'Inventory', to: '/inventory-module/purchase-list' },
+                { label: 'Purchase' },
+              ]}
+            />
+            <div className="mt-1 flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 shadow-sm shadow-indigo-600/30">
+                <ShoppingCart size={18} className="text-white" strokeWidth={2.2} />
+              </div>
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+                {isEdit ? 'Edit Purchase' : 'New Purchase'}
+              </h1>
+              {code && (
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 font-mono text-xs font-medium text-slate-600">{code}</span>
               )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-md p-4 mb-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Field label="Subtotal">
-              <input
-                value={subtotal.toLocaleString()}
-                readOnly
-                title="Auto-calculated as the sum of Rate x Purchase Qty across all item rows"
-                className="input bg-gray-50 cursor-not-allowed"
-              />
-              <p className="text-xs text-gray-400 mt-1">Auto-calculated from item rows</p>
-            </Field>
-            <Field label="Discount">
-              <input type="number" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} className="input" placeholder="discount" />
-            </Field>
-            <Field label="Delivery/Labour">
-              <input type="number" min="0" value={deliveryCharge} onChange={(e) => setDeliveryCharge(e.target.value)} className="input" placeholder="delivery_charge" />
-            </Field>
-            <Field label="Grand Total">
-              <input value={grandTotal.toLocaleString()} readOnly className="input bg-gray-50 font-medium cursor-not-allowed" />
-            </Field>
-            <Field label="Paid">
-              <input type="number" min="0" value={paid} onChange={(e) => setPaid(e.target.value)} className="input" />
-            </Field>
-            <Field label="Due">
-              <input value={dueAmount.toLocaleString()} readOnly className="input bg-gray-50 text-red-600 font-medium cursor-not-allowed" />
-            </Field>
-            <Field label="Note/Comments">
-              <input value={note} onChange={(e) => setNote(e.target.value)} className="input" />
-            </Field>
-            <Field label="Attachment">
-              <input type="file" onChange={(e) => setAttachmentName(e.target.files?.[0]?.name || '')} className="input" />
-            </Field>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-          <div className="bg-white border border-gray-200 rounded-md overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-indigo-500 text-white">
-                  {['Transaction ID', 'Payment Method', 'Cheque Receipt No', 'Amount', 'Date', 'Action'].map((h) => (
-                    <th key={h} className="px-2 py-2 text-left font-medium">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {payments.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center py-4 text-gray-400">No payments yet</td></tr>
-                ) : (
-                  payments.map((p, i) => (
-                    <tr key={i} className="border-t border-gray-100">
-                      <td className="px-2 py-1.5">{p.transactionId}</td>
-                      <td className="px-2 py-1.5">{p.method}</td>
-                      <td className="px-2 py-1.5">{p.chequeReceiptNo || '-'}</td>
-                      <td className="px-2 py-1.5">{num(p.amount).toLocaleString()}</td>
-                      <td className="px-2 py-1.5">{p.date}</td>
-                      <td className="px-2 py-1.5">
-                        <button type="button" onClick={() => removePayment(i)} className="text-red-500 hover:text-red-700">
-                          <Trash2 size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-                {payments.length > 0 && (
-                  <tr className="border-t border-gray-200 font-medium">
-                    <td colSpan={3} className="px-2 py-1.5">Total</td>
-                    <td className="px-2 py-1.5">{paymentsTotal.toLocaleString()}</td>
-                    <td colSpan={2}></td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="bg-white border border-gray-200 rounded-md p-4">
-            <div className="grid grid-cols-2 gap-4 mb-3">
-              <Field label={<span>Payment Method <span className="text-red-500">*</span> <label className="ml-2 text-xs font-normal"><input type="checkbox" checked={ifCheque} onChange={(e) => setIfCheque(e.target.checked)} className="mr-1" />If cheque</label></span>}>
-                <input value={ifCheque ? 'Cheque' : 'Cash'} readOnly className="input bg-gray-50" />
-              </Field>
-              <Field label="Payment Date">
-                <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="input" />
-              </Field>
-              <Field label="Cheque Receipt No">
-                <input value={chequeReceiptNo} onChange={(e) => setChequeReceiptNo(e.target.value)} className="input" placeholder="Cheque Receipt No" disabled={!ifCheque} />
-              </Field>
-              <Field label="Amount" required>
-                <input type="number" min="0" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} className="input" />
-              </Field>
             </div>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={addPayment}
-                className="bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium px-4 py-2 rounded-md"
-              >
-                Add Payment
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-6 py-2 rounded-md disabled:opacity-50"
-              >
-                {submitting ? 'Saving...' : 'Submit'}
-              </button>
-            </div>
+            <p className="ml-12 mt-1 text-sm text-slate-500">Pick the supplier, add the items, check the total and save.</p>
           </div>
+          <button
+            type="button"
+            onClick={() => navigate('/inventory-module/purchase-list')}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+          >
+            <List size={15} />
+            Purchase List
+          </button>
         </div>
-      </form>
+
+        <form onSubmit={handleSubmit} className="pb-10">
+          {error && (
+            <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+          )}
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="min-w-0 space-y-5">
+              {/* 1. Supplier & date */}
+              <Panel icon={Truck} title="Supplier & date" subtitle="Who you bought from" accent="indigo">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <Field label="Date">
+                    <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
+                  </Field>
+                  <Field label="Supplier" required>
+                    <select value={supplier} onChange={(e) => setSupplier(e.target.value)} className="input">
+                      <option value="">Select supplier</option>
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Ledger" required>
+                    <select value={ledger} onChange={(e) => setLedger(e.target.value)} className="input">
+                      <option value="">Select ledger</option>
+                      {ledgers.map((l) => (
+                        <option key={l.id} value={l.id}>{l.name}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Code">
+                    <input value={code} readOnly className="input font-mono" />
+                  </Field>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setMoreOpen((o) => !o)}
+                  className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                >
+                  <ChevronDown size={15} className={`transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
+                  More options (project, work, task, site)
+                  {!moreOpen && moreFilled > 0 && (
+                    <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] text-indigo-700">{moreFilled} filled</span>
+                  )}
+                </button>
+                {moreOpen && (
+                  <div className="mt-3 grid grid-cols-1 gap-4 rounded-xl border border-slate-100 bg-slate-50/60 p-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <Field label="Project">
+                      <select value={project} onChange={(e) => setProject(e.target.value)} className="input">
+                        <option value="">Select project</option>
+                        {projects.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Title/Name of Work">
+                      <input value={titleOfWork} onChange={(e) => setTitleOfWork(e.target.value)} className="input" placeholder="Title/Name of Work" />
+                    </Field>
+                    <Field label="If Task">
+                      <input value={task} onChange={(e) => setTask(e.target.value)} className="input" placeholder="Task" />
+                    </Field>
+                    <Field label="Site">
+                      <select value={site} onChange={(e) => setSite(e.target.value)} className="input">
+                        <option value="">Select site</option>
+                        {sites.map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
+                )}
+              </Panel>
+
+              {/* 2. Items */}
+              <Panel
+                icon={Package}
+                title="Items"
+                subtitle="Choose an item and press Add; edit qty and rate in the table"
+                accent="emerald"
+                right={<span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">{rows.length} item{rows.length === 1 ? '' : 's'}</span>}
+                bodyClassName="p-0"
+              >
+                <div className="grid grid-cols-1 gap-3 border-b border-slate-100 p-4 sm:grid-cols-[220px_minmax(0,1fr)_auto] sm:items-end">
+                  <Field label="Category (filter)">
+                    <select value={category} onChange={(e) => setCategory(e.target.value)} className="input">
+                      <option value="">All categories</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Item">
+                    <select value={selectedItemId} onChange={(e) => setSelectedItemId(e.target.value)} className="input">
+                      <option value="">Select item</option>
+                      {items.map((it) => (
+                        <option key={it.id} value={it.id}>{it.name}{it.code ? ` (${it.code})` : ''}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <button
+                    type="button"
+                    onClick={addItemRow}
+                    disabled={!selectedItemId}
+                    className="inline-flex h-[42px] items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-4 text-sm font-medium text-white shadow-sm shadow-indigo-600/20 transition-colors hover:bg-indigo-700 disabled:opacity-50"
+                    title="Add this item to the table below"
+                  >
+                    <Plus size={16} strokeWidth={2.5} />
+                    Add
+                  </button>
+                  {items.length === 0 && (
+                    <p className="text-xs text-slate-400 sm:col-span-3">No items found for this category.</p>
+                  )}
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="whitespace-nowrap bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+                        {['Item', 'Details', 'Unit', 'Quantity', 'Budget Qty', 'Purchase Qty', 'Rate', 'Stock Qty', 'Amount', ''].map((h) => (
+                          <th key={h} className="px-3 py-2.5 text-left font-semibold">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {rows.length === 0 ? (
+                        <tr>
+                          <td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-400">
+                            No items yet. Select an item above and press <span className="font-medium text-indigo-600">Add</span>.
+                          </td>
+                        </tr>
+                      ) : (
+                        rows.map((r, i) => (
+                          <tr key={i} className="align-middle hover:bg-slate-50/60">
+                            <td className="px-3 py-2">
+                              <div className="font-medium text-slate-800">{r.itemName}</div>
+                              <div className="font-mono text-[11px] text-slate-400">{r.itemCode}</div>
+                            </td>
+                            <td className="px-3 py-2">
+                              <input value={r.details || ''} onChange={(e) => updateRow(i, 'details', e.target.value)} className={`${inputSm} min-w-[120px]`} placeholder="Optional" />
+                            </td>
+                            <td className="px-3 py-2 text-slate-600">{r.unit}</td>
+                            <td className="px-3 py-2">
+                              <input type="number" min="0" value={r.quantity} onChange={(e) => updateRow(i, 'quantity', e.target.value)} className={inputSm} />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input type="number" min="0" value={r.budgetQty} onChange={(e) => updateRow(i, 'budgetQty', e.target.value)} className={inputSm} />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input type="number" min="0" value={r.purchaseQty} onChange={(e) => updateRow(i, 'purchaseQty', e.target.value)} className={`${inputSm} border-indigo-200 bg-indigo-50/40`} />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input type="number" min="0" value={r.rate} onChange={(e) => updateRow(i, 'rate', e.target.value)} className={`${inputSm} border-indigo-200 bg-indigo-50/40`} />
+                            </td>
+                            <td className="px-3 py-2 tabular-nums text-slate-500">{r.stockQty}</td>
+                            <td className="px-3 py-2 font-semibold tabular-nums text-slate-900">{money(num(r.rate) * num(r.purchaseQty))}</td>
+                            <td className="px-3 py-2">
+                              <button type="button" onClick={() => removeRow(i)} title="Remove" className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600">
+                                <Trash2 size={15} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {rows.length > 0 && (
+                  <p className="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-400">Amount = Rate × Purchase Qty</p>
+                )}
+              </Panel>
+
+              {/* 3. Payment & notes */}
+              <Panel icon={Wallet} title="Payment & notes" accent="violet">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <Field label="Discount">
+                    <input type="number" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} className="input" placeholder="0" />
+                  </Field>
+                  <Field label="Delivery/Labour">
+                    <input type="number" min="0" value={deliveryCharge} onChange={(e) => setDeliveryCharge(e.target.value)} className="input" placeholder="0" />
+                  </Field>
+                  <Field label="Paid">
+                    <input type="number" min="0" value={paid} onChange={(e) => setPaid(e.target.value)} className="input" placeholder="0" />
+                  </Field>
+                  <div className="sm:col-span-2">
+                    <Field label="Note/Comments">
+                      <input value={note} onChange={(e) => setNote(e.target.value)} className="input" placeholder="Optional" />
+                    </Field>
+                  </div>
+                  <Field label="Attachment">
+                    <input type="file" onChange={(e) => setAttachmentName(e.target.files?.[0]?.name || '')} className="input py-2 text-xs" />
+                  </Field>
+                </div>
+
+                {/* Payment records */}
+                <button
+                  type="button"
+                  onClick={() => setPaymentsOpen((o) => !o)}
+                  className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                >
+                  <ChevronDown size={15} className={`transition-transform ${paymentsOpen ? 'rotate-180' : ''}`} />
+                  Payment records (cash / cheque)
+                  {payments.length > 0 && (
+                    <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] text-indigo-700">{payments.length} · {money(paymentsTotal)}</span>
+                  )}
+                </button>
+                {paymentsOpen && (
+                  <div className="mt-3 space-y-3 rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[auto_1fr_1fr_1fr_auto] xl:items-end">
+                      <Field label="Payment Method" required>
+                        <div className="flex h-[42px] items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
+                          {['Cash', 'Cheque'].map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setIfCheque(m === 'Cheque')}
+                              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                                (m === 'Cheque') === ifCheque ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'
+                              }`}
+                            >
+                              {m}
+                            </button>
+                          ))}
+                        </div>
+                      </Field>
+                      <Field label="Payment Date">
+                        <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="input" />
+                      </Field>
+                      <Field label="Cheque Receipt No">
+                        <input value={chequeReceiptNo} onChange={(e) => setChequeReceiptNo(e.target.value)} className="input" placeholder="Cheque Receipt No" disabled={!ifCheque} />
+                      </Field>
+                      <Field label="Amount" required>
+                        <input type="number" min="0" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} className="input" />
+                      </Field>
+                      <button
+                        type="button"
+                        onClick={addPayment}
+                        className="inline-flex h-[42px] items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-4 text-sm font-medium text-white transition-colors hover:bg-violet-700"
+                      >
+                        <Plus size={15} strokeWidth={2.5} />
+                        Add Payment
+                      </button>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="whitespace-nowrap bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+                            {['Transaction ID', 'Method', 'Cheque Receipt No', 'Amount', 'Date', ''].map((h) => (
+                              <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {payments.length === 0 ? (
+                            <tr><td colSpan={6} className="py-5 text-center text-sm text-slate-400">No payments yet</td></tr>
+                          ) : (
+                            payments.map((p, i) => (
+                              <tr key={i}>
+                                <td className="px-3 py-2 font-mono text-xs">{p.transactionId}</td>
+                                <td className="px-3 py-2">
+                                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${p.method === 'Cheque' ? 'bg-sky-50 text-sky-700' : 'bg-emerald-50 text-emerald-700'}`}>{p.method}</span>
+                                </td>
+                                <td className="px-3 py-2">{p.chequeReceiptNo || '-'}</td>
+                                <td className="px-3 py-2 tabular-nums">{num(p.amount).toLocaleString()}</td>
+                                <td className="px-3 py-2">{p.date}</td>
+                                <td className="px-3 py-2">
+                                  <button type="button" onClick={() => removePayment(i)} title="Remove" className="text-slate-400 hover:text-red-600">
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                          {payments.length > 0 && (
+                            <tr className="bg-slate-50 font-semibold">
+                              <td colSpan={3} className="px-3 py-2">Total</td>
+                              <td className="px-3 py-2 tabular-nums">{paymentsTotal.toLocaleString()}</td>
+                              <td colSpan={2}></td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </Panel>
+            </div>
+
+            {/* Sticky summary */}
+            <aside className="lg:sticky lg:top-4 lg:self-start">
+              <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_18px_rgba(15,23,42,.05)]">
+                <div className="flex items-center gap-2.5 border-b border-slate-100 px-5 py-3.5">
+                  <span className="flex size-9 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
+                    <Receipt className="size-4" />
+                  </span>
+                  <h2 className="text-sm font-bold text-slate-800">Summary</h2>
+                </div>
+                <dl className="space-y-2.5 px-5 py-4 text-sm">
+                  <SummaryRow label="Items" value={rows.length} />
+                  <SummaryRow
+                    label="Subtotal"
+                    value={money(subtotal)}
+                    title="Auto-calculated as the sum of Rate x Purchase Qty across all item rows"
+                  />
+                  <SummaryRow label="Discount" value={`- ${money(discount)}`} />
+                  <SummaryRow label="Delivery/Labour" value={`+ ${money(deliveryCharge)}`} />
+                  <div className="flex items-center justify-between border-t border-slate-100 pt-3">
+                    <dt className="font-semibold text-slate-800">Grand Total</dt>
+                    <dd className="text-xl font-extrabold tabular-nums text-slate-900">{money(grandTotal)}</dd>
+                  </div>
+                  <SummaryRow label="Paid" value={money(paid)} valueClass="text-emerald-600" />
+                  <div className="flex items-center justify-between rounded-lg bg-red-50 px-3 py-2">
+                    <dt className="font-medium text-red-700">Due</dt>
+                    <dd className="font-bold tabular-nums text-red-600">{money(dueAmount)}</dd>
+                  </div>
+                </dl>
+                <div className="space-y-2 border-t border-slate-100 px-5 py-4">
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-emerald-600/20 transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    <Save size={16} />
+                    {submitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Save Purchase'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/inventory-module/purchase-list')}
+                    className="w-full rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-200"
+                  >
+                    Cancel
+                  </button>
+                  <p className="text-center text-[11px] text-slate-400">Supplier, Ledger and at least one item are required.</p>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
@@ -470,10 +604,19 @@ export default function PurchasePage() {
 function Field({ label, required, children }) {
   return (
     <div>
-      <label className="block text-sm text-gray-700 mb-1">
-        {label}{required && <span className="text-red-500">*</span>}
+      <label className="mb-1.5 block text-xs font-medium text-slate-500">
+        {label}{required && <span className="ml-0.5 text-red-500">*</span>}
       </label>
       {children}
+    </div>
+  );
+}
+
+function SummaryRow({ label, value, title, valueClass = 'text-slate-800' }) {
+  return (
+    <div className="flex items-center justify-between" title={title}>
+      <dt className="text-slate-500">{label}</dt>
+      <dd className={`font-medium tabular-nums ${valueClass}`}>{value}</dd>
     </div>
   );
 }
