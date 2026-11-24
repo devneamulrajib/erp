@@ -344,6 +344,10 @@ Expense.belongsTo(Voucher, { foreignKey: 'voucherId' });
 // ---- Voucher ----
 Voucher.hasMany(VoucherEntry, { foreignKey: 'voucherId', onDelete: 'CASCADE' });
 VoucherEntry.belongsTo(Voucher, { foreignKey: 'voucherId' });
+// Aliases used by the accounting reports (Day Book, Cash/Bank Book, Ledger, Trial Balance...).
+// constraints:false = no schema change; the voucherId FK above already exists.
+Voucher.hasMany(VoucherEntry, { as: 'entries', foreignKey: 'voucherId', constraints: false });
+VoucherEntry.belongsTo(ChartOfAccount, { as: 'account', foreignKey: 'accountId', constraints: false });
 
 Voucher.hasMany(VoucherApproval, { foreignKey: 'voucherId', onDelete: 'CASCADE' });
 VoucherApproval.belongsTo(Voucher, { foreignKey: 'voucherId' });
