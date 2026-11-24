@@ -225,7 +225,7 @@ function PurchaseOrderOverviewModal({ orderId, initialRow, onClose, onEdit }) {
                   <tr className="bg-slate-50 text-slate-500">
                     <th className="text-left px-3 py-2 font-medium text-[10px] uppercase tracking-wide">Item</th>
                     <th className="text-left px-3 py-2 font-medium text-[10px] uppercase tracking-wide">Unit</th>
-                    <th className="text-right px-3 py-2 font-medium text-[10px] uppercase tracking-wide">Purchase Qty</th>
+                    <th className="text-right px-3 py-2 font-medium text-[10px] uppercase tracking-wide">Qty</th>
                     <th className="text-right px-3 py-2 font-medium text-[10px] uppercase tracking-wide">Rate</th>
                     <th className="text-right px-3 py-2 font-medium text-[10px] uppercase tracking-wide">Amount</th>
                   </tr>

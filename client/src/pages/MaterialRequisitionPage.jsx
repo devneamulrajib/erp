@@ -247,32 +247,23 @@ export default function MaterialRequisitionPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
-                    {['Item Code', 'Item Name', 'Details', 'Unit', 'Budget Qty', 'Demand Qty',
-                      'Stock Qty', 'Action'].map((h) => (
+                    {['Item Code', 'Item Name', 'Unit', 'Qty', 'Action'].map((h) => (
                       <th key={h} className="px-2 py-2.5 text-left font-medium text-[11px] uppercase tracking-wide">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {rows.length === 0 ? (
-                    <tr><td colSpan={8} className="text-center py-8 text-slate-400">No items added</td></tr>
+                    <tr><td colSpan={5} className="text-center py-8 text-slate-400">No items added</td></tr>
                   ) : (
                     rows.map((r, i) => (
                       <tr key={i} className="hover:bg-slate-50/70 transition-colors">
                         <td className="px-2 py-2 text-slate-600 font-mono">{r.itemCode}</td>
                         <td className="px-2 py-2 font-medium text-slate-700">{r.itemName}</td>
-                        <td className="px-2 py-2">
-                          <input value={r.details} onChange={(e) => updateRow(i, 'details', e.target.value)} className={cellInputCls} />
-                        </td>
                         <td className="px-2 py-2 text-slate-600">{r.unit}</td>
                         <td className="px-2 py-2">
-                          <input type="number" value={r.budgetQty} onChange={(e) => updateRow(i, 'budgetQty', e.target.value)} className={`w-20 ${cellInputCls}`} />
-                        </td>
-                        <td className="px-2 py-2">
-                          <input type="number" value={r.demandQty} onChange={(e) => updateRow(i, 'demandQty', e.target.value)} className={`w-20 ${cellInputCls}`} />
-                        </td>
-                        <td className="px-2 py-2">
-                          <input type="number" value={r.stockQty} onChange={(e) => updateRow(i, 'stockQty', e.target.value)} className={`w-20 ${cellInputCls}`} />
+                          {/* Qty is the demanded quantity (demandQty) the supplier quotes against */}
+                          <input type="number" min="0" value={r.demandQty} onChange={(e) => updateRow(i, 'demandQty', e.target.value)} className={`w-24 ${cellInputCls}`} />
                         </td>
                         <td className="px-2 py-2">
                           <button

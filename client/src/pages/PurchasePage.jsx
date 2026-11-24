@@ -110,7 +110,11 @@ export default function PurchasePage() {
       setCategory(p.category?.id || p.categoryId || '');
       // Saved rows come back with itemId; the payload uses `item` (server maps
       // item -> itemId), so keep it set or editing would drop the item link.
-      setRows(unwrap(p.PurchaseItems || p.items).map((r) => ({ ...r, item: r.item ?? r.itemId })));
+      // One Qty on screen: purchaseQty drives stock and amount; fall back to the
+      // old Quantity column for rows that only had that filled in.
+      setRows(unwrap(p.PurchaseItems || p.items).map((r) => ({
+        ...r, item: r.item ?? r.itemId, purchaseQty: num(r.purchaseQty) || r.quantity || '',
+      })));
       setDiscount(p.discount ?? '');
       setDeliveryCharge(p.deliveryCharge ?? '');
       setPaid(p.paid ?? '');
@@ -154,6 +158,11 @@ export default function PurchasePage() {
     setSelectedItemId('');
   }
 
+  // The single Qty box fills both quantity and purchaseQty (server uses
+  // purchaseQty for stock and amount, quantity is kept in step).
+  function updateQty(i, value) {
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, quantity: value, purchaseQty: value } : r)));
+  }
   function updateRow(i, key, value) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
   }
@@ -327,7 +336,7 @@ export default function PurchasePage() {
               <Panel
                 icon={Package}
                 title="Items"
-                subtitle="Choose an item and press Add; edit qty and rate in the table"
+                subtitle="Choose an item and press Add, then enter Qty and Rate"
                 accent="emerald"
                 right={<span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">{rows.length} item{rows.length === 1 ? '' : 's'}</span>}
                 bodyClassName="p-0"
@@ -368,7 +377,7 @@ export default function PurchasePage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="whitespace-nowrap bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
-                        {['Item', 'Details', 'Unit', 'Quantity', 'Budget Qty', 'Purchase Qty', 'Rate', 'Stock Qty', 'Amount', ''].map((h) => (
+                        {['Item', 'Unit', 'Qty', 'Rate', 'Amount', ''].map((h) => (
                           <th key={h} className="px-3 py-2.5 text-left font-semibold">{h}</th>
                         ))}
                       </tr>
@@ -376,7 +385,7 @@ export default function PurchasePage() {
                     <tbody className="divide-y divide-slate-100">
                       {rows.length === 0 ? (
                         <tr>
-                          <td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-400">
+                          <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
                             No items yet. Select an item above and press <span className="font-medium text-indigo-600">Add</span>.
                           </td>
                         </tr>
@@ -387,23 +396,13 @@ export default function PurchasePage() {
                               <div className="font-medium text-slate-800">{r.itemName}</div>
                               <div className="font-mono text-[11px] text-slate-400">{r.itemCode}</div>
                             </td>
-                            <td className="px-3 py-2">
-                              <input value={r.details || ''} onChange={(e) => updateRow(i, 'details', e.target.value)} className={`${inputSm} min-w-[120px]`} placeholder="Optional" />
-                            </td>
                             <td className="px-3 py-2 text-slate-600">{r.unit}</td>
                             <td className="px-3 py-2">
-                              <input type="number" min="0" value={r.quantity} onChange={(e) => updateRow(i, 'quantity', e.target.value)} className={inputSm} />
+                              <input type="number" min="0" value={r.purchaseQty} onChange={(e) => updateQty(i, e.target.value)} className={`${inputSm} max-w-[120px] border-indigo-200 bg-indigo-50/40`} placeholder="0" />
                             </td>
                             <td className="px-3 py-2">
-                              <input type="number" min="0" value={r.budgetQty} onChange={(e) => updateRow(i, 'budgetQty', e.target.value)} className={inputSm} />
+                              <input type="number" min="0" value={r.rate} onChange={(e) => updateRow(i, 'rate', e.target.value)} className={`${inputSm} max-w-[140px] border-indigo-200 bg-indigo-50/40`} />
                             </td>
-                            <td className="px-3 py-2">
-                              <input type="number" min="0" value={r.purchaseQty} onChange={(e) => updateRow(i, 'purchaseQty', e.target.value)} className={`${inputSm} border-indigo-200 bg-indigo-50/40`} />
-                            </td>
-                            <td className="px-3 py-2">
-                              <input type="number" min="0" value={r.rate} onChange={(e) => updateRow(i, 'rate', e.target.value)} className={`${inputSm} border-indigo-200 bg-indigo-50/40`} />
-                            </td>
-                            <td className="px-3 py-2 tabular-nums text-slate-500">{r.stockQty}</td>
                             <td className="px-3 py-2 font-semibold tabular-nums text-slate-900">{money(num(r.rate) * num(r.purchaseQty))}</td>
                             <td className="px-3 py-2">
                               <button type="button" onClick={() => removeRow(i)} title="Remove" className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600">
@@ -417,7 +416,7 @@ export default function PurchasePage() {
                   </table>
                 </div>
                 {rows.length > 0 && (
-                  <p className="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-400">Amount = Rate × Purchase Qty</p>
+                  <p className="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-400">Amount = Qty × Rate</p>
                 )}
               </Panel>
 

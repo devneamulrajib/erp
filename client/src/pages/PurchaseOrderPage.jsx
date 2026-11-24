@@ -130,7 +130,9 @@ export default function PurchaseOrderPage() {
       setSite(o.site?.id || o.siteId || o.site || '');
       setCategory(o.category?.id || o.categoryId || o.category || '');
       setBoqItems((o.boqItems || []).map((b) => (typeof b === 'string' ? b : b.label)));
-      setRows(asArray(o.items));
+      // One Qty on screen: purchaseQty drives amount and the bill conversion;
+      // fall back to the old Quantity column for rows that only had that.
+      setRows(asArray(o.items).map((r) => ({ ...r, purchaseQty: num(r.purchaseQty) || r.quantity || '' })));
       setLifecycle({
         status: o.status,
         deliveryStatus: o.deliveryStatus,
@@ -177,6 +179,10 @@ export default function PurchaseOrderPage() {
       amount: 0,
     }]);
     setSelectedItemId('');
+  }
+  // The single Qty box fills both quantity and purchaseQty.
+  function updateQty(i, value) {
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, quantity: value, purchaseQty: value } : r)));
   }
   function updateRow(i, key, value) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
@@ -392,42 +398,28 @@ export default function PurchaseOrderPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-slate-50 text-slate-500 whitespace-nowrap">
-                      {['Item Code', 'Item Name', 'Details', 'Unit', 'Quantity', 'Rate', 'Budget Qty',
-                        'Purchase Qty', 'Stock Qty', 'Amount', 'Action'].map((h) => (
+                      {['Item Code', 'Item Name', 'Unit', 'Qty', 'Rate', 'Amount', 'Action'].map((h) => (
                         <th key={h} className="px-3 py-2.5 text-left font-medium text-[10px] uppercase tracking-wide">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {rows.length === 0 ? (
-                      <tr><td colSpan={11} className="text-center py-8 text-slate-400">No items added — select an item above and click +</td></tr>
+                      <tr><td colSpan={7} className="text-center py-8 text-slate-400">No items added — select an item above and click +</td></tr>
                     ) : (
                       rows.map((r, i) => (
                         <tr key={i} className="hover:bg-slate-50/60">
                           <td className="px-3 py-2 text-slate-600">{r.itemCode}</td>
                           <td className="px-3 py-2 font-medium text-slate-700">{r.itemName}</td>
-                          <td className="px-3 py-2">
-                            <input value={r.details} onChange={(e) => updateRow(i, 'details', e.target.value)}
-                              className="w-full border border-slate-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30" />
-                          </td>
                           <td className="px-3 py-2 text-slate-600">{r.unit}</td>
                           <td className="px-3 py-2">
-                            <input type="number" min="0" value={r.quantity} onChange={(e) => updateRow(i, 'quantity', e.target.value)}
-                              className="w-16 border border-slate-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30" />
+                            <input type="number" min="0" value={r.purchaseQty} onChange={(e) => updateQty(i, e.target.value)} placeholder="0"
+                              className="w-20 border border-slate-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30" />
                           </td>
                           <td className="px-3 py-2">
                             <input type="number" min="0" value={r.rate} onChange={(e) => updateRow(i, 'rate', e.target.value)}
                               className="w-20 border border-slate-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30" />
                           </td>
-                          <td className="px-3 py-2">
-                            <input type="number" min="0" value={r.budgetQty} onChange={(e) => updateRow(i, 'budgetQty', e.target.value)}
-                              className="w-16 border border-slate-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30" />
-                          </td>
-                          <td className="px-3 py-2">
-                            <input type="number" min="0" value={r.purchaseQty} onChange={(e) => updateRow(i, 'purchaseQty', e.target.value)}
-                              className="w-16 border border-slate-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30" />
-                          </td>
-                          <td className="px-3 py-2 text-slate-600">{r.stockQty}</td>
                           <td className="px-3 py-2 font-semibold text-slate-800">{(num(r.rate) * num(r.purchaseQty)).toLocaleString()}</td>
                           <td className="px-3 py-2">
                             <button type="button" onClick={() => removeRow(i)}

@@ -102,7 +102,9 @@ export default function MaterialUsagePage() {
       setTask(u.task || '');
       setSite(u.site?.id || u.site || '');
       setCategory(u.category?.id || u.category || '');
-      setRows(u.items || []);
+      // Saved rows come back with itemId; the payload uses `item` (server maps
+      // item -> itemId), so keep it set or editing would drop the item link.
+      setRows((u.items || []).map((r) => ({ ...r, item: r.item ?? r.itemId })));
     }).catch((err) => {
       console.error(err);
       setError('Failed to load material usage.');
@@ -256,32 +258,27 @@ export default function MaterialUsagePage() {
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-indigo-500 text-white whitespace-nowrap">
-                {['Item Code', 'Item Name', 'Details', 'Unit', 'Use Qty', 'Budget Qty',
-                  'Purchase Qty', 'Stock Qty', 'Action'].map((h) => (
+                {['Item Code', 'Item Name', 'Unit', 'Qty', 'Rate', 'Amount', 'Action'].map((h) => (
                   <th key={h} className="px-2 py-2 text-left font-medium">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={9} className="text-center py-4 text-gray-400">No items added</td></tr>
+                <tr><td colSpan={7} className="text-center py-4 text-gray-400">No items added</td></tr>
               ) : (
                 rows.map((r, i) => (
                   <tr key={i} className="border-t border-gray-100">
                     <td className="px-2 py-1.5">{r.itemCode}</td>
                     <td className="px-2 py-1.5">{r.itemName}</td>
-                    <td className="px-2 py-1.5">
-                      <input value={r.details} onChange={(e) => updateRow(i, 'details', e.target.value)} className="w-full border border-gray-200 rounded px-2 py-1" />
-                    </td>
                     <td className="px-2 py-1.5">{r.unit}</td>
                     <td className="px-2 py-1.5">
                       <input type="number" value={r.useQty} onChange={(e) => updateRow(i, 'useQty', e.target.value)} className="w-20 border border-gray-200 rounded px-2 py-1" />
                     </td>
                     <td className="px-2 py-1.5">
-                      <input type="number" value={r.budgetQty} onChange={(e) => updateRow(i, 'budgetQty', e.target.value)} className="w-20 border border-gray-200 rounded px-2 py-1" />
+                      <input type="number" min="0" value={r.rate} onChange={(e) => updateRow(i, 'rate', e.target.value)} className="w-24 border border-gray-200 rounded px-2 py-1" />
                     </td>
-                    <td className="px-2 py-1.5">{r.purchaseQty}</td>
-                    <td className="px-2 py-1.5">{r.stockQty}</td>
+                    <td className="px-2 py-1.5 font-medium">{(num(r.rate) * num(r.useQty)).toLocaleString()}</td>
                     <td className="px-2 py-1.5">
                       <button type="button" onClick={() => removeRow(i)} className="text-red-500 hover:text-red-700">
                         <Trash2 size={14} />
