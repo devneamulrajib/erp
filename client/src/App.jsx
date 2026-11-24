@@ -1,180 +1,182 @@
 // client/src/App.jsx
-import React from 'react'
+import React, { Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import ProjectDashboard from './pages/ProjectDashboard'
-import InventoryDashboard from './pages/InventoryDashboard'
-import Project from './pages/Project'
-import AgreementList from './pages/AgreementList'
-import AgreementForm from './pages/AgreementForm'
-import AgreementView from './pages/AgreementView'
-import PartyList from './pages/PartyList'
-import Site from './pages/Site'
-import Flat from './pages/Flat'
-import FlatSaleList from './pages/FlatSaleList'
-import FlatSaleForm from './pages/FlatSaleForm'
-import InstallmentReport from './pages/InstallmentReport'
-import AssignShare from './pages/AssignShare'
-import ShareReport from './pages/ShareReport'
-import PenaltyReport from './pages/PenaltyReport'
-import ProjectShareConfiguration from './pages/ProjectShareConfiguration'
-import ProjectSummaryReport from './pages/ProjectSummaryReport'
-import ProjectProgressReport from './pages/ProjectProgressReport'
-import ProjectWiseIncomeStatement from './pages/ProjectWiseIncomeStatement'
-import SiteWiseIncomeStatement from './pages/SiteWiseIncomeStatement'
-import AmountUsageReport from './pages/AmountUsageReport'
-import ItemPage from './pages/ItemPage'
-import PurchasePage from './pages/PurchasePage'
-import PurchaseList from './pages/PurchaseList'
-import PurchaseOrderPage from './pages/PurchaseOrderPage'
-import PurchaseOrderList from './pages/PurchaseOrderList'
-import MaterialRequisitionList from './pages/MaterialRequisitionList'
-import MaterialRequisitionPage from './pages/MaterialRequisitionPage'
-import ServiceRequisitionList from './pages/ServiceRequisitionList'
-import ServiceRequisitionPage from './pages/ServiceRequisitionPage'
-import MaterialUsagePage from './pages/MaterialUsagePage'
-import MaterialUsageList from './pages/MaterialUsageList'
-import StockTransferPage from './pages/StockTransferPage'
-import StockTransferList from './pages/StockTransferList'
-import CommunicationStatusPage from './pages/CommunicationStatusPage'
-import LeadCategoryPage from './pages/LeadCategoryPage'
-import CampaignPage from './pages/CampaignPage'
-import ProfessionPage from './pages/ProfessionPage'
-import LeadSourcePage from './pages/LeadSourcePage'
-import OfferPage from './pages/OfferPage'
-import AreaPage from './pages/AreaPage'
-import LeadStagePage from './pages/LeadStagePage'
-import LeadPage from './pages/LeadPage'
-import FollowUp from './pages/FollowUp'
-import ChartOfGroupPage from './pages/ChartOfGroupPage'
-import ChartOfGroupHierarchy from './pages/ChartOfGroupHierarchy'
-import ChartOfAccountsPage from './pages/ChartOfAccountsPage'
-import CustomerAccountsPage from './pages/CustomerAccountsPage'
-import SupplierAccountsPage from './pages/SupplierAccountsPage'
-import InvestorAccountsPage from './pages/InvestorAccountsPage'
-import BillingCategoryPage from './pages/BillingCategoryPage'
-import BillItemPage from './pages/BillItemPage'
-import ServiceWorkNamePage from './pages/ServiceWorkNamePage'
-import BoqTitlePage from './pages/BoqTitlePage'
-import AssetListPage from './pages/AssetListPage'
-import AssetFormPage from './pages/AssetFormPage'
-import FundRequisitionList from './pages/FundRequisitionList'
-import BillPage from './pages/BillPage'
-import BillList from './pages/BillList'
-import ContractorBillPage from './pages/ContractorBillPage'
-import ContractorBillList from './pages/ContractorBillList'
-import LabourWorkerBillPage from './pages/LabourWorkerBillPage'
-import LabourWorkerBillList from './pages/LabourWorkerBillList'
-import WorkorderPage from './pages/WorkorderPage'
-import ContractorWorkorderPage from './pages/ContractorWorkorderPage'
-import ContractorWorkorderList from './pages/ContractorWorkorderList'
-import PeriodBillPage from './pages/PeriodBillPage'
-import PeriodBillList from './pages/PeriodBillList'
-import AdjustmentBillPage from './pages/AdjustmentBillPage'
-import AdjustmentBillList from './pages/AdjustmentBillList'
-import ExpenseListPage from './pages/ExpenseListPage'
-import ExpensePage from './pages/ExpensePage'
-import ReceiptVoucherPage from './pages/ReceiptVoucherPage'
-import DayBookPage from './pages/DayBookPage'
-import PayableReportPage from './pages/PayableReportPage'
-import ExpenseReportPage from './pages/ExpenseReportPage'
-import ReceivableReportPage from './pages/ReceivableReportPage'
-import ReceivePaymentStatementPage from './pages/ReceivePaymentStatementPage'
-import BankReconciliationPage from './pages/BankReconciliationPage'
-import FundRequisitionReportPage from './pages/FundRequisitionReportPage'
-import SaleList from './pages/SaleList'
-import SalePage from './pages/SalePage'
-import QuotePage from './pages/QuotePage'
-import QuoteList from './pages/QuoteList'
-import PaymentVoucherPage from './pages/PaymentVoucherPage'
-import ContractorBillReportPage from './pages/ContractorBillReportPage'
-import JournalVoucherListPage from './pages/JournalVoucherListPage'
-import JournalVoucherPage from './pages/JournalVoucherPage'
-import ContraVoucherListPage from './pages/ContraVoucherListPage'
-import ContraVoucherPage from './pages/ContraVoucherPage'
-import WorkorderList from './pages/WorkorderList'
-import StockReportPage from './pages/StockReportPage'
-import EmployeeListPage from './pages/EmployeeListPage'
-import MaterialUsageReportPage from './pages/MaterialUsageReportPage'
-import PurchaseDetailsReportPage from './pages/PurchaseDetailsReportPage'
-import PurchaseOrderReceiveReportPage from './pages/PurchaseOrderReceiveReportPage'
-import AccountsDashboard from './pages/AccountsDashboard'
-import CashBankBookPage from './pages/CashBankBookPage'
-import BankAccountPage from './pages/BankAccountPage'
-import GeneralLedgerPage from './pages/GeneralLedgerPage'
-import CashFlowStatementPage from './pages/CashFlowStatementPage'
-import IncomeStatementPage from './pages/IncomeStatementPage'
-import TrialBalancePage from './pages/TrialBalancePage'
-import BalanceSheetPage from './pages/BalanceSheetPage'
-import WorkorderInvoice from './pages/WorkorderInvoice'
+const Dashboard = lazyPage(() => import('./pages/Dashboard'))
+const ProjectDashboard = lazyPage(() => import('./pages/ProjectDashboard'))
+const InventoryDashboard = lazyPage(() => import('./pages/InventoryDashboard'))
+const Project = lazyPage(() => import('./pages/Project'))
+const AgreementList = lazyPage(() => import('./pages/AgreementList'))
+const AgreementForm = lazyPage(() => import('./pages/AgreementForm'))
+const AgreementView = lazyPage(() => import('./pages/AgreementView'))
+const PartyList = lazyPage(() => import('./pages/PartyList'))
+const Site = lazyPage(() => import('./pages/Site'))
+const Flat = lazyPage(() => import('./pages/Flat'))
+const FlatSaleList = lazyPage(() => import('./pages/FlatSaleList'))
+const FlatSaleForm = lazyPage(() => import('./pages/FlatSaleForm'))
+const InstallmentReport = lazyPage(() => import('./pages/InstallmentReport'))
+const AssignShare = lazyPage(() => import('./pages/AssignShare'))
+const ShareReport = lazyPage(() => import('./pages/ShareReport'))
+const PenaltyReport = lazyPage(() => import('./pages/PenaltyReport'))
+const ProjectShareConfiguration = lazyPage(() => import('./pages/ProjectShareConfiguration'))
+const ProjectSummaryReport = lazyPage(() => import('./pages/ProjectSummaryReport'))
+const ProjectProgressReport = lazyPage(() => import('./pages/ProjectProgressReport'))
+const ProjectWiseIncomeStatement = lazyPage(() => import('./pages/ProjectWiseIncomeStatement'))
+const SiteWiseIncomeStatement = lazyPage(() => import('./pages/SiteWiseIncomeStatement'))
+const AmountUsageReport = lazyPage(() => import('./pages/AmountUsageReport'))
+const ItemPage = lazyPage(() => import('./pages/ItemPage'))
+const PurchasePage = lazyPage(() => import('./pages/PurchasePage'))
+const PurchaseList = lazyPage(() => import('./pages/PurchaseList'))
+const PurchaseOrderPage = lazyPage(() => import('./pages/PurchaseOrderPage'))
+const PurchaseOrderList = lazyPage(() => import('./pages/PurchaseOrderList'))
+const MaterialRequisitionList = lazyPage(() => import('./pages/MaterialRequisitionList'))
+const MaterialRequisitionPage = lazyPage(() => import('./pages/MaterialRequisitionPage'))
+const ServiceRequisitionList = lazyPage(() => import('./pages/ServiceRequisitionList'))
+const ServiceRequisitionPage = lazyPage(() => import('./pages/ServiceRequisitionPage'))
+const MaterialUsagePage = lazyPage(() => import('./pages/MaterialUsagePage'))
+const MaterialUsageList = lazyPage(() => import('./pages/MaterialUsageList'))
+const StockTransferPage = lazyPage(() => import('./pages/StockTransferPage'))
+const StockTransferList = lazyPage(() => import('./pages/StockTransferList'))
+const CommunicationStatusPage = lazyPage(() => import('./pages/CommunicationStatusPage'))
+const LeadCategoryPage = lazyPage(() => import('./pages/LeadCategoryPage'))
+const CampaignPage = lazyPage(() => import('./pages/CampaignPage'))
+const ProfessionPage = lazyPage(() => import('./pages/ProfessionPage'))
+const LeadSourcePage = lazyPage(() => import('./pages/LeadSourcePage'))
+const OfferPage = lazyPage(() => import('./pages/OfferPage'))
+const AreaPage = lazyPage(() => import('./pages/AreaPage'))
+const LeadStagePage = lazyPage(() => import('./pages/LeadStagePage'))
+const LeadPage = lazyPage(() => import('./pages/LeadPage'))
+const FollowUp = lazyPage(() => import('./pages/FollowUp'))
+const ChartOfGroupPage = lazyPage(() => import('./pages/ChartOfGroupPage'))
+const ChartOfGroupHierarchy = lazyPage(() => import('./pages/ChartOfGroupHierarchy'))
+const ChartOfAccountsPage = lazyPage(() => import('./pages/ChartOfAccountsPage'))
+const CustomerAccountsPage = lazyPage(() => import('./pages/CustomerAccountsPage'))
+const SupplierAccountsPage = lazyPage(() => import('./pages/SupplierAccountsPage'))
+const InvestorAccountsPage = lazyPage(() => import('./pages/InvestorAccountsPage'))
+const BillingCategoryPage = lazyPage(() => import('./pages/BillingCategoryPage'))
+const BillItemPage = lazyPage(() => import('./pages/BillItemPage'))
+const ServiceWorkNamePage = lazyPage(() => import('./pages/ServiceWorkNamePage'))
+const BoqTitlePage = lazyPage(() => import('./pages/BoqTitlePage'))
+const AssetListPage = lazyPage(() => import('./pages/AssetListPage'))
+const AssetFormPage = lazyPage(() => import('./pages/AssetFormPage'))
+const FundRequisitionList = lazyPage(() => import('./pages/FundRequisitionList'))
+const BillPage = lazyPage(() => import('./pages/BillPage'))
+const BillList = lazyPage(() => import('./pages/BillList'))
+const ContractorBillPage = lazyPage(() => import('./pages/ContractorBillPage'))
+const ContractorBillList = lazyPage(() => import('./pages/ContractorBillList'))
+const LabourWorkerBillPage = lazyPage(() => import('./pages/LabourWorkerBillPage'))
+const LabourWorkerBillList = lazyPage(() => import('./pages/LabourWorkerBillList'))
+const WorkorderPage = lazyPage(() => import('./pages/WorkorderPage'))
+const ContractorWorkorderPage = lazyPage(() => import('./pages/ContractorWorkorderPage'))
+const ContractorWorkorderList = lazyPage(() => import('./pages/ContractorWorkorderList'))
+const PeriodBillPage = lazyPage(() => import('./pages/PeriodBillPage'))
+const PeriodBillList = lazyPage(() => import('./pages/PeriodBillList'))
+const AdjustmentBillPage = lazyPage(() => import('./pages/AdjustmentBillPage'))
+const AdjustmentBillList = lazyPage(() => import('./pages/AdjustmentBillList'))
+const ExpenseListPage = lazyPage(() => import('./pages/ExpenseListPage'))
+const ExpensePage = lazyPage(() => import('./pages/ExpensePage'))
+const ReceiptVoucherPage = lazyPage(() => import('./pages/ReceiptVoucherPage'))
+const DayBookPage = lazyPage(() => import('./pages/DayBookPage'))
+const PayableReportPage = lazyPage(() => import('./pages/PayableReportPage'))
+const ExpenseReportPage = lazyPage(() => import('./pages/ExpenseReportPage'))
+const ReceivableReportPage = lazyPage(() => import('./pages/ReceivableReportPage'))
+const ReceivePaymentStatementPage = lazyPage(() => import('./pages/ReceivePaymentStatementPage'))
+const BankReconciliationPage = lazyPage(() => import('./pages/BankReconciliationPage'))
+const FundRequisitionReportPage = lazyPage(() => import('./pages/FundRequisitionReportPage'))
+const SaleList = lazyPage(() => import('./pages/SaleList'))
+const SalePage = lazyPage(() => import('./pages/SalePage'))
+const QuotePage = lazyPage(() => import('./pages/QuotePage'))
+const QuoteList = lazyPage(() => import('./pages/QuoteList'))
+const PaymentVoucherPage = lazyPage(() => import('./pages/PaymentVoucherPage'))
+const ContractorBillReportPage = lazyPage(() => import('./pages/ContractorBillReportPage'))
+const JournalVoucherListPage = lazyPage(() => import('./pages/JournalVoucherListPage'))
+const JournalVoucherPage = lazyPage(() => import('./pages/JournalVoucherPage'))
+const ContraVoucherListPage = lazyPage(() => import('./pages/ContraVoucherListPage'))
+const ContraVoucherPage = lazyPage(() => import('./pages/ContraVoucherPage'))
+const WorkorderList = lazyPage(() => import('./pages/WorkorderList'))
+const StockReportPage = lazyPage(() => import('./pages/StockReportPage'))
+const EmployeeListPage = lazyPage(() => import('./pages/EmployeeListPage'))
+const MaterialUsageReportPage = lazyPage(() => import('./pages/MaterialUsageReportPage'))
+const PurchaseDetailsReportPage = lazyPage(() => import('./pages/PurchaseDetailsReportPage'))
+const PurchaseOrderReceiveReportPage = lazyPage(() => import('./pages/PurchaseOrderReceiveReportPage'))
+const AccountsDashboard = lazyPage(() => import('./pages/AccountsDashboard'))
+const CashBankBookPage = lazyPage(() => import('./pages/CashBankBookPage'))
+const BankAccountPage = lazyPage(() => import('./pages/BankAccountPage'))
+const GeneralLedgerPage = lazyPage(() => import('./pages/GeneralLedgerPage'))
+const CashFlowStatementPage = lazyPage(() => import('./pages/CashFlowStatementPage'))
+const IncomeStatementPage = lazyPage(() => import('./pages/IncomeStatementPage'))
+const TrialBalancePage = lazyPage(() => import('./pages/TrialBalancePage'))
+const BalanceSheetPage = lazyPage(() => import('./pages/BalanceSheetPage'))
+const WorkorderInvoice = lazyPage(() => import('./pages/WorkorderInvoice'))
 
 // --- Office budget module ---
-import BudgetCategoryPage from './pages/BudgetCategoryPage'
-import OfficeBudgetPage from './pages/OfficeBudgetPage'
-import OfficeExpensePage from './pages/OfficeExpensePage'
-import OfficeExpenseListPage from './pages/OfficeExpenseListPage'
-import OfficeReportPage from './pages/OfficeReportPage'
+const BudgetCategoryPage = lazyPage(() => import('./pages/BudgetCategoryPage'))
+const OfficeBudgetPage = lazyPage(() => import('./pages/OfficeBudgetPage'))
+const OfficeExpensePage = lazyPage(() => import('./pages/OfficeExpensePage'))
+const OfficeExpenseListPage = lazyPage(() => import('./pages/OfficeExpenseListPage'))
+const OfficeReportPage = lazyPage(() => import('./pages/OfficeReportPage'))
 
 // --- Approval & Accountant Dashboards ---
-import AdminApprovalCenter from './pages/AdminApprovalCenter'
-import AccountantDashboard from './pages/AccountantDashboard'
+const AdminApprovalCenter = lazyPage(() => import('./pages/AdminApprovalCenter'))
+const AccountantDashboard = lazyPage(() => import('./pages/AccountantDashboard'))
 
-import AttendanceLogPage from './pages/AttendanceLogPage'
-import EmployeeTaskOverview from './pages/EmployeeTaskOverview'
-import TaskListPage from './pages/TaskListPage'
-import TaskDetailPage from './pages/TaskDetailPage'
-import WorkLogReportPage from './pages/WorkLogReportPage'
+const AttendanceLogPage = lazyPage(() => import('./pages/AttendanceLogPage'))
+const EmployeeTaskOverview = lazyPage(() => import('./pages/EmployeeTaskOverview'))
+const TaskListPage = lazyPage(() => import('./pages/TaskListPage'))
+const TaskDetailPage = lazyPage(() => import('./pages/TaskDetailPage'))
+const WorkLogReportPage = lazyPage(() => import('./pages/WorkLogReportPage'))
 
 // --- Core Portal ---
 import PortalLogin from './portal/pages/PortalLogin'
-import PortalDashboard from './portal/pages/PortalDashboard'
-import PortalEmployeeDashboard from './portal/pages/PortalEmployeeDashboard'
-import PortalAttendancePage from './portal/pages/PortalAttendancePage'
-import PortalTasksPage from './portal/pages/PortalTasksPage'
-import PortalTaskDetailPage from './portal/pages/PortalTaskDetailPage'
-import PortalWorkLogPage from './portal/pages/PortalWorkLogPage'
-import PortalLeaveRequestPage from './portal/pages/PortalLeaveRequestPage'
-import PortalAdvanceRequestPage from './portal/pages/PortalAdvanceRequestPage'
-import PortalMyRequestsPage from './portal/pages/PortalMyRequestsPage'
-import PortalEmployeeProfilePage from './portal/pages/PortalEmployeeProfilePage'
-import PortalInvoices from './portal/pages/PortalInvoices'
-import PortalQuotesPage from './portal/pages/PortalQuotesPage'
-import PortalOrdersPage from './portal/pages/PortalOrdersPage'
-import PortalRequestsPage from './portal/pages/PortalRequestsPage'
-import PortalPurchaseOrderView from './portal/pages/PortalPurchaseOrderView'
-import PortalEarnings from './portal/pages/PortalEarnings'
-import PortalMaterialRequisitionsPage from './portal/pages/PortalMaterialRequisitionsPage'
-import PortalMaterialRequisitionView from './portal/pages/PortalMaterialRequisitionView'
+const PortalDashboard = lazyPage(() => import('./portal/pages/PortalDashboard'))
+const PortalEmployeeDashboard = lazyPage(() => import('./portal/pages/PortalEmployeeDashboard'))
+const PortalAttendancePage = lazyPage(() => import('./portal/pages/PortalAttendancePage'))
+const PortalTasksPage = lazyPage(() => import('./portal/pages/PortalTasksPage'))
+const PortalTaskDetailPage = lazyPage(() => import('./portal/pages/PortalTaskDetailPage'))
+const PortalWorkLogPage = lazyPage(() => import('./portal/pages/PortalWorkLogPage'))
+const PortalLeaveRequestPage = lazyPage(() => import('./portal/pages/PortalLeaveRequestPage'))
+const PortalAdvanceRequestPage = lazyPage(() => import('./portal/pages/PortalAdvanceRequestPage'))
+const PortalMyRequestsPage = lazyPage(() => import('./portal/pages/PortalMyRequestsPage'))
+const PortalEmployeeProfilePage = lazyPage(() => import('./portal/pages/PortalEmployeeProfilePage'))
+const PortalInvoices = lazyPage(() => import('./portal/pages/PortalInvoices'))
+const PortalQuotesPage = lazyPage(() => import('./portal/pages/PortalQuotesPage'))
+const PortalOrdersPage = lazyPage(() => import('./portal/pages/PortalOrdersPage'))
+const PortalRequestsPage = lazyPage(() => import('./portal/pages/PortalRequestsPage'))
+const PortalPurchaseOrderView = lazyPage(() => import('./portal/pages/PortalPurchaseOrderView'))
+const PortalEarnings = lazyPage(() => import('./portal/pages/PortalEarnings'))
+const PortalMaterialRequisitionsPage = lazyPage(() => import('./portal/pages/PortalMaterialRequisitionsPage'))
+const PortalMaterialRequisitionView = lazyPage(() => import('./portal/pages/PortalMaterialRequisitionView'))
 import PortalProtectedRoute from './portal/components/PortalProtectedRoute'
 
 // --- Investor Portal Experience ---
 import InvestorPortalLayout from './portal/investor/components/InvestorPortalLayout'
 import { InvestorPrivacyProvider } from './portal/investor/context/InvestorPrivacyContext'
-import PortalInvestorDashboard from './portal/pages/PortalInvestorDashboard'
-import PortalInvestorInvestments from './portal/pages/PortalInvestorInvestments'
-import PortalInvestorInvestmentDetail from './portal/pages/PortalInvestorInvestmentDetail'
-import PortalInvestorHistory from './portal/pages/PortalInvestorHistory'
-import PortalInvestorCompare from './portal/pages/PortalInvestorCompare'
-import PortalInvestorPayments from './portal/pages/PortalInvestorPayments'
-import PortalInvestorProfile from './portal/pages/PortalInvestorProfile'
-import PortalInvestorInbox from './portal/pages/PortalInvestorInbox'
+const PortalInvestorDashboard = lazyPage(() => import('./portal/pages/PortalInvestorDashboard'))
+const PortalInvestorInvestments = lazyPage(() => import('./portal/pages/PortalInvestorInvestments'))
+const PortalInvestorInvestmentDetail = lazyPage(() => import('./portal/pages/PortalInvestorInvestmentDetail'))
+const PortalInvestorHistory = lazyPage(() => import('./portal/pages/PortalInvestorHistory'))
+const PortalInvestorCompare = lazyPage(() => import('./portal/pages/PortalInvestorCompare'))
+const PortalInvestorPayments = lazyPage(() => import('./portal/pages/PortalInvestorPayments'))
+const PortalInvestorProfile = lazyPage(() => import('./portal/pages/PortalInvestorProfile'))
+const PortalInvestorInbox = lazyPage(() => import('./portal/pages/PortalInvestorInbox'))
 
-import PaySlipProcess from './pages/PaySlipProcess'
-import PaySlip from './pages/PaySlip'
-import SupportTicketsPage from './pages/SupportTicketsPage';
+const PaySlipProcess = lazyPage(() => import('./pages/PaySlipProcess'))
+const PaySlip = lazyPage(() => import('./pages/PaySlip'))
+const SupportTicketsPage = lazyPage(() => import('./pages/SupportTicketsPage'))
 
 
 // --- Investors (Admin / ERP) ---
-import InvestorDashboardPage from './pages/InvestorDashboardPage'
-import InvestorListPage from './pages/InvestorListPage'
-import InvestorProfilePage from './pages/InvestorProfilePage'
-import InvestmentListPage from './pages/InvestmentListPage'
-import InvestmentDetailPage from './pages/InvestmentDetailPage'
-import InvestorReportsPage from './pages/InvestorReportsPage'
+const InvestorDashboardPage = lazyPage(() => import('./pages/InvestorDashboardPage'))
+const InvestorListPage = lazyPage(() => import('./pages/InvestorListPage'))
+const InvestorProfilePage = lazyPage(() => import('./pages/InvestorProfilePage'))
+const InvestmentListPage = lazyPage(() => import('./pages/InvestmentListPage'))
+const InvestmentDetailPage = lazyPage(() => import('./pages/InvestmentDetailPage'))
+const InvestorReportsPage = lazyPage(() => import('./pages/InvestorReportsPage'))
 
 import TitleManager from './components/TitleManager'
-import UserManagementPage from './pages/UserManagementPage'
+import { PageLoader } from './components/PageLoader'
+import { lazyPage } from './utils/lazyPage'
+const UserManagementPage = lazyPage(() => import('./pages/UserManagementPage'))
 import { canAccessModule, getModuleForPath } from './config/permissions'
 
 import './App.css'
@@ -248,6 +250,7 @@ function App() {
   return (
     <BrowserRouter>
       <TitleManager />
+      <Suspense fallback={<PageLoader />}>
       <Routes>
         {/* ========================================================
             --- PUBLIC & ERP CORE ROUTES ---
@@ -481,6 +484,7 @@ function App() {
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

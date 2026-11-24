@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useInvestorPrivacy } from '../context/InvestorPrivacyContext';
+import { PageLoader } from '../../../components/PageLoader';
 import { getInboxSummary } from '../../api/portalInvestor';
 import '../theme.css';
 
@@ -245,7 +246,9 @@ const InvestorPortalLayout = () => {
 
         {/* Content Container */}
         <main className="flex-1 p-4 md:p-8 max-w-[1120px] w-full mx-auto">
-          <Outlet />
+          <Suspense fallback={<PageLoader />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
 

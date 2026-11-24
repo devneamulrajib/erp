@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiEye, FiEyeOff, FiMail, FiLock, FiArrowRight } from 'react-icons/fi';
 import api from '../api/axios';
@@ -11,8 +11,23 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // The background video is ~24 MB: attach it only after the page has loaded so
+  // it never competes with the login form/JS, and skip it on data-saver.
+  const [videoSrc, setVideoSrc] = useState(null);
 
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (navigator.connection?.saveData) return undefined;
+    let timer;
+    const start = () => { timer = setTimeout(() => setVideoSrc(loginVideo), 300); };
+    if (document.readyState === 'complete') start();
+    else window.addEventListener('load', start, { once: true });
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('load', start);
+    };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -51,14 +66,17 @@ export default function Login() {
     <div className="relative min-h-screen flex items-center justify-center p-4 sm:p-6 overflow-hidden">
 
       {/* Full-page background video */}
+      {videoSrc && (
       <video
         className="absolute inset-0 w-full h-full object-cover -z-10"
-        src={loginVideo}
+        src={videoSrc}
         autoPlay
         loop
         muted
         playsInline
+        preload="none"
       />
+      )}
 
       {/* Main Card */}
       <div className="relative w-full max-w-[1080px] min-h-[650px] bg-[#fafaf6] rounded-[30px] overflow-hidden shadow-[0_30px_90px_rgba(20,50,35,0.16)] grid lg:grid-cols-2">
