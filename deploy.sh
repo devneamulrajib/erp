@@ -9,9 +9,22 @@ echo "=============================="
 echo "Deploy started: $(date)"
 
 # ---------- 1. Frontend (built dist files) ----------
-# Change "frontend/dist" if your local folder name is different
-rsync -a --delete "$REPO/frontend/dist/" "$FRONT/"
-echo "Frontend updated"
+# Copies the committed build output from client/dist (run `npm run build` in
+# client/ and commit client/dist before pushing). Nothing is built on the server.
+# --delete removes old hashed bundles, but these are protected/never copied:
+#   .htaccess (SPA rewrites), .well-known (SSL validation), cgi-bin,
+#   dist.zip (local upload archive - must not be public).
+if [ -f "$REPO/client/dist/index.html" ]; then
+  rsync -a --delete \
+    --exclude '.htaccess' \
+    --exclude '.well-known' \
+    --exclude 'cgi-bin' \
+    --exclude 'dist.zip' \
+    "$REPO/client/dist/" "$FRONT/"
+  echo "Frontend updated"
+else
+  echo "Frontend skipped: $REPO/client/dist/index.html not found"
+fi
 
 # ---------- 2. Backend (protects .env, uploads, node_modules, tmp) ----------
 # Change "server" if your local folder name is different
