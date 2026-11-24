@@ -1,3 +1,6 @@
 # Secrets - never commit these (local copies stay on disk)
 .env
 *.sql
+
+# Dependencies - installed by npm install (deploy.sh runs it on the server)
+node_modules/
