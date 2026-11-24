@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { getSales, deleteSale } from '../api/sale';
+import { pageParams, readPage } from '../utils/serverPage';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import { ChevronDown, PlusCircle } from 'lucide-react';
@@ -17,19 +18,28 @@ export default function SaleList() {
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
+  const [serverTotal, setServerTotal] = useState(null); // null = full list loaded
+
+  // Empty search box: ask the server for one page. Searching: load the full list
+  // and filter it here, as before.
+  const serverMode = !search.trim();
+  const fetchPage = serverMode ? page : 0;
+  const fetchLimit = serverMode ? pageSize : 0;
 
   const loadRows = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await getSales();
-      setRows(Array.isArray(data) ? data : []);
+      const data = await getSales(pageParams(fetchPage > 0, fetchPage, fetchLimit));
+      const result = readPage(data);
+      setRows(result.rows);
+      setServerTotal(result.paged ? result.total : null);
     } catch (e) {
       setError(e.response?.data?.message || e.message || 'Failed to load sales');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchPage, fetchLimit]);
 
   useEffect(() => { loadRows(); }, [loadRows]);
 
@@ -37,7 +47,8 @@ export default function SaleList() {
     if (!window.confirm('Delete this sale?')) return;
     try {
       await deleteSale(row._id);
-      setRows((prev) => prev.filter((r) => r._id !== row._id));
+      if (serverTotal !== null) loadRows();
+      else setRows((prev) => prev.filter((r) => r._id !== row._id));
     } catch (e) {
       alert(e.response?.data?.message || e.message || 'Failed to delete');
     }
@@ -51,8 +62,10 @@ export default function SaleList() {
       .filter(Boolean)
       .some((v) => String(v).toLowerCase().includes(q));
   });
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const isServerPaged = serverTotal !== null;
+  const totalCount = isServerPaged ? serverTotal : filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const paged = isServerPaged ? rows : filtered.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="min-h-screen w-full bg-gray-50 text-left">
@@ -161,12 +174,12 @@ export default function SaleList() {
 
         <div className="flex items-center justify-between mt-3">
           <span className="text-sm text-gray-500">
-            Showing {filtered.length === 0 ? 0 : (page - 1) * pageSize + 1} to {Math.min(page * pageSize, filtered.length)} of {filtered.length} entries
+            Showing {totalCount === 0 ? 0 : (page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} entries
           </span>
           <div className="flex gap-2">
             <button disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="px-3 py-1.5 rounded-md text-sm bg-gray-100 text-gray-500 disabled:opacity-50">Previous</button>
             <span className="px-3 py-1.5 rounded-md text-sm bg-indigo-500 text-white">{page}</span>
-            <button disabled={page === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-3 py-1.5 rounded-md text-sm bg-gray-100 text-gray-500 disabled:opacity-50">Next</button>
+            <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-3 py-1.5 rounded-md text-sm bg-gray-100 text-gray-500 disabled:opacity-50">Next</button>
           </div>
         </div>
       </div>

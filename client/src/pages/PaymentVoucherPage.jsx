@@ -11,6 +11,7 @@ import {
 import { getChartOfAccounts, createChartOfAccount } from '../api/chartOfAccounts';
 import { getChartOfGroupOptions } from '../api/chartOfGroup';
 import { getBankAccounts } from '../api/bankAccount';
+import { pageParams, readPage } from '../utils/serverPage';
 
 export default function PaymentVoucherPage() {
   const [projects, setProjects] = useState([]);
@@ -58,27 +59,43 @@ export default function PaymentVoucherPage() {
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
+  const [serverTotal, setServerTotal] = useState(null); // null = full list loaded
+
+  // Empty search box: ask the server for one page. Searching: load the full list
+  // and filter it here, as before.
+  const serverMode = !search;
+  const fetchPage = serverMode ? page : 0;
+  const fetchLimit = serverMode ? pageSize : 0;
+
+  const voucherFilters = useCallback(() => ({
+    type: 'Payment',
+    from: fromDate || undefined,
+    to: toDate || undefined,
+    account: filterDebit || undefined,
+    project: filterProject || undefined,
+  }), [fromDate, toDate, filterDebit, filterProject]);
 
   const loadVouchers = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await getVouchers({
-        type: 'Payment',
-        from: fromDate || undefined,
-        to: toDate || undefined,
-        account: filterDebit || undefined,
-        project: filterProject || undefined,
+        ...voucherFilters(),
+        ...pageParams(fetchPage > 0, fetchPage, fetchLimit),
       });
-      setVouchers(Array.isArray(data) ? data : []);
+      const result = readPage(data);
+      setVouchers(result.rows);
+      setServerTotal(result.paged ? result.total : null);
     } catch (err) {
       console.error('Failed to load payment vouchers', err);
       setVouchers([]);
+      setServerTotal(null);
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate, filterDebit, filterProject]);
+  }, [voucherFilters, fetchPage, fetchLimit]);
 
   useEffect(() => { loadVouchers(); }, [loadVouchers]);
+  useEffect(() => { setPage(1); }, [fromDate, toDate, filterDebit, filterProject]);
 
   function reloadAccounts() {
     getChartOfAccounts().then((res) => setAccounts(res?.data ?? res ?? [])).catch(() => setAccounts([]));
@@ -221,9 +238,20 @@ export default function PaymentVoucherPage() {
     return projects.find((p) => (p._id ?? p.id) === id)?.name || '';
   }
 
-  function exportExcel() {
+  async function exportExcel() {
     const headers = ['SL', 'Date', 'Project', 'Title/Name of Work', 'Code', 'Debit', 'Credit', 'Total', 'Comment', 'Cheque/Receipt', 'Added By', 'Status'];
-    const rows = filtered.map((v, i) => {
+    // A server page holds only one page of rows - export the whole filtered list.
+    let source = filtered;
+    if (serverTotal !== null) {
+      try {
+        const { data } = await getVouchers(voucherFilters());
+        source = readPage(data).rows;
+      } catch (err) {
+        window.alert(err.response?.data?.message || 'Failed to load vouchers for export');
+        return;
+      }
+    }
+    const rows = source.map((v, i) => {
       const entries = v.entries || [];
       const debitEntry = entries.find((e) => Number(e.debit) > 0);
       const creditEntry = entries.find((e) => Number(e.credit) > 0);
@@ -248,8 +276,10 @@ export default function PaymentVoucherPage() {
     return (v.voucherNo || '').toLowerCase().includes(q);
   });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const isServerPaged = serverTotal !== null;
+  const totalCount = isServerPaged ? serverTotal : filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const pageRows = isServerPaged ? filtered : filtered.slice((page - 1) * pageSize, page * pageSize);
   const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
 
   return (
@@ -486,12 +516,12 @@ export default function PaymentVoucherPage() {
         <div className="flex items-center justify-between mt-3 text-sm text-gray-500">
           <div>
             Showing {pageRows.length === 0 ? 0 : (page - 1) * pageSize + 1} to{' '}
-            {(page - 1) * pageSize + pageRows.length} of {filtered.length} entries
+            {(page - 1) * pageSize + pageRows.length} of {totalCount} entries
           </div>
           <div className="flex gap-1">
             <button disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-40">Previous</button>
             <span className="px-3 py-1.5 rounded-md bg-indigo-500 text-white">{page}</span>
-            <button disabled={page === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-40">Next</button>
+            <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-3 py-1.5 rounded-md border border-gray-300 disabled:opacity-40">Next</button>
           </div>
         </div>
       </div>
