@@ -3,6 +3,7 @@ const auth = require('../middleware/auth');
 const sequelize = require('../config/db');
 const { Op } = require('sequelize');
 const notifyAdmin = require('../utils/notify');
+const { listOrPage } = require('../utils/paginate');
 const {
   PurchaseOrder, PurchaseOrderItem, PurchaseOrderBoqItem, PurchaseOrderApproval,
   ChartOfAccount, Project, Site, Bill, BillPayment,
@@ -64,11 +65,11 @@ router.get('/', auth, async (req, res) => {
       if (to) where.date[Op.lte] = to;
     }
 
-    const orders = await PurchaseOrder.findAll({
+    const orders = await listOrPage(PurchaseOrder, {
       where,
       include: includes,
       order: [['createdAt', 'DESC']],
-    });
+    }, req.query);
 
     res.json(orders);
   } catch (err) {

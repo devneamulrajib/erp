@@ -7,6 +7,7 @@ const { Op } = require('sequelize');
 
 const sequelize = require('../config/db');
 const auth = require('../middleware/auth');
+const { listOrPage } = require('../utils/paginate');
 const { requireAdmin } = require('../middleware/permissions');
 const {
   OfficeExpense,
@@ -342,11 +343,11 @@ router.get('/', auth, async (req, res) => {
       }
     }
 
-    const rows = await OfficeExpense.findAll({
+    const rows = await listOrPage(OfficeExpense, {
       where,
       include: listInclude,
       order: [['date', 'DESC'], ['id', 'DESC']],
-    });
+    }, req.query);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ message: err.message });

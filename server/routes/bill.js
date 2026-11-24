@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
+const { listOrPage } = require('../utils/paginate');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -131,7 +132,7 @@ router.get('/', auth, async (req, res) => {
       if (to) where.date[Op.lte] = to;
     }
 
-    const bills = await Bill.findAll({
+    const bills = await listOrPage(Bill, {
       where,
       include: [
         { model: ChartOfAccount, attributes: ['name'] },
@@ -139,7 +140,7 @@ router.get('/', auth, async (req, res) => {
         { model: BillLineItem }, { model: BillPayment }, { model: BillApproval },
       ],
       order: [['createdAt', 'DESC']],
-    });
+    }, req.query);
 
     res.json(bills);
   } catch (err) {

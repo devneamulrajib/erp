@@ -5,6 +5,7 @@ const fs = require('fs');
 const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
 const { Voucher, VoucherEntry, VoucherApproval } = require('../models/associations');
+const { listOrPage } = require('../utils/paginate');
 
 const uploadDir = path.join(__dirname, '..', 'uploads', 'vouchers');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -101,11 +102,11 @@ router.get('/', auth, async (req, res) => {
       { model: VoucherApproval },
     ];
 
-    const items = await Voucher.findAll({
+    const items = await listOrPage(Voucher, {
       where,
       include,
       order: [['date', 'DESC'], ['createdAt', 'DESC']],
-    });
+    }, req.query);
     res.json(items);
   } catch (err) {
     console.error('GET /api/vouchers failed:', err);

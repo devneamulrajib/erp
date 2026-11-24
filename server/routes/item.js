@@ -2,6 +2,7 @@ const router = require('express').Router();
 const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
 const { Item, Category, Brand } = require('../models/associations');
+const { listOrPage } = require('../utils/paginate');
 const Asset = require('../models/Asset');
 const PurchaseItem = require('../models/PurchaseItem');
 const PurchaseOrderItem = require('../models/PurchaseOrderItem');
@@ -32,14 +33,14 @@ router.get('/', auth, async (req, res) => {
     if (brand) where.brandId = brand;
     if (search) where.name = { [Op.like]: `%${search}%` };
 
-    const items = await Item.findAll({
+    const items = await listOrPage(Item, {
       where,
       include: [
         { model: Category, attributes: ['name'] },
         { model: Brand, attributes: ['name'] },
       ],
       order: [['createdAt', 'DESC']],
-    });
+    }, req.query);
 
     res.json(items);
   } catch (err) {

@@ -5,14 +5,24 @@ const { MAX_TIMER_MS, todayStr } = require('./taskTime');
 
 async function sweep() {
   const running = await TaskTimeLog.findAll({ where: { endedAt: null } });
+  if (!running.length) return;
   const today = todayStr();
+  // One query for today's check-outs of everyone with a running timer
+  // (instead of one query per timer). First row per employee, as findOne did.
+  const employeeIds = [...new Set(running.map((l) => l.employeeId))];
+  const checkOuts = await Attendance.findAll({
+    where: { employeeId: employeeIds, date: today, checkOutAt: { [Op.ne]: null } },
+    order: [['id', 'ASC']],
+  });
+  const outByEmployee = new Map();
+  for (const a of checkOuts) {
+    if (!outByEmployee.has(a.employeeId)) outByEmployee.set(a.employeeId, a);
+  }
   for (const log of running) {
     const started = new Date(log.startedAt).getTime();
     const overCap = Date.now() - started > MAX_TIMER_MS;
     let checkedOut = false;
-    const out = await Attendance.findOne({
-      where: { employeeId: log.employeeId, date: today, checkOutAt: { [Op.ne]: null } },
-    });
+    const out = outByEmployee.get(log.employeeId) || null;
     if (out && new Date(out.checkOutAt).getTime() >= started) checkedOut = true;
     if (overCap || checkedOut) {
       const end = checkedOut ? new Date(out.checkOutAt) : new Date(started + MAX_TIMER_MS);

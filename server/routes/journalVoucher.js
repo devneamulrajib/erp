@@ -5,6 +5,7 @@ const fs = require('fs');
 const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
 const { JournalVoucher, JournalVoucherLine, JournalVoucherApproval } = require('../models/associations');
+const { listOrPage } = require('../utils/paginate');
 
 const uploadDir = path.join(__dirname, '..', 'uploads', 'journal-vouchers');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -67,7 +68,7 @@ router.get('/', auth, async (req, res) => {
       ? [{ model: JournalVoucherLine, where: { [Op.or]: lineWhere } }]
       : [{ model: JournalVoucherLine }];
 
-    const vouchers = await JournalVoucher.findAll({ where, include, order: [['createdAt', 'DESC']] });
+    const vouchers = await listOrPage(JournalVoucher, { where, include, order: [['createdAt', 'DESC']] }, req.query);
     res.json(vouchers);
   } catch (err) {
     res.status(500).json({ message: err.message });

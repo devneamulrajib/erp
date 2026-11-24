@@ -176,14 +176,32 @@ router.get('/cash-bank-books', auth, async (req, res) => {
 
     const books = [];
 
-    for (const b of banks) {
-      const voucherWhere = { bankId: b.id };
-      if (voucherType) voucherWhere.type = voucherType;
+    // Two queries for all banks (instead of two per bank), grouped by bankId.
+    // Same filters and ordering as the old per-bank queries.
+    const bankIds = banks.map((b) => b.id);
+    const baseWhere = { bankId: bankIds };
+    if (voucherType) baseWhere.type = voucherType;
+    const groupByBank = (list) => {
+      const map = new Map();
+      for (const v of list) {
+        const key = String(v.bankId);
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(v);
+      }
+      return map;
+    };
+    const openingByBank = groupByBank(bankIds.length ? await Voucher.findAll({
+      where: { ...baseWhere, date: { [Op.lt]: start } },
+      include: [{ model: VoucherEntry, as: 'entries' }],
+    }) : []);
+    const periodByBank = groupByBank(bankIds.length ? await Voucher.findAll({
+      where: { ...baseWhere, date: { [Op.gte]: start, [Op.lte]: end } },
+      include: voucherIncludes,
+      order: [['date', 'ASC'], ['createdAt', 'ASC']],
+    }) : []);
 
-      const openingVouchers = await Voucher.findAll({
-        where: { ...voucherWhere, date: { [Op.lt]: start } },
-        include: [{ model: VoucherEntry, as: 'entries' }],
-      });
+    for (const b of banks) {
+      const openingVouchers = openingByBank.get(String(b.id)) || [];
       let openingBalance = Number(b.balance) || 0;
       openingVouchers.forEach((v) => {
         movements(v).forEach((m) => {
@@ -191,11 +209,7 @@ router.get('/cash-bank-books', auth, async (req, res) => {
         });
       });
 
-      const periodVouchers = await Voucher.findAll({
-        where: { ...voucherWhere, date: { [Op.gte]: start, [Op.lte]: end } },
-        include: voucherIncludes,
-        order: [['date', 'ASC'], ['createdAt', 'ASC']],
-      });
+      const periodVouchers = periodByBank.get(String(b.id)) || [];
 
       const rows = [];
       let running = openingBalance;

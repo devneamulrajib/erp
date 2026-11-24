@@ -2,6 +2,7 @@ const router = require('express').Router();
 const auth = require('../middleware/auth');
 const { Op } = require('sequelize');
 const { Sale, SaleItem, SalePayment, SaleApproval, Customer, Project } = require('../models/associations');
+const { listOrPage } = require('../utils/paginate');
 
 async function generateSaleCode() {
   for (let i = 0; i < 5; i += 1) {
@@ -35,11 +36,11 @@ router.get('/', auth, async (req, res) => {
       if (to) where.date[Op.lte] = to;
     }
 
-    const items = await Sale.findAll({
+    const items = await listOrPage(Sale, {
       where,
       include: includeAll,
       order: [['createdAt', 'DESC']],
-    });
+    }, req.query);
     res.json(items);
   } catch (err) {
     console.error('GET /api/sales failed:', err);

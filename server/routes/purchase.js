@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
 const { Purchase, PurchaseItem, PurchasePayment, PurchaseApproval } = require('../models/associations');
+const { listOrPage } = require('../utils/paginate');
 
 function generateCode() {
   return 'PUR' + Math.floor(1000000 + Math.random() * 9000000);
@@ -107,11 +108,11 @@ router.get('/', auth, async (req, res) => {
       if (to) where.date[require('sequelize').Op.lte] = to;
     }
 
-    const purchases = await Purchase.findAll({
+    const purchases = await listOrPage(Purchase, {
       where,
       include: includeAll,
       order: [['createdAt', 'DESC']],
-    });
+    }, req.query);
     res.json(purchases);
   } catch (err) {
     res.status(500).json({ message: err.message });
