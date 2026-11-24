@@ -24,9 +24,6 @@ import ProjectProgressReport from './pages/ProjectProgressReport'
 import ProjectWiseIncomeStatement from './pages/ProjectWiseIncomeStatement'
 import SiteWiseIncomeStatement from './pages/SiteWiseIncomeStatement'
 import AmountUsageReport from './pages/AmountUsageReport'
-import CategoryPage from './pages/CategoryPage'
-import BrandPage from './pages/BrandPage'
-import UnitPage from './pages/UnitPage'
 import ItemPage from './pages/ItemPage'
 import PurchasePage from './pages/PurchasePage'
 import PurchaseList from './pages/PurchaseList'
@@ -280,9 +277,10 @@ function App() {
         <Route path="/project-module/reports/project-wise-income" element={<ProtectedRoute><ProjectWiseIncomeStatement /></ProtectedRoute>} />
         <Route path="/project-module/reports/site-wise-income" element={<ProtectedRoute><SiteWiseIncomeStatement /></ProtectedRoute>} />
         <Route path="/project-module/reports/amount-usage" element={<ProtectedRoute><AmountUsageReport /></ProtectedRoute>} />
-        <Route path="/inventory-module/products/category" element={<ProtectedRoute><CategoryPage /></ProtectedRoute>} />
-        <Route path="/inventory-module/products/brand" element={<ProtectedRoute><BrandPage /></ProtectedRoute>} />
-        <Route path="/inventory-module/products/unit" element={<ProtectedRoute><UnitPage /></ProtectedRoute>} />
+        {/* Category, Brand and Unit are now managed from Item Entry; old links/bookmarks land there */}
+        <Route path="/inventory-module/products/category" element={<Navigate to="/inventory-module/products/item-entry" replace />} />
+        <Route path="/inventory-module/products/brand" element={<Navigate to="/inventory-module/products/item-entry" replace />} />
+        <Route path="/inventory-module/products/unit" element={<Navigate to="/inventory-module/products/item-entry" replace />} />
         <Route path="/inventory-module/products/item-entry" element={<ProtectedRoute><ItemPage /></ProtectedRoute>} />
         <Route path="/inventory-module/purchase" element={<ProtectedRoute><PurchasePage /></ProtectedRoute>} />
         <Route path="/inventory-module/purchase/:id" element={<ProtectedRoute><PurchasePage /></ProtectedRoute>} />

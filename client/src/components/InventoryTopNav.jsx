@@ -25,12 +25,7 @@ const NAV_ITEMS = [
     key: 'products',
     label: 'Products',
     icon: ShoppingBasket,
-    children: [
-      { key: 'category', label: 'Category', route: '/inventory-module/products/category' },
-      { key: 'brand', label: 'Brand', route: '/inventory-module/products/brand' },
-      { key: 'unit', label: 'Unit', route: '/inventory-module/products/unit' },
-      { key: 'item-entry', label: 'Item Entry', route: '/inventory-module/products/item-entry' },
-    ],
+    route: '/inventory-module/products/item-entry',
   },
   {
     key: 'purchase',

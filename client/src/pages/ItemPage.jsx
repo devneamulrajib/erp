@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Pencil, Trash2, Plus, Package, FileText, FileSpreadsheet,
-  Search, ChevronLeft, ChevronRight, Boxes, Wallet, Tag, List,
+  Search, ChevronLeft, ChevronRight, Boxes, Wallet, Tag, List, Settings2,
 } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
+import ItemMastersModal from '../components/ItemMastersModal';
 import { getItems, createItem, updateItem, deleteItem } from '../api/item';
 import { getCategories, createCategory } from '../api/category';
 import { getBrands, createBrand } from '../api/brand';
@@ -63,6 +64,9 @@ export default function ItemPage() {
 
   const [newMode, setNewMode] = useState(EMPTY_NEW_MODE);
   const [newEntry, setNewEntry] = useState(EMPTY_NEW_ENTRY);
+  // Category / Unit / Brand management (replaces the old separate pages)
+  const [mastersOpen, setMastersOpen] = useState(false);
+  const [mastersTab, setMastersTab] = useState('category');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -251,6 +255,14 @@ export default function ItemPage() {
             >
               <Plus size={16} strokeWidth={2.5} />
               Add Item
+            </button>
+            <button
+              onClick={() => { setMastersTab('category'); setMastersOpen(true); }}
+              className="inline-flex items-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
+              title="Add, edit or delete categories, units and brands"
+            >
+              <Settings2 size={15} />
+              Categories, Units &amp; Brands
             </button>
             <button
               onClick={() => window.print()}
@@ -618,6 +630,13 @@ export default function ItemPage() {
           </div>
         </form>
       </Modal>
+
+      <ItemMastersModal
+        open={mastersOpen}
+        initialTab={mastersTab}
+        onClose={() => setMastersOpen(false)}
+        onChanged={load}
+      />
     </div>
   );
 }

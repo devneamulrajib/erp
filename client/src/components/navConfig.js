@@ -154,17 +154,7 @@ const PROJECT_SUBPAGES = [
 ];
 
 const INVENTORY_SUBPAGES = [
-  {
-    key: 'products',
-    label: 'Products',
-    route: null,
-    children: [
-      { key: 'category', label: 'Category', route: '/inventory-module/products/category' },
-      { key: 'brand', label: 'Brand', route: '/inventory-module/products/brand' },
-      { key: 'unit', label: 'Unit', route: '/inventory-module/products/unit' },
-      { key: 'item-entry', label: 'Item Entry', route: '/inventory-module/products/item-entry' },
-    ],
-  },
+  { key: 'products', label: 'Products', route: '/inventory-module/products/item-entry' },
   { key: 'add-purchase', label: 'Add Purchase', route: '/inventory-module/purchase/add' },
   { key: 'purchase-list', label: 'Purchase List', route: '/inventory-module/purchase-list' },
   { key: 'purchase-order-list', label: 'Purchase Order List', route: '/procurement-module/purchase-order-list' },
