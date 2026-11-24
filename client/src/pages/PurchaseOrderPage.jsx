@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
-import { getCustomers } from '../api/customer';
+import { getContacts } from '../api/contactAccounts';
 import { getCategories } from '../api/category';
 import { getItems } from '../api/item';
 import {
@@ -90,7 +90,9 @@ export default function PurchaseOrderPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    getCustomers()
+    // Suppliers are Supplier contacts in Chart of Accounts (purchases.supplierId
+    // belongs to ChartOfAccount), not rows from the Customers table.
+    getContacts('Supplier')
       .then((res) => setSuppliers(asArray(res)))
       .catch(() => setSuppliers([]));
     api.get('/projects')

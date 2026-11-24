@@ -44,7 +44,10 @@ export default function PurchaseList() {
   useEffect(() => { loadRows(); }, [loadRows]);
 
   useEffect(() => {
-    api.get('/customers').then((res) => setSuppliers(res.data)).catch(() => {});
+    // Suppliers are Supplier contacts in Chart of Accounts (purchases.supplierId
+    // belongs to ChartOfAccount), not rows from the Customers table.
+    api.get('/chart-of-accounts', { params: { contactType: 'Supplier' } })
+      .then((res) => setSuppliers(Array.isArray(res.data) ? res.data : [])).catch(() => {});
     api.get('/projects').then((res) => setProjects(res.data)).catch(() => {});
   }, []);
 
