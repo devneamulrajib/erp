@@ -8,11 +8,12 @@ export function pageParams(enabled, page, limit) {
   return enabled ? { page, limit } : {};
 }
 
-// Normalise either response shape to { rows, total, paged }.
+// Normalise either response shape to { rows, total, paged, totals }.
+// `totals` = the server's aggregates over the whole filtered set (summary cards).
 export function readPage(data) {
-  if (Array.isArray(data)) return { rows: data, total: data.length, paged: false };
+  if (Array.isArray(data)) return { rows: data, total: data.length, paged: false, totals: null };
   if (data && Array.isArray(data.rows)) {
-    return { rows: data.rows, total: Number(data.total) || 0, paged: true };
+    return { rows: data.rows, total: Number(data.total) || 0, paged: true, totals: data.totals || null };
   }
-  return { rows: [], total: 0, paged: false };
+  return { rows: [], total: 0, paged: false, totals: null };
 }

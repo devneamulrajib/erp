@@ -8,6 +8,7 @@ import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
 import ItemMastersModal from '../components/ItemMastersModal';
 import { getItems, createItem, updateItem, deleteItem } from '../api/item';
+import { pageParams, readPage } from '../utils/serverPage';
 import { getCategories, createCategory } from '../api/category';
 import { getBrands, createBrand } from '../api/brand';
 import { getUnits, createUnit } from '../api/unit';
@@ -68,37 +69,60 @@ export default function ItemPage() {
   const [mastersOpen, setMastersOpen] = useState(false);
   const [mastersTab, setMastersTab] = useState('category');
 
-  const load = useCallback(async () => {
+  // Set when the server sent one page: { total, totals } (totals = whole catalog).
+  const [serverPage, setServerPage] = useState(null);
+  // Empty search box: ask the server for one page. Searching: load the full list
+  // and filter it here, as before.
+  const serverMode = !search;
+  const fetchPage = serverMode ? page : 0;
+  const fetchLimit = serverMode ? pageSize : 0;
+
+  // getItems/getCategories/getBrands/getUnits already resolve to the
+  // unwrapped data (see api/item.js, api/category.js, etc. — each one
+  // does `return res.data` internally), so no extra `.data` here.
+  const loadItems = useCallback(async () => {
     setLoading(true);
     try {
-      // getItems/getCategories/getBrands/getUnits already resolve to the
-      // unwrapped data (see api/item.js, api/category.js, etc. — each one
-      // does `return res.data` internally), so no extra `.data` here.
-      const [itemsData, categoriesData, brandsData, unitsData] = await Promise.all([
-        getItems(), getCategories(), getBrands(), getUnits(),
-      ]);
-      setItems(itemsData);
-      setCategories(categoriesData);
-      setBrands(brandsData);
-      setUnits(unitsData);
+      const result = readPage(await getItems(pageParams(fetchPage > 0, fetchPage, fetchLimit)));
+      setItems(result.rows);
+      setServerPage(result.paged ? { total: result.total, totals: result.totals || {} } : null);
     } catch (err) {
       console.error('Failed to load item data', err);
     } finally {
       setLoading(false);
     }
+  }, [fetchPage, fetchLimit]);
+
+  const loadMasters = useCallback(async () => {
+    try {
+      const [categoriesData, brandsData, unitsData] = await Promise.all([
+        getCategories(), getBrands(), getUnits(),
+      ]);
+      setCategories(categoriesData);
+      setBrands(brandsData);
+      setUnits(unitsData);
+    } catch (err) {
+      console.error('Failed to load item data', err);
+    }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  const load = useCallback(() => Promise.all([loadItems(), loadMasters()]), [loadItems, loadMasters]);
+
+  useEffect(() => { loadItems(); }, [loadItems]);
+  useEffect(() => { loadMasters(); }, [loadMasters]);
 
   const filtered = useMemo(() => items.filter((it) => {
     if (search && !it.name?.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   }), [items, search]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const totalCount = serverPage ? serverPage.total : filtered.length;
+  const totalItems = serverPage ? serverPage.total : items.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const pageRows = serverPage ? filtered : filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const avgMargin = useMemo(() => {
+    if (serverPage) return Number(serverPage.totals.avgMargin) || 0;
     const withPrices = items.filter((it) => Number(it.salePrice) > 0);
     if (!withPrices.length) return 0;
     const total = withPrices.reduce((sum, it) => {
@@ -107,7 +131,7 @@ export default function ItemPage() {
       return sum + ((sale - purchase) / sale) * 100;
     }, 0);
     return total / withPrices.length;
-  }, [items]);
+  }, [items, serverPage]);
 
   useEffect(() => {
     setPage(1);
@@ -288,12 +312,12 @@ export default function ItemPage() {
 
         {/* Summary strip */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          <SummaryCard label="Total Items" value={items.length} accent="bg-indigo-500" />
+          <SummaryCard label="Total Items" value={totalItems} accent="bg-indigo-500" />
           <SummaryCard label="Categories" value={categories.length} accent="bg-violet-500" />
           <SummaryCard label="Brands" value={brands.length} accent="bg-sky-500" />
           <SummaryCard
             label="Avg. Margin"
-            value={items.length ? `${avgMargin.toFixed(1)}%` : '—'}
+            value={totalItems ? `${avgMargin.toFixed(1)}%` : '—'}
             accent="bg-emerald-500"
           />
         </div>
@@ -433,9 +457,9 @@ export default function ItemPage() {
           {/* Pagination */}
           <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100">
             <span className="text-sm text-slate-500">
-              Showing <span className="font-medium text-slate-700">{filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}</span> to{' '}
-              <span className="font-medium text-slate-700">{Math.min(page * pageSize, filtered.length)}</span> of{' '}
-              <span className="font-medium text-slate-700">{filtered.length}</span> entries
+              Showing <span className="font-medium text-slate-700">{totalCount === 0 ? 0 : (page - 1) * pageSize + 1}</span> to{' '}
+              <span className="font-medium text-slate-700">{Math.min(page * pageSize, totalCount)}</span> of{' '}
+              <span className="font-medium text-slate-700">{totalCount}</span> entries
             </span>
             <div className="flex gap-1.5">
               <button
@@ -457,7 +481,7 @@ export default function ItemPage() {
                 </button>
               ))}
               <button
-                disabled={page === totalPages}
+                disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 className="w-9 h-9 flex items-center justify-center rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors"
               >

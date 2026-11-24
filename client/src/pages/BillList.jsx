@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getBills, deleteBill, updateBillStatus, downloadBillPdf, sendBillEmail, getBillAttachmentUrl } from '../api/bill';
 import Topbar from '../components/Topbar';
+import { pageParams, readPage } from '../utils/serverPage';
 import Breadcrumb from '../components/Breadcrumb';
 import { ChevronDown, PlusCircle, FileSpreadsheet, FileText, LayoutGrid, Eye, Pencil, Trash2, Download, Mail, X, Loader2 } from 'lucide-react';
 
@@ -32,26 +33,37 @@ export default function BillList() {
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
+  // Set when the server sent one page: { total, totals } (totals = whole filtered set).
+  const [serverPage, setServerPage] = useState(null);
+
+  // Empty search box: ask the server for one page. Searching: load the full list
+  // and filter it here, as before.
+  const serverMode = !search.trim();
+  const fetchPage = serverMode ? page : 0;
+  const fetchLimit = serverMode ? pageSize : 0;
 
   const loadRows = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const data = await getBills({ from, to });
-      setRows(Array.isArray(data) ? data : []);
+      const data = await getBills({ from, to, ...pageParams(fetchPage > 0, fetchPage, fetchLimit) });
+      const result = readPage(data);
+      setRows(result.rows);
+      setServerPage(result.paged ? { total: result.total, totals: result.totals || {} } : null);
     } catch (e) {
       setError(e.response?.data?.message || e.message || 'Failed to load bills');
     } finally { setLoading(false); }
-  }, [from, to]);
+  }, [from, to, fetchPage, fetchLimit]);
 
   useEffect(() => { loadRows(); }, [loadRows]);
-  useEffect(() => { setPage(1); }, [search, pageSize]);
+  useEffect(() => { setPage(1); }, [search, pageSize, from, to]);
 
   async function handleDelete(row) {
     if (!window.confirm('Delete this bill?')) return;
     const rowId = getId(row);
     try {
       await deleteBill(rowId);
-      setRows((prev) => prev.filter((r) => getId(r) !== rowId));
+      if (serverPage) loadRows();
+      else setRows((prev) => prev.filter((r) => getId(r) !== rowId));
     } catch (e) {
       alert(e.response?.data?.message || e.message || 'Failed to delete');
     }
@@ -81,9 +93,19 @@ export default function BillList() {
     }
   }
 
-  function exportCsv() {
+  async function exportCsv() {
     const header = ['ID', 'Customer', 'Code', 'Date', 'Grand Total', 'Paid', 'Due', 'Status'];
-    const lines = filtered.map((r, i) => [
+    // A server page holds only one page of rows - export the whole filtered list.
+    let source = filtered;
+    if (serverPage) {
+      try {
+        source = readPage(await getBills({ from, to })).rows;
+      } catch (e) {
+        alert(e.response?.data?.message || e.message || 'Failed to load bills for export');
+        return;
+      }
+    }
+    const lines = source.map((r, i) => [
       i + 1,
       r.Customer?.name || r.customer?.name || '',
       r.code || '', r.date || '',
@@ -104,8 +126,10 @@ export default function BillList() {
     return [r.code, r.refWoNo, name].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
   });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const totalCount = serverPage ? serverPage.total : filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const paged = serverPage ? filtered : filtered.slice((page - 1) * pageSize, page * pageSize);
+  const sumOf = (key) => (serverPage ? num(serverPage.totals[key]) : filtered.reduce((s, r) => s + num(r[key]), 0));
 
   return (
     <div className="min-h-screen w-full bg-slate-50 text-left">
@@ -156,10 +180,10 @@ export default function BillList() {
         {/* Summary */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {[
-            { label: 'Total Bills', value: rows.length, color: 'text-slate-900' },
-            { label: 'Grand Total', value: filtered.reduce((s, r) => s + num(r.grandTotal), 0).toLocaleString(), color: 'text-slate-900' },
-            { label: 'Total Paid', value: filtered.reduce((s, r) => s + num(r.paid), 0).toLocaleString(), color: 'text-emerald-600' },
-            { label: 'Total Due', value: filtered.reduce((s, r) => s + num(r.due), 0).toLocaleString(), color: 'text-red-500' },
+            { label: 'Total Bills', value: serverPage ? serverPage.total : rows.length, color: 'text-slate-900' },
+            { label: 'Grand Total', value: sumOf('grandTotal').toLocaleString(), color: 'text-slate-900' },
+            { label: 'Total Paid', value: sumOf('paid').toLocaleString(), color: 'text-emerald-600' },
+            { label: 'Total Due', value: sumOf('due').toLocaleString(), color: 'text-red-500' },
           ].map((s) => (
             <div key={s.label} className="bg-white rounded-xl border border-slate-200 px-4 py-3">
               <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">{s.label}</div>
@@ -297,9 +321,9 @@ export default function BillList() {
           {/* Pagination */}
           <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100">
             <span className="text-sm text-slate-500">
-              Showing <span className="font-medium text-slate-700">{filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}</span> to{' '}
-              <span className="font-medium text-slate-700">{Math.min(page * pageSize, filtered.length)}</span> of{' '}
-              <span className="font-medium text-slate-700">{filtered.length}</span> entries
+              Showing <span className="font-medium text-slate-700">{totalCount === 0 ? 0 : (page - 1) * pageSize + 1}</span> to{' '}
+              <span className="font-medium text-slate-700">{Math.min(page * pageSize, totalCount)}</span> of{' '}
+              <span className="font-medium text-slate-700">{totalCount}</span> entries
             </span>
             <div className="flex gap-1.5">
               <button disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -312,7 +336,7 @@ export default function BillList() {
                   {n}
                 </button>
               ))}
-              <button disabled={page === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 transition-colors">
                 Next
               </button>

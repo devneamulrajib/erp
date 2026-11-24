@@ -7,6 +7,7 @@ import {
   createBillFromPurchaseOrder, confirmDelivery,
 } from '../api/purchaseOrder';
 import Topbar from '../components/Topbar';
+import { pageParams, readPage } from '../utils/serverPage';
 import Breadcrumb from '../components/Breadcrumb';
 import {
   PlusCircle, SlidersHorizontal, ChevronDown, X, ListFilter, ClipboardList, Search,
@@ -574,18 +575,31 @@ export default function PurchaseOrderList() {
     setFrom(''); setTo(''); setFilterSupplier(''); setFilterProject('');
   }
 
+  // Set when the server sent one page: { total, totals } (totals = whole filtered set).
+  const [serverPage, setServerPage] = useState(null);
+  // Empty search box: ask the server for one page. Searching: load the full list
+  // and filter it here, as before.
+  const serverMode = !search.trim();
+  const fetchPage = serverMode ? page : 0;
+  const fetchLimit = serverMode ? pageSize : 0;
+
   const loadRows = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await getPurchaseOrders({ from, to, supplier: filterSupplier, project: filterProject });
-      setRows(Array.isArray(data) ? data : []);
+      const data = await getPurchaseOrders({
+        from, to, supplier: filterSupplier, project: filterProject,
+        ...pageParams(fetchPage > 0, fetchPage, fetchLimit),
+      });
+      const result = readPage(data);
+      setRows(result.rows);
+      setServerPage(result.paged ? { total: result.total, totals: result.totals || {} } : null);
     } catch (e) {
       setError(e.response?.data?.message || e.message || 'Failed to load purchase orders');
     } finally {
       setLoading(false);
     }
-  }, [from, to, filterSupplier, filterProject]);
+  }, [from, to, filterSupplier, filterProject, fetchPage, fetchLimit]);
 
   useEffect(() => { loadRows(); }, [loadRows]);
 
@@ -597,7 +611,7 @@ export default function PurchaseOrderList() {
     api.get('/projects').then((res) => setProjects(asArray(res))).catch(() => {});
   }, []);
 
-  useEffect(() => { setPage(1); }, [search, pageSize]);
+  useEffect(() => { setPage(1); }, [search, pageSize, from, to, filterSupplier, filterProject]);
 
   // Auto-open the read-only overview when arriving via a notification link like
   // /procurement-module/purchase-order-list?viewId=42
@@ -625,7 +639,8 @@ export default function PurchaseOrderList() {
     if (!window.confirm('Delete this purchase order?')) return;
     try {
       await deletePurchaseOrder(row.id);
-      setRows((prev) => prev.filter((r) => r.id !== row.id));
+      if (serverPage) loadRows();
+      else setRows((prev) => prev.filter((r) => r.id !== row.id));
     } catch (e) {
       alert(e.response?.data?.message || e.message || 'Failed to delete');
     }
@@ -673,13 +688,17 @@ export default function PurchaseOrderList() {
       .filter(Boolean)
       .some((v) => String(v).toLowerCase().includes(q));
   });
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const totalCount = serverPage ? serverPage.total : filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const paged = serverPage ? filtered : filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const pendingConfirmCount = rows.filter((r) => r.deliveryStatus === 'Delivered' && !r.deliveryConfirmedAt).length;
-  const unpaidCount = rows.filter((r) => paymentState(r.bill, r.paymentStatus || 'Unpaid') !== 'Paid').length;
-  const totalSpent = rows.reduce((sum, r) => sum + num(r.bill?.paid), 0);
-  const totalDue = rows.reduce((sum, r) => sum + (r.bill ? billDue(r.bill) : 0), 0);
+  // With a server page the cards use the server's totals over every matching order.
+  const st = serverPage ? serverPage.totals : null;
+  const totalOrders = serverPage ? serverPage.total : rows.length;
+  const pendingConfirmCount = st ? num(st.pendingConfirm) : rows.filter((r) => r.deliveryStatus === 'Delivered' && !r.deliveryConfirmedAt).length;
+  const unpaidCount = st ? num(st.notFullyPaid) : rows.filter((r) => paymentState(r.bill, r.paymentStatus || 'Unpaid') !== 'Paid').length;
+  const totalSpent = st ? num(st.spent) : rows.reduce((sum, r) => sum + num(r.bill?.paid), 0);
+  const totalDue = st ? num(st.due) : rows.reduce((sum, r) => sum + (r.bill ? billDue(r.bill) : 0), 0);
 
   return (
     <div className="min-h-screen w-full bg-slate-50 text-left">
@@ -712,8 +731,8 @@ export default function PurchaseOrderList() {
 
         {/* Summary strip */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-          <StatCard icon={ClipboardList} label="Total Orders" value={rows.length} theme="indigo" />
-          <StatCard icon={Search} label="Matching Search" value={filtered.length} theme="sky" />
+          <StatCard icon={ClipboardList} label="Total Orders" value={totalOrders} theme="indigo" />
+          <StatCard icon={Search} label="Matching Search" value={totalCount} theme="sky" />
           <StatCard icon={Truck} label="Awaiting Delivery Confirm" value={pendingConfirmCount} theme="amber" />
           <StatCard icon={Wallet} label="Not Fully Paid" value={unpaidCount} theme="rose" />
           <StatCard icon={Banknote} label="Total Spent" value={`৳${totalSpent.toLocaleString()}`} theme="emerald" />
@@ -909,16 +928,16 @@ export default function PurchaseOrderList() {
 
           <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100">
             <span className="text-sm text-slate-500">
-              Showing <span className="font-medium text-slate-700">{filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}</span> to{' '}
-              <span className="font-medium text-slate-700">{Math.min(page * pageSize, filtered.length)}</span> of{' '}
-              <span className="font-medium text-slate-700">{filtered.length}</span> entries
+              Showing <span className="font-medium text-slate-700">{totalCount === 0 ? 0 : (page - 1) * pageSize + 1}</span> to{' '}
+              <span className="font-medium text-slate-700">{Math.min(page * pageSize, totalCount)}</span> of{' '}
+              <span className="font-medium text-slate-700">{totalCount}</span> entries
             </span>
             <div className="flex gap-1.5">
               <button disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 transition-colors">Previous</button>
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
                 <button key={n} onClick={() => setPage(n)} className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${n === page ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>{n}</button>
               ))}
-              <button disabled={page === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 transition-colors">Next</button>
+              <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 transition-colors">Next</button>
             </div>
           </div>
         </div>

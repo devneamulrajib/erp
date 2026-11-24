@@ -15,6 +15,7 @@ import {
   deleteOfficeExpense,
   updateOfficeExpenseStatus,
 } from '../api/officeExpense';
+import { readPage } from '../utils/serverPage';
 
 // ---- Status Styling ----
 const STATUS = {
@@ -91,6 +92,21 @@ function monthKeyOf(value) {
   return day ? day.slice(0, 7) : '';
 }
 
+// Local-midnight bounds of the chosen period as ISO strings for the server
+// (fromTs inclusive, toTs exclusive); {} for 'all months'.
+function periodBoundsOf(rangeActive, fromDate, toDate, monthValue) {
+  const day = (key, plus = 0) => {
+    const [y, m, d] = key.split('-').map(Number);
+    return new Date(y, m - 1, d + plus).toISOString();
+  };
+  if (rangeActive) {
+    return { fromTs: fromDate ? day(fromDate) : undefined, toTs: toDate ? day(toDate, 1) : undefined };
+  }
+  if (monthValue === 'all') return {};
+  const [y, m] = monthValue.split('-').map(Number);
+  return { fromTs: new Date(y, m - 1, 1).toISOString(), toTs: new Date(y, m, 1).toISOString() };
+}
+
 function currentMonthKey() {
   const d = new Date();
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
@@ -142,18 +158,34 @@ export default function OfficeExpenseListPage() {
 
   const monthInitialised = useRef(false);
 
+  // Set when the server sent one page: { total, totals }. totals = the period's
+  // amount and status counts, every month's total, and the category names.
+  const [serverPage, setServerPage] = useState(null);
+
+  // No search / category / status filter: ask the server for one page of the
+  // chosen period. Otherwise load every expense and filter here, as before.
+  const serverMode = !search.trim() && !categoryFilter && statusFilter === 'all';
+  const fetchArgs = serverMode
+    ? JSON.stringify({ page, limit: pageSize, ...periodBoundsOf(!!(fromDate || toDate), fromDate, toDate, monthValue) })
+    : '';
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getOfficeExpenses();
-      setRows(Array.isArray(data) ? data : []);
+      const data = fetchArgs
+        ? await getOfficeExpenses({ ...JSON.parse(fetchArgs), tz: new Date().getTimezoneOffset() })
+        : await getOfficeExpenses();
+      const result = readPage(data);
+      setRows(result.rows);
+      setServerPage(result.paged ? { total: result.total, totals: result.totals || {} } : null);
     } catch (error) {
       console.error('Failed to load office expenses:', error);
       setRows([]);
+      setServerPage(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchArgs]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -161,11 +193,14 @@ export default function OfficeExpenseListPage() {
   useEffect(() => {
     if (loading || monthInitialised.current) return;
     monthInitialised.current = true;
-    if (rows.length === 0) return;
-    if (rows.some((r) => monthKeyOf(r.date) === monthValue)) return;
-    const latest = rows.map((r) => monthKeyOf(r.date)).filter(Boolean).sort().pop();
+    const keys = serverPage
+      ? (serverPage.totals.months || []).map((mo) => mo.key)
+      : rows.map((r) => monthKeyOf(r.date)).filter(Boolean);
+    if (keys.length === 0) return;
+    if (keys.includes(monthValue)) return;
+    const latest = [...keys].sort().pop();
     if (latest) setMonthValue(latest);
-  }, [loading, rows, monthValue]);
+  }, [loading, rows, monthValue, serverPage]);
 
   useEffect(() => {
     setPage(1);
@@ -205,13 +240,14 @@ export default function OfficeExpenseListPage() {
   }, [rows, rangeActive, fromDate, toDate, monthValue]);
 
   const categoryOptions = useMemo(() => {
+    if (serverPage) return [...(serverPage.totals.categories || [])];
     const set = new Set();
     rows.forEach((r) => {
       const c = textValue(r.budgetCategory);
       if (c !== '—') set.add(c);
     });
     return Array.from(set).sort();
-  }, [rows]);
+  }, [rows, serverPage]);
 
   const filteredRows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -225,27 +261,33 @@ export default function OfficeExpenseListPage() {
     });
   }, [scopedRows, search, categoryFilter, statusFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const totalCount = serverPage ? serverPage.total : filteredRows.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   const pageRows = useMemo(() => {
+    if (serverPage) return filteredRows;
     const start = (page - 1) * pageSize;
     return filteredRows.slice(start, start + pageSize);
-  }, [filteredRows, page, pageSize]);
+  }, [filteredRows, page, pageSize, serverPage]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
   // Stat cards follow the chosen period
-  const totalAmount = scopedRows.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const approvedCount = scopedRows.filter((item) => textValue(item.status).toLowerCase() === 'approved').length;
-  const pendingCount = scopedRows.filter((item) => textValue(item.status).toLowerCase() === 'pending').length;
-  const rejectedCount = scopedRows.filter((item) => textValue(item.status).toLowerCase() === 'rejected').length;
+  // (server totals cover the whole period, not just the page on screen)
+  const st = serverPage ? serverPage.totals : null;
+  const countStatus = (s) => scopedRows.filter((item) => textValue(item.status).toLowerCase() === s).length;
+  const totalAmount = st ? Number(st.amount) || 0 : scopedRows.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const approvedCount = st ? Number(st.approved) || 0 : countStatus('approved');
+  const pendingCount = st ? Number(st.pending) || 0 : countStatus('pending');
+  const rejectedCount = st ? Number(st.rejected) || 0 : countStatus('rejected');
 
   // Trend chart always uses every month, so it still works when one month is selected
   const monthlyTrend = useMemo(() => {
     const map = {};
-    rows.forEach((item) => {
+    if (serverPage) (serverPage.totals.months || []).forEach((mo) => { map[mo.key] = Number(mo.total) || 0; });
+    else rows.forEach((item) => {
       const key = monthKeyOf(item.date);
       if (!key) return;
       map[key] = (map[key] || 0) + Number(item.amount || 0);
@@ -257,7 +299,7 @@ export default function OfficeExpenseListPage() {
       const label = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'short' });
       return { key, label, total: map[key] };
     });
-  }, [rows]);
+  }, [rows, serverPage]);
 
   const momChange = useMemo(() => {
     if (monthlyTrend.length < 2) return null;
@@ -293,6 +335,7 @@ export default function OfficeExpenseListPage() {
     try {
       await updateOfficeExpenseStatus(item.id, newStatus);
       setRows((prev) => prev.map((r) => (r.id === item.id ? { ...r, status: newStatus } : r)));
+      if (serverPage) load(); // refresh the period's status counts
       if (viewing && viewing.id === item.id) {
         setViewing((prev) => ({ ...prev, status: newStatus }));
       }
@@ -329,9 +372,19 @@ export default function OfficeExpenseListPage() {
 
   const hasActiveFilters = !!(search || fromDate || toDate || categoryFilter || statusFilter !== 'all');
 
-  function exportCsv() {
+  async function exportCsv() {
     const headers = ['Date', 'Reference', 'Title', 'Category', 'Debit', 'Credit', 'Amount', 'Status', 'Added By'];
-    const dataRows = filteredRows.map((item) => [
+    // A server page holds only one page of rows - export the whole period.
+    let source = filteredRows;
+    if (serverPage) {
+      try {
+        source = readPage(await getOfficeExpenses(periodBoundsOf(rangeActive, fromDate, toDate, monthValue))).rows;
+      } catch (error) {
+        alert(error?.response?.data?.message || error?.message || 'Failed to load expenses for export.');
+        return;
+      }
+    }
+    const dataRows = source.map((item) => [
       formatDate(item.date), textValue(item.reference), textValue(item.title), textValue(item.budgetCategory),
       textValue(item.drAccount), textValue(item.crAccount), Number(item.amount || 0), textValue(item.status), textValue(item.addedBy),
     ]);
@@ -408,7 +461,7 @@ export default function OfficeExpenseListPage() {
                   Net Disbursement
                 </span>
                 <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-600">
-                  {scopedRows.length} total entries
+                  {serverPage ? serverPage.total : scopedRows.length} total entries
                 </span>
               </div>
               <div className="mt-3">
@@ -567,7 +620,7 @@ export default function OfficeExpenseListPage() {
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Records</span>
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                {filteredRows.length}
+                {totalCount}
               </span>
               <span className="text-xs text-slate-400">· {periodLabel}</span>
             </div>
@@ -636,12 +689,12 @@ export default function OfficeExpenseListPage() {
             </table>
           </div>
 
-          {!loading && filteredRows.length > 0 && (
+          {!loading && totalCount > 0 && (
             <div className="flex flex-col sm:flex-row items-center justify-between px-5 py-4 border-t border-slate-100 gap-3 bg-slate-50/30">
               <p className="text-xs text-slate-500">
                 Showing <span className="font-semibold text-slate-700">{(page - 1) * pageSize + 1}</span> to{' '}
-                <span className="font-semibold text-slate-700">{Math.min(page * pageSize, filteredRows.length)}</span> of{' '}
-                <span className="font-semibold text-slate-700">{filteredRows.length}</span> records
+                <span className="font-semibold text-slate-700">{Math.min(page * pageSize, totalCount)}</span> of{' '}
+                <span className="font-semibold text-slate-700">{totalCount}</span> records
               </p>
 
               <div className="flex items-center gap-1.5">
@@ -658,7 +711,7 @@ export default function OfficeExpenseListPage() {
                 </div>
                 <button
                   type="button"
-                  disabled={page === totalPages}
+                  disabled={page >= totalPages}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition"
                 >

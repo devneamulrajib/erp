@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { getPurchases, deletePurchase } from '../api/purchase';
+import { pageParams, readPage } from '../utils/serverPage';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import {
@@ -27,21 +28,35 @@ export default function PurchaseList() {
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
+  // Set when the server sent one page: { total, totals } (totals = whole filtered set).
+  const [serverPage, setServerPage] = useState(null);
+
+  // Empty search box: ask the server for one page. Searching: load the full list
+  // and filter it here, as before.
+  const serverMode = !search.trim();
+  const fetchPage = serverMode ? page : 0;
+  const fetchLimit = serverMode ? pageSize : 0;
 
   const loadRows = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await getPurchases({ from, to, supplier: filterSupplier, project: filterProject });
-      setRows(Array.isArray(data) ? data : []);
+      const data = await getPurchases({
+        from, to, supplier: filterSupplier, project: filterProject,
+        ...pageParams(fetchPage > 0, fetchPage, fetchLimit),
+      });
+      const result = readPage(data);
+      setRows(result.rows);
+      setServerPage(result.paged ? { total: result.total, totals: result.totals || {} } : null);
     } catch (e) {
       setError(e.response?.data?.message || e.message || 'Failed to load purchases');
     } finally {
       setLoading(false);
     }
-  }, [from, to, filterSupplier, filterProject]);
+  }, [from, to, filterSupplier, filterProject, fetchPage, fetchLimit]);
 
   useEffect(() => { loadRows(); }, [loadRows]);
+  useEffect(() => { setPage(1); }, [from, to, filterSupplier, filterProject]);
 
   useEffect(() => {
     // Suppliers are Supplier contacts in Chart of Accounts (purchases.supplierId
@@ -69,7 +84,8 @@ export default function PurchaseList() {
     if (!window.confirm('Delete this purchase?')) return;
     try {
       await deletePurchase(rowId(row));
-      setRows((prev) => prev.filter((r) => rowId(r) !== rowId(row)));
+      if (serverPage) loadRows();
+      else setRows((prev) => prev.filter((r) => rowId(r) !== rowId(row)));
     } catch (e) {
       alert(e.response?.data?.message || e.message || 'Failed to delete');
     }
@@ -82,11 +98,12 @@ export default function PurchaseList() {
       .filter(Boolean)
       .some((v) => String(v).toLowerCase().includes(q));
   });
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
-  const grandTotalSum = filtered.reduce((sum, r) => sum + num(r.grandTotal), 0);
-  const paidSum = filtered.reduce((sum, r) => sum + num(r.paid), 0);
-  const dueSum = filtered.reduce((sum, r) => sum + num(r.due), 0);
+  const totalCount = serverPage ? serverPage.total : filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const paged = serverPage ? filtered : filtered.slice((page - 1) * pageSize, page * pageSize);
+  const grandTotalSum = serverPage ? num(serverPage.totals.grandTotal) : filtered.reduce((sum, r) => sum + num(r.grandTotal), 0);
+  const paidSum = serverPage ? num(serverPage.totals.paid) : filtered.reduce((sum, r) => sum + num(r.paid), 0);
+  const dueSum = serverPage ? num(serverPage.totals.due) : filtered.reduce((sum, r) => sum + num(r.due), 0);
   const money = (v) => num(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
   const hasFilters = !!(from || to || filterSupplier || filterProject || search);
 
@@ -129,7 +146,7 @@ export default function PurchaseList() {
 
         {/* Summary */}
         <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <KpiCard label="Purchases" value={filtered.length} icon={ShoppingCart} accent="indigo" hint={hasFilters ? 'Matching filters' : 'All time'} loading={loading} />
+          <KpiCard label="Purchases" value={totalCount} icon={ShoppingCart} accent="indigo" hint={hasFilters ? 'Matching filters' : 'All time'} loading={loading} />
           <KpiCard label="Grand Total" value={money(grandTotalSum)} icon={Receipt} accent="violet" loading={loading} />
           <KpiCard label="Paid" value={money(paidSum)} icon={Wallet} accent="emerald" loading={loading} />
           <KpiCard label="Due" value={money(dueSum)} icon={AlertCircle} accent="rose" loading={loading} />
@@ -299,7 +316,7 @@ export default function PurchaseList() {
                 {[10, 25, 50].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
               <span>
-                · Showing {filtered.length === 0 ? 0 : (page - 1) * pageSize + 1} to {Math.min(page * pageSize, filtered.length)} of {filtered.length} entries
+                · Showing {totalCount === 0 ? 0 : (page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} entries
               </span>
             </div>
             <div className="flex items-center gap-1.5">
@@ -307,7 +324,7 @@ export default function PurchaseList() {
                 <ChevronLeft size={15} /> Previous
               </button>
               <span className="flex h-9 min-w-9 items-center justify-center rounded-lg bg-indigo-600 px-3 text-sm font-medium text-white">{page} / {totalPages}</span>
-              <button disabled={page === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40">
+              <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40">
                 Next <ChevronRight size={15} />
               </button>
             </div>

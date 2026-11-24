@@ -13,6 +13,7 @@ import {
 import { getChartOfAccounts, createChartOfAccount } from '../api/chartOfAccounts';
 import { getChartOfGroupOptions } from '../api/chartOfGroup';
 import { getBankAccounts } from '../api/bankAccount';
+import { pageParams, readPage } from '../utils/serverPage';
 
 const inputClass = "w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition";
 const labelClass = "block text-xs font-medium text-slate-500 mb-1.5";
@@ -68,27 +69,44 @@ export default function ReceiptVoucherPage() {
   const [search, setSearch] = useState('');
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
+  // Set when the server sent one page: { total, totals } (totals = whole filtered set).
+  const [serverPage, setServerPage] = useState(null);
+
+  // Empty search box: ask the server for one page. Searching: load the full list
+  // and filter it here, as before.
+  const serverMode = !search;
+  const fetchPage = serverMode ? page : 0;
+  const fetchLimit = serverMode ? pageSize : 0;
+
+  const voucherFilters = useCallback(() => ({
+    type: 'Receipt',
+    from: fromDate || undefined,
+    to: toDate || undefined,
+    account: filterCredit || undefined,
+    project: filterProject || undefined,
+  }), [fromDate, toDate, filterCredit, filterProject]);
 
   const loadVouchers = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await getVouchers({
-        type: 'Receipt',
-        from: fromDate || undefined,
-        to: toDate || undefined,
-        account: filterCredit || undefined,
-        project: filterProject || undefined,
+        ...voucherFilters(),
+        ...pageParams(fetchPage > 0, fetchPage, fetchLimit),
       });
-      setVouchers(Array.isArray(data) ? data : []);
+      const result = readPage(data);
+      setVouchers(result.rows);
+      setServerPage(result.paged ? { total: result.total, totals: result.totals || {} } : null);
     } catch (err) {
       console.error('Failed to load receipt vouchers', err);
       setVouchers([]);
+      setServerPage(null);
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate, filterCredit, filterProject]);
+  }, [voucherFilters, fetchPage, fetchLimit]);
 
   useEffect(() => { loadVouchers(); }, [loadVouchers]);
+  useEffect(() => { setPage(1); }, [fromDate, toDate, filterCredit, filterProject]);
 
   function reloadAccounts() {
     getChartOfAccounts().then((res) => setAccounts(res?.data ?? res ?? [])).catch(() => {});
@@ -236,9 +254,20 @@ export default function ReceiptVoucherPage() {
     window.print();
   }
 
-  function exportExcel() {
+  async function exportExcel() {
     const headers = ['SL', 'Date', 'Project', 'Code', 'Credit', 'Debit', 'Total', 'Ref', 'Cheque/Receipt', 'Comment', 'Added By', 'Status'];
-    const rows = filtered.map((v, i) => {
+    // A server page holds only one page of rows - export the whole filtered list.
+    let source = filtered;
+    if (serverPage) {
+      try {
+        const { data } = await getVouchers(voucherFilters());
+        source = readPage(data).rows;
+      } catch (err) {
+        window.alert(err.response?.data?.message || 'Failed to load vouchers for export');
+        return;
+      }
+    }
+    const rows = source.map((v, i) => {
       const entries = v.entries || [];
       const debitEntry = entries.find((e) => Number(e.debit) > 0);
       const creditEntry = entries.find((e) => Number(e.credit) > 0);
@@ -263,10 +292,13 @@ export default function ReceiptVoucherPage() {
     return (v.voucherNo || '').toLowerCase().includes(q);
   });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const totalCount = serverPage ? serverPage.total : filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const pageRows = serverPage ? filtered : filtered.slice((page - 1) * pageSize, page * pageSize);
   const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
-  const totalAmount = filtered.reduce((sum, v) => sum + Number(v.amount || 0), 0);
+  const totalAmount = serverPage
+    ? Number(serverPage.totals.amount) || 0
+    : filtered.reduce((sum, v) => sum + Number(v.amount || 0), 0);
   const activeFilterCount = [fromDate, toDate, filterCredit, filterProject, filterTitle, filterSite, filterTask].filter(Boolean).length;
 
   return (
@@ -295,7 +327,7 @@ export default function ReceiptVoucherPage() {
           <div className="flex gap-3">
             <div className="bg-white rounded-xl border border-slate-200 px-4 py-2.5 min-w-[120px]">
               <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Entries</div>
-              <div className="text-lg font-semibold text-slate-900">{filtered.length}</div>
+              <div className="text-lg font-semibold text-slate-900">{totalCount}</div>
             </div>
             <div className="bg-white rounded-xl border border-slate-200 px-4 py-2.5 min-w-[140px]">
               <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Total Amount</div>
@@ -634,7 +666,7 @@ export default function ReceiptVoucherPage() {
             <span className="text-sm text-slate-500">
               Showing <span className="font-medium text-slate-700">{pageRows.length === 0 ? 0 : (page - 1) * pageSize + 1}</span> to{' '}
               <span className="font-medium text-slate-700">{(page - 1) * pageSize + pageRows.length}</span> of{' '}
-              <span className="font-medium text-slate-700">{filtered.length}</span> entries
+              <span className="font-medium text-slate-700">{totalCount}</span> entries
             </span>
             <div className="flex gap-1.5">
               <button disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors">
@@ -651,7 +683,7 @@ export default function ReceiptVoucherPage() {
                   {n}
                 </button>
               ))}
-              <button disabled={page === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors">
+              <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors">
                 Next
               </button>
             </div>
