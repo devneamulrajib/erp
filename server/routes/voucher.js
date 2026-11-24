@@ -41,7 +41,8 @@ async function generateVoucherNo(type) {
   return `${fullPrefix}-${seq}`;
 }
 
-const includeAll = [{ model: VoucherEntry }, { model: VoucherApproval }];
+// Lines come back as `entries` - the name the Payment/Receipt voucher pages read.
+const includeAll = [{ model: VoucherEntry, as: 'entries' }, { model: VoucherApproval }];
 
 router.get('/next-code', auth, async (req, res) => {
   try {
@@ -98,7 +99,7 @@ router.get('/', auth, async (req, res) => {
     }
 
       const include = [
-      account ? { model: VoucherEntry, where: { accountId: account } } : { model: VoucherEntry },
+      account ? { model: VoucherEntry, as: 'entries', where: { accountId: account } } : { model: VoucherEntry, as: 'entries' },
       { model: VoucherApproval },
     ];
 
