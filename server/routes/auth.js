@@ -54,21 +54,9 @@ router.post('/login', async (req, res) => {
       return res.status(429).json({ message: `Too many failed attempts. Try again in ${minutesLeft} minute(s).` });
     }
 
-    // Superadmin fallback via .env — kept for initial setup / recovery access.
-    if (process.env.SUPERADMIN_EMAIL && process.env.SUPERADMIN_PASSWORD && email === process.env.SUPERADMIN_EMAIL && password === process.env.SUPERADMIN_PASSWORD) {
-      limiter.clear(key);
-      const token = jwt.sign(
-        { id: 'temp-superadmin', role: 'superadmin' },
-        process.env.JWT_SECRET,
-        { expiresIn: '7d' }
-      );
-      return res.json({
-        token,
-        user: { id: 'temp-superadmin', name: process.env.SUPERADMIN_NAME, email, role: 'superadmin' },
-      });
-    }
-
-    // Regular team members: check the database.
+    // Everyone, including the superadmin, logs in as a real database user.
+    // The SUPERADMIN_* account from .env is created/synced at startup by
+    // seed/createSuperAdmin.js (the old 'temp-superadmin' token is gone).
     const user = await User.findOne({ where: { email } });
     if (!user) {
       limiter.fail(key);

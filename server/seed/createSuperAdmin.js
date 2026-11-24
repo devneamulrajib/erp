@@ -12,7 +12,21 @@ async function createSuperAdmin() {
   const existing = await User.findOne({ where: { email: SUPERADMIN_EMAIL } });
 
   if (existing) {
-    console.log(`Superadmin already exists: ${SUPERADMIN_EMAIL}`);
+    // .env is the source of truth for this one account: after SUPERADMIN_PASSWORD
+    // is rotated in .env, the next restart updates the stored hash (this replaced
+    // the old login shortcut that compared the .env password directly).
+    const updates = {};
+    if (!(await bcrypt.compare(SUPERADMIN_PASSWORD, existing.password || ''))) {
+      updates.password = await bcrypt.hash(SUPERADMIN_PASSWORD, 10);
+    }
+    if (existing.role !== 'superadmin') updates.role = 'superadmin';
+    if (existing.isActive === false) updates.isActive = true;
+    if (Object.keys(updates).length) {
+      await existing.update(updates);
+      console.log(`Superadmin synced from .env (${Object.keys(updates).join(', ')}): ${SUPERADMIN_EMAIL}`);
+    } else {
+      console.log(`Superadmin already exists: ${SUPERADMIN_EMAIL}`);
+    }
     return;
   }
 
