@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
+import { getContacts } from '../api/contactAccounts';
 import {
   getMaterialRequisitions,
   getMaterialRequisition,
@@ -611,7 +612,9 @@ export default function MaterialRequisitionList() {
   useEffect(() => { loadRows(); }, [loadRows]);
 
   useEffect(() => {
-    api.get('/customers').then((res) => setSuppliers(asArray(res))).catch(() => {});
+    // Suppliers are Supplier contacts in Chart of Accounts (requisitions.supplierId
+    // belongs to ChartOfAccount), not rows from the Customers table.
+    getContacts('Supplier').then((res) => setSuppliers(asArray(res))).catch(() => {});
     api.get('/projects').then((res) => setProjects(asArray(res))).catch(() => {});
   }, []);
 
