@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-CWjljldh.js";var t=e();function n({icon:e,label:n,onClick:r,color:i=`bg-cyan-500 hover:bg-cyan-600`}){return(0,t.jsxs)(`button`,{onClick:r,className:`flex items-center gap-1.5 ${i} text-white text-sm font-medium px-3 py-1.5 rounded-md`,children:[e&&(0,t.jsx)(e,{size:14}),n]})}export{n as t};

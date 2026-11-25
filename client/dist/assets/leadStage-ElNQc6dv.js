@@ -1,0 +1,1 @@
+import{gt as e}from"./index-ugk-zmqp.js";var t=t=>e.get(`/lead-stage`,{params:t}),n=t=>e.post(`/lead-stage`,t),r=(t,n)=>e.put(`/lead-stage/${t}`,n),i=t=>e.delete(`/lead-stage/${t}`);export{r as i,i as n,t as r,n as t};

@@ -1,0 +1,1 @@
+function e(e=new Date){let t=e.getHours();return t<12?`Good morning`:t<17?`Good afternoon`:`Good evening`}function t(){try{return JSON.parse(localStorage.getItem(`user`)||`null`)}catch{return null}}var n=e=>`৳${Number(e||0).toLocaleString(`en-BD`,{maximumFractionDigits:0})}`,r=e=>Number(e||0).toLocaleString(`en-BD`);export{e as i,r as n,n as r,t};

@@ -1,0 +1,1 @@
+import{gt as e}from"./index-ugk-zmqp.js";async function t(){return(await e.get(`/users`)).data}export{t};

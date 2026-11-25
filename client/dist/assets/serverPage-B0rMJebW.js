@@ -1,0 +1,1 @@
+function e(e,t,n){return e?{page:t,limit:n}:{}}function t(e){return Array.isArray(e)?{rows:e,total:e.length,paged:!1,totals:null}:e&&Array.isArray(e.rows)?{rows:e.rows,total:Number(e.total)||0,paged:!0,totals:e.totals||null}:{rows:[],total:0,paged:!1,totals:null}}export{t as n,e as t};

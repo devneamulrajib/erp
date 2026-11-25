@@ -1,0 +1,1 @@
+import{gt as e}from"./index-ugk-zmqp.js";async function t(t={}){return(await e.get(`/customers`,{params:t})).data}async function n(){return(await e.get(`/customers/next-code`)).data.code}async function r(t){return(await e.post(`/customers`,t)).data}export{t as n,n as r,r as t};

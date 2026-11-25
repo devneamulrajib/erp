@@ -1,0 +1,1 @@
+import{gt as e}from"./index-ugk-zmqp.js";var t=t=>e.get(`/profession`,{params:t}),n=t=>e.post(`/profession`,t),r=(t,n)=>e.put(`/profession/${t}`,n),i=t=>e.delete(`/profession/${t}`);export{r as i,i as n,t as r,n as t};
