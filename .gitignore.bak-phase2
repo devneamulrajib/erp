@@ -1,3 +1,0 @@
-# Secrets - never commit these (local copies stay on disk)
-.env
-*.sql

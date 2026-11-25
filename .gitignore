@@ -4,3 +4,6 @@
 
 # Dependencies - installed by npm install (deploy.sh runs it on the server)
 node_modules/
+# Local backup files - keep on disk, do not track
+*.bak-*
+client/dist.bak-*
