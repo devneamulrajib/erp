@@ -2,19 +2,91 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Trash2, LayoutGrid, Plus, UserRound, ShieldCheck, Ban,
-  CheckCircle2, AlertCircle, Eye, EyeOff, X, Loader2, Check
+  CheckCircle2, AlertCircle, Eye, EyeOff, X, Loader2, Check, LockKeyhole
 } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import Breadcrumb from '../components/Breadcrumb';
 import Modal from '../components/Modal';
 import {
-  getUsers, addUser, updateUserRole, updateUserStatus, deleteUser,
+  getUsers, addUser, updateUserRole, updateUserStatus, deleteUser, updateUserAccess,
 } from '../api/userManagement';
-import { ALL_ROLES } from '../config/permissions';
+import { ALL_ROLES, ACCESS_MODULES, MODULE_LABELS, normalizeModules } from '../config/permissions';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const ASSIGNABLE_ROLES = ALL_ROLES.filter((r) => r !== 'superadmin');
-const EMPTY_FORM = { name: '', email: '', password: '', role: 'user', roles: [] };
+const EMPTY_FORM = { name: '', email: '', password: '', role: 'user', roles: [], accessMode: 'role', modules: [] };
+
+function readCurrentUser() {
+  try {
+    return JSON.parse(localStorage.getItem('user') || 'null');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Section access picker. mode 'role' = the role's default access (as before),
+ * 'custom' = the user sees ONLY the ticked sections (their own workspace,
+ * menu and pages). `allowSettings` hides the Settings section for non-admins.
+ */
+function SectionAccessPicker({ mode, modules, onModeChange, onToggle, allowSettings = true }) {
+  const options = ACCESS_MODULES.filter((m) => allowSettings || m.key !== 'settings');
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {[
+          { value: 'role', title: 'Role defaults', text: 'Access comes from the primary/additional roles (current behaviour).' },
+          { value: 'custom', title: 'Only selected sections', text: 'Sees only the sections ticked below, with a personal workspace.' },
+        ].map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onModeChange(opt.value)}
+            className={`rounded-xl border p-3 text-left transition ${
+              mode === opt.value
+                ? 'border-indigo-500 bg-indigo-50/60 shadow-2xs'
+                : 'border-slate-200 bg-white hover:bg-slate-50'
+            }`}
+          >
+            <span className="flex items-center gap-2 text-xs font-semibold text-slate-800">
+              <span className={`flex h-4 w-4 items-center justify-center rounded-full border ${mode === opt.value ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'}`}>
+                {mode === opt.value && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+              </span>
+              {opt.title}
+            </span>
+            <span className="mt-1 block text-[11px] leading-snug text-slate-500">{opt.text}</span>
+          </button>
+        ))}
+      </div>
+
+      {mode === 'custom' && (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {options.map((m) => {
+            const checked = modules.includes(m.key);
+            return (
+              <button
+                key={m.key}
+                type="button"
+                onClick={() => onToggle(m.key)}
+                className={`flex items-start gap-2.5 rounded-xl border p-2.5 text-left transition ${
+                  checked ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-200 bg-white hover:bg-slate-50'
+                }`}
+              >
+                <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-md border ${checked ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 bg-white'}`}>
+                  {checked && <Check size={12} strokeWidth={3} />}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-xs font-semibold text-slate-800">{m.label}</span>
+                  <span className="block text-[11px] leading-snug text-slate-500">{m.description}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const ROLE_BADGE_STYLES = {
   superadmin: 'bg-violet-50 text-violet-600 ring-violet-600/20',
@@ -49,6 +121,18 @@ export default function UserManagementPage() {
   const [notice, setNotice] = useState('');
   const [rowBusyId, setRowBusyId] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
+
+  // Section access modal
+  const [accessUser, setAccessUser] = useState(null);
+  const [accessMode, setAccessMode] = useState('role');
+  const [accessModules, setAccessModules] = useState([]);
+  const [savingAccess, setSavingAccess] = useState(false);
+  const [accessError, setAccessError] = useState('');
+
+  const me = readCurrentUser();
+  const iAmAdmin = ['superadmin', 'admin'].includes(me?.role);
+  // Non-admins with the Settings section cannot hand out admin roles.
+  const roleChoices = iAmAdmin ? ASSIGNABLE_ROLES : ASSIGNABLE_ROLES.filter((r) => r !== 'admin');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -87,6 +171,40 @@ export default function UserManagementPage() {
   // Superadmin is always active; others check boolean
   const activeCount = users.filter((u) => u.role === 'superadmin' || Boolean(u.isActive)).length;
   const adminCount = users.filter((u) => ['admin', 'superadmin'].includes(u.role)).length;
+
+  function openAccessModal(user) {
+    const current = normalizeModules(user.modules);
+    setAccessUser(user);
+    setAccessMode(current ? 'custom' : 'role');
+    setAccessModules(current || []);
+    setAccessError('');
+  }
+
+  const toggleIn = (list, key) => (list.includes(key) ? list.filter((k) => k !== key) : [...list, key]);
+
+  async function handleSaveAccess() {
+    if (!accessUser) return;
+    if (accessMode === 'custom' && accessModules.length === 0) {
+      setAccessError('Tick at least one section, or choose Role defaults.');
+      return;
+    }
+    setSavingAccess(true);
+    setAccessError('');
+    try {
+      const modules = accessMode === 'custom' ? accessModules : null;
+      const saved = await updateUserAccess(accessUser.id, modules);
+      setUsers((prev) => prev.map((u) => (u.id === accessUser.id ? { ...u, modules: saved.modules } : u)));
+      if (me && me.id === accessUser.id) {
+        localStorage.setItem('user', JSON.stringify({ ...me, modules: saved.modules }));
+      }
+      setNotice(`Section access updated for ${accessUser.name}.`);
+      setAccessUser(null);
+    } catch (err) {
+      setAccessError(err.response?.data?.message || 'Failed to update section access.');
+    } finally {
+      setSavingAccess(false);
+    }
+  }
 
   function openAddModal() {
     setForm(EMPTY_FORM);
@@ -175,10 +293,15 @@ export default function UserManagementPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!form.name || !form.email || !form.password) return;
+    if (form.accessMode === 'custom' && form.modules.length === 0) {
+      setFormError('Tick at least one section, or choose Role defaults.');
+      return;
+    }
     setSaving(true);
     setFormError('');
     try {
-      await addUser(form);
+      const { accessMode: mode, modules, ...rest } = form;
+      await addUser({ ...rest, modules: mode === 'custom' ? modules : null });
       setModalOpen(false);
       setNotice(`${form.name} was added.`);
       await load();
@@ -319,6 +442,7 @@ export default function UserManagementPage() {
                   <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Email</th>
                   <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Primary Role</th>
                   <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Additional Assigned Roles</th>
+                  <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Section Access</th>
                   <th className="px-5 py-3 text-left font-medium text-xs uppercase tracking-wide">Status</th>
                   <th className="px-5 py-3 text-right font-medium text-xs uppercase tracking-wide">Action</th>
                 </tr>
@@ -326,7 +450,7 @@ export default function UserManagementPage() {
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-16 text-slate-400 text-sm">
+                    <td colSpan={7} className="text-center py-16 text-slate-400 text-sm">
                       <span className="inline-flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Loading team members…
@@ -335,7 +459,7 @@ export default function UserManagementPage() {
                   </tr>
                 ) : pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-16">
+                    <td colSpan={7} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <LayoutGrid size={28} strokeWidth={1.5} />
                         <p className="text-sm">No team members found.</p>
@@ -371,7 +495,7 @@ export default function UserManagementPage() {
                               onChange={(e) => handlePrimaryRoleChange(user, e.target.value)}
                               className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset border-0 outline-none cursor-pointer capitalize disabled:opacity-50 ${ROLE_BADGE_STYLES[user.role] || ROLE_BADGE_STYLES.user}`}
                             >
-                              {ASSIGNABLE_ROLES.map((role) => (
+                              {(roleChoices.includes(user.role) ? roleChoices : [user.role, ...roleChoices]).map((role) => (
                                 <option key={role} value={role} className="bg-white text-slate-700 capitalize">{role}</option>
                               ))}
                             </select>
@@ -413,6 +537,34 @@ export default function UserManagementPage() {
                               >
                                 <Plus size={10} strokeWidth={3} />
                                 Manage
+                              </button>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Section Access Column */}
+                        <td className="px-5 py-3.5">
+                          {isSuperadmin || ['admin'].includes(user.role) ? (
+                            <span className="text-xs text-slate-400 italic">All sections</span>
+                          ) : (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {normalizeModules(user.modules) ? (
+                                normalizeModules(user.modules).map((k) => (
+                                  <span key={k} className="inline-flex items-center rounded-lg bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 ring-1 ring-inset ring-amber-600/20">
+                                    {MODULE_LABELS[k] || k}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-xs text-slate-400">Role defaults</span>
+                              )}
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => openAccessModal(user)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/70 transition"
+                              >
+                                <LockKeyhole size={10} strokeWidth={2.5} />
+                                Edit
                               </button>
                             </div>
                           )}
@@ -547,6 +699,47 @@ export default function UserManagementPage() {
         </Modal>
       )}
 
+      {/* Section access modal */}
+      {accessUser && (
+        <Modal open={!!accessUser} title={`Section access for ${accessUser.name}`} onClose={() => setAccessUser(null)}>
+          <div className="space-y-4">
+            <p className="text-xs text-slate-500">
+              With <span className="font-semibold text-slate-700">Only selected sections</span>, this person sees just those
+              sections in the menu, gets a personal workspace dashboard, and the server refuses everything else.
+              Changes apply within a minute, no new login needed.
+            </p>
+            {accessError && (
+              <div className="px-3.5 py-2.5 rounded-lg bg-red-50 border border-red-100 text-sm text-red-600">{accessError}</div>
+            )}
+            <SectionAccessPicker
+              mode={accessMode}
+              modules={accessModules}
+              allowSettings={iAmAdmin}
+              onModeChange={setAccessMode}
+              onToggle={(key) => setAccessModules((prev) => toggleIn(prev, key))}
+            />
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setAccessUser(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={savingAccess}
+                onClick={handleSaveAccess}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition shadow-2xs"
+              >
+                {savingAccess && <Loader2 size={13} className="animate-spin" />}
+                Save Access
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* Add member modal */}
       <Modal open={modalOpen} title="Add Team Member" onClose={closeModal}>
         <form onSubmit={handleSubmit}>
@@ -605,11 +798,22 @@ export default function UserManagementPage() {
                 onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition capitalize"
               >
-                {ASSIGNABLE_ROLES.map((role) => (
+                {roleChoices.map((role) => (
                   <option key={role} value={role} className="capitalize">{role}</option>
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="mb-5">
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Section access</label>
+            <SectionAccessPicker
+              mode={form.accessMode}
+              modules={form.modules}
+              allowSettings={iAmAdmin}
+              onModeChange={(accessMode) => setForm((f) => ({ ...f, accessMode }))}
+              onToggle={(key) => setForm((f) => ({ ...f, modules: toggleIn(f.modules, key) }))}
+            />
           </div>
 
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">

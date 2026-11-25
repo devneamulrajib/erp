@@ -4,6 +4,7 @@ import { FiEye, FiEyeOff, FiMail, FiLock, FiArrowRight } from 'react-icons/fi';
 import api from '../api/axios';
 import trikonLogo from '../assets/trikon-logo.png';
 import loginVideo from '../assets/login-video.mp4';
+import { homePathFor } from '../config/permissions';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -51,7 +52,8 @@ export default function Login() {
 
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
-      navigate('/dashboard');
+      // Section-restricted users land on their personal workspace.
+      navigate(homePathFor(data.user));
     } catch (err) {
       setError(
         err.response?.data?.message ||

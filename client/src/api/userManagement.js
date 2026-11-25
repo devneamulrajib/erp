@@ -8,3 +8,6 @@ export const updateUserRole = (id, role, roles) =>
 export const updateUserStatus = (id, isActive) =>
   api.put(`/users/${id}/status`, { isActive }).then((res) => res.data);
 export const deleteUser = (id) => api.delete(`/users/${id}`).then((res) => res.data);
+// modules: array of section keys, or null = use the role's default access
+export const updateUserAccess = (id, modules) =>
+  api.put(`/users/${id}/access`, { modules }).then((res) => res.data);
