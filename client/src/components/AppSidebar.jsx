@@ -1,7 +1,7 @@
 // client/src/components/AppSidebar.jsx
 // Collapsible left sidebar, in the ERP's own look (white panel, slate borders,
-// black active item like the top menu). Shown ONLY to users with their own
-// section list (not admins/superadmins, not role-based users). The three-dot
+// black active item like the top menu). Shown to every staff user except
+// admins and superadmins (role defaults or selected sections). The three-dot
 // button switches between the slim icon rail and the full menu; the choice is
 // saved. It lists only the sections and pages this user may open
 // (getSidebarNavForUser); the floating top menu is unchanged.

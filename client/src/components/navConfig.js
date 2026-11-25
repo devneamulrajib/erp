@@ -24,7 +24,7 @@ import {
   ListChecks,
   Sparkles,
 } from 'lucide-react';
-import { canAccessModule, hasExplicitModules, canOpenPath, isAdminUser } from '../config/permissions';
+import { canAccessModule, hasExplicitModules, canOpenPath, isAdminUser, getAllUserRoles } from '../config/permissions';
 
 /* ============================================================
    FLOATING ISLAND UI CONFIG & ACCENTS
@@ -544,6 +544,8 @@ const WORKSPACE_MODULE = {
   ui: { priority: 0, accent: 'amber' },
 };
 
+const MODULE_KEY_SET = new Set(['dashboards', 'accounts', 'hrm', 'inventory', 'project', 'requisition', 'investors', 'crm', 'tasks', 'support', 'settings']);
+
 // Drops items the user cannot open (route guard says no, or admin-only) and
 // parents left with no children. Keeps every other item exactly as configured.
 function filterItems(items, user) {
@@ -557,18 +559,39 @@ function filterItems(items, user) {
         return { ...item, children };
       }
       if (item.route && !canOpenPath(user, item.route)) return null;
+      // Placeholder entries named after a section (Dashboards > HRM / CRM)
+      // only for users who have that section.
+      if (!item.route && MODULE_KEY_SET.has(item.key) && !canAccessModule(user, item.key)) return null;
       return item;
     })
     .filter(Boolean);
 }
 
-// Menu for the logged-in user.
-// - Users WITHOUT an explicit section list (all existing users) and admins get
-//   TOP_MODULES unchanged, same as before.
+// Role defaults (no section list): modules the user's roles allow (primary +
+// extra roles), or modules that name one of their roles (Investors ->
+// accountant); inside each, only pages the route guard lets them open.
+const roleDefaultNav = (user) => {
+  const roles = getAllUserRoles(user);
+  return TOP_MODULES.map((m) => {
+    const allowed = Array.isArray(m.roles)
+      ? m.roles.some((r) => roles.includes(r)) || canAccessModule(user, m.key)
+      : canAccessModule(user, m.key);
+    if (!allowed) return null;
+    if (!m.children?.length) return m;
+    const children = filterItems(m.children, user);
+    if (!children.length) return m.route ? { ...m, children: [] } : null;
+    return { ...m, children };
+  }).filter(Boolean);
+};
+
+// Menu for the logged-in user (top floating menu and sidebar).
+// - Admins / superadmins: TOP_MODULES unchanged, same as before.
+// - Role defaults (no section list): only what their roles allow.
 // - Users WITH a list (Settings > Team Members) see only their sections, with
 //   "My Workspace" first; Tasks-only users get Tasks & Work Log as its own menu.
 export const getNavForUser = (user) => {
-  if (!user || isAdminUser(user) || !hasExplicitModules(user)) return TOP_MODULES;
+  if (!user || isAdminUser(user)) return TOP_MODULES;
+  if (!hasExplicitModules(user)) return roleDefaultNav(user);
 
   const out = [];
   if (!canAccessModule(user, 'dashboards')) out.push(WORKSPACE_MODULE);
@@ -598,14 +621,9 @@ export const getNavForUser = (user) => {
   return out;
 };
 
-// Menu for the left sidebar: only what this user may open.
-// - Users with an explicit section list: same as getNavForUser.
-// - Admins: every module.
-// - Everyone else: modules their roles allow, minus pages the route guard
-//   would refuse (the top menu keeps showing TOP_MODULES as before).
-// Left sidebar only for users with their own section list; admins,
-// superadmins and role-based users (no list) keep the page layout as before.
-export const shouldShowSidebar = (user) => Boolean(user) && hasExplicitModules(user) && !isAdminUser(user);
+// Left sidebar for every staff user except admins and superadmins (they keep
+// the full-width layout). It lists the same sections as the top menu.
+export const shouldShowSidebar = (user) => Boolean(user) && !isAdminUser(user);
 
 // Sidebar entries must lead somewhere: drop placeholder items with no page.
 const dropDeadLeaves = (items) =>
@@ -620,22 +638,7 @@ const dropDeadLeaves = (items) =>
     })
     .filter(Boolean);
 
-export const getSidebarNavForUser = (user) => dropDeadLeaves(sidebarModules(user));
-
-const sidebarModules = (user) => {
-  if (!user) return [];
-  if (hasExplicitModules(user) && !isAdminUser(user)) return getNavForUser(user);
-  const role = user.role;
-  return TOP_MODULES.map((m) => {
-    if (!isAdminUser(user)) {
-      if (Array.isArray(m.roles) && role && !m.roles.includes(role)) return null;
-      if (!canAccessModule(user, m.key)) return null;
-    }
-    if (!m.children?.length) return m;
-    const children = filterItems(m.children, user);
-    if (!children.length) return m.route ? { ...m, children: [] } : null;
-    return { ...m, children };
-  }).filter(Boolean);
-};
+// Menu for the left sidebar: the top menu's sections, minus placeholders.
+export const getSidebarNavForUser = (user) => (user ? dropDeadLeaves(getNavForUser(user)) : []);
 
 export default TOP_MODULES;

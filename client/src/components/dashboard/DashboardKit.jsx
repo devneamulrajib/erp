@@ -3,6 +3,7 @@
 // quick links, skeletons, empty and error states). Tailwind only, no new deps.
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowUpRight, RefreshCw } from 'lucide-react';
+import { canOpenLink, readStoredUser } from '../../config/permissions';
 
 // Hero gradients per module, all built on the app's palette.
 const HERO_TONES = {
@@ -91,8 +92,10 @@ export const heroButtonSolid =
   'inline-flex items-center gap-1.5 rounded-xl bg-white px-3.5 py-2 text-xs font-bold text-slate-900 shadow-lg shadow-black/10 transition hover:bg-slate-100';
 
 /** KPI card. Renders as a Link when `to` is given. */
-export function KpiCard({ label, value, icon: Icon, accent = 'emerald', hint, to, loading, error }) {
+export function KpiCard({ label, value, icon: Icon, accent = 'emerald', hint, to: target, loading, error }) {
   const a = ACCENTS[accent] || ACCENTS.emerald;
+  // Only link to pages this user may open.
+  const to = target && canOpenLink(readStoredUser(), target) ? target : null;
   const body = (
     <>
       <span className={`absolute inset-x-0 top-0 h-1 ${a.bar} opacity-80`} />
@@ -155,9 +158,13 @@ export function Panel({ icon: Icon, title, subtitle, right, accent = 'emerald', 
 
 /** Grid of quick links to existing routes: items = [{ label, to, icon, accent }]. */
 export function QuickLinks({ items }) {
+  // Hide shortcuts to pages this user may not open.
+  const user = readStoredUser();
+  const visible = items.filter((i) => canOpenLink(user, i.to));
+  if (!visible.length) return null;
   return (
     <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
-      {items.map(({ label, to, icon: Icon, accent = 'emerald' }) => {
+      {visible.map(({ label, to, icon: Icon, accent = 'emerald' }) => {
         const a = ACCENTS[accent] || ACCENTS.emerald;
         return (
           <Link

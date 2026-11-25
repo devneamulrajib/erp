@@ -20,7 +20,11 @@ export default function SessionSync() {
   useEffect(() => {
     const isStaffPage = !location.pathname.startsWith('/portal') && location.pathname !== '/login';
     if (!isStaffPage || !localStorage.getItem('token')) return;
-    if (Date.now() - lastRun.current < REFRESH_MS) return;
+    // Sessions saved by an older build have no section list yet: refresh now.
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem('user') || 'null'); } catch { saved = null; }
+    const stale = !saved || !('modules' in saved) || !('roles' in saved);
+    if (!stale && Date.now() - lastRun.current < REFRESH_MS) return;
     lastRun.current = Date.now();
 
     api
@@ -29,9 +33,11 @@ export default function SessionSync() {
         if (!data?.id) return;
         let stored = null;
         try { stored = JSON.parse(localStorage.getItem('user') || 'null'); } catch { stored = null; }
-        const next = { ...(stored || {}), ...data };
+        const next = { roles: [], modules: null, ...(stored || {}), ...data };
         const changed =
           !stored ||
+          !('modules' in stored) ||
+          !('roles' in stored) ||
           stored.role !== next.role ||
           stored.name !== next.name ||
           !sameJson(stored.roles, next.roles) ||

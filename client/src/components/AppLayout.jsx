@@ -1,8 +1,8 @@
 // client/src/components/AppLayout.jsx
-// Shared layout route for staff pages. Users with their own section list
-// (Settings > Team Members > "Only selected sections") get the collapsible
-// left sidebar next to the page; admins, superadmins and users on role-based
-// access (no section list) get the page alone, exactly as before.
+// Shared layout route for staff pages. Every staff user except admins and
+// superadmins gets the collapsible left sidebar next to the page (it lists
+// the sections they can open); admins and superadmins get the page alone,
+// full width, exactly as before.
 // Because this is a layout route, the sidebar stays mounted while you move
 // between pages, so its open groups and collapsed/expanded state are kept.
 import { Suspense, useEffect, useState } from 'react';
@@ -34,7 +34,7 @@ export default function AppLayout() {
     };
   }, []);
 
-  // No sidebar (not logged in, admin, or role-based user): page only.
+  // No sidebar (not logged in, admin or superadmin): page only.
   if (!localStorage.getItem('token') || !shouldShowSidebar(user)) return <Outlet />;
 
   return (

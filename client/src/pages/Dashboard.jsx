@@ -29,6 +29,7 @@ import Topbar from '../components/Topbar';
 import InflowOutflowChart from '../components/InflowOutflowChart';
 import { DashboardHero, Skeleton, heroButton, heroButtonSolid } from '../components/dashboard/DashboardKit';
 import { greeting, currentStaffUser } from '../components/dashboard/dashboardUtils';
+import { canOpenLink } from '../config/permissions';
 
 const RANGES = [
   { key: '30d', label: '30 Days' },
@@ -45,6 +46,8 @@ const number = (value) => Number(value || 0).toLocaleString('en-BD');
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  // Buttons and shortcuts only for pages this user may open.
+  const canGo = (path) => canOpenLink(currentStaffUser(), path);
   const [summary, setSummary] = useState(null);
   const [summaryError, setSummaryError] = useState('');
   const [projects, setProjects] = useState([]);
@@ -232,10 +235,12 @@ export default function Dashboard() {
                 <Download className="size-3.5" />
                 Export
               </button>
-              <button onClick={() => navigate('/requisition-module/material-requisition-add')} className={heroButtonSolid}>
-                <Plus className="size-3.5" />
-                New Requisition
-              </button>
+              {canGo('/requisition-module/material-requisition-add') && (
+                <button onClick={() => navigate('/requisition-module/material-requisition-add')} className={heroButtonSolid}>
+                  <Plus className="size-3.5" />
+                  New Requisition
+                </button>
+              )}
             </>
           }
         />
@@ -255,12 +260,14 @@ export default function Dashboard() {
                   <p className="text-[11px] text-slate-400">{banks.accounts.length} linked accounts</p>
                 </div>
               </div>
-              <button
-                onClick={() => navigate('/accounts-module/bank-accounts')}
-                className="rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-[#174d36] hover:bg-emerald-100"
-              >
-                Manage →
-              </button>
+              {canGo('/accounts-module/bank-accounts') && (
+                <button
+                  onClick={() => navigate('/accounts-module/bank-accounts')}
+                  className="rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-[#174d36] hover:bg-emerald-100"
+                >
+                  Manage →
+                </button>
+              )}
             </div>
 
             <div className="px-5 py-4">
@@ -354,7 +361,8 @@ export default function Dashboard() {
           {/* Quick Stats */}
           <div className="col-span-12 grid grid-cols-2 gap-3 lg:col-span-3">
             <button
-              onClick={() => navigate('/project-module/projects')}
+              onClick={() => canGo('/project-module/projects') && navigate('/project-module/projects')}
+              disabled={!canGo('/project-module/projects')}
               className="flex flex-col items-start rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4 text-left shadow-sm transition hover:shadow-md"
             >
               <div className="flex size-9 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
@@ -365,7 +373,8 @@ export default function Dashboard() {
             </button>
 
             <button
-              onClick={() => navigate('/inventory-module/flat')}
+              onClick={() => canGo('/inventory-module/flat') && navigate('/inventory-module/flat')}
+              disabled={!canGo('/inventory-module/flat')}
               className="flex flex-col items-start rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-white p-4 text-left shadow-sm transition hover:shadow-md"
             >
               <div className="flex size-9 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
@@ -376,7 +385,8 @@ export default function Dashboard() {
             </button>
 
             <button
-              onClick={() => navigate('/requisition-module/material-requisition-list')}
+              onClick={() => canGo('/requisition-module/material-requisition-list') && navigate('/requisition-module/material-requisition-list')}
+              disabled={!canGo('/requisition-module/material-requisition-list')}
               className="flex flex-col items-start rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50 to-white p-4 text-left shadow-sm transition hover:shadow-md"
             >
               <div className="flex size-9 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
@@ -387,7 +397,8 @@ export default function Dashboard() {
             </button>
 
             <button
-              onClick={() => navigate('/accounts-module/approval-center')}
+              onClick={() => canGo('/accounts-module/approval-center') && navigate('/accounts-module/approval-center')}
+              disabled={!canGo('/accounts-module/approval-center')}
               className="flex flex-col items-start rounded-2xl border border-rose-100 bg-gradient-to-br from-rose-50 to-white p-4 text-left shadow-sm transition hover:shadow-md"
             >
               <div className="flex size-9 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
@@ -500,12 +511,14 @@ export default function Dashboard() {
                     <p className="text-[11px] text-slate-400">{projects.length} active projects</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => navigate('/project-module/projects')}
-                  className="text-xs font-bold text-[#174d36] hover:underline"
-                >
-                  View All →
-                </button>
+                {canGo('/project-module/projects') && (
+                  <button
+                    onClick={() => navigate('/project-module/projects')}
+                    className="text-xs font-bold text-[#174d36] hover:underline"
+                  >
+                    View All →
+                  </button>
+                )}
               </div>
 
               <div className="max-h-[300px] overflow-y-auto">
@@ -526,8 +539,10 @@ export default function Dashboard() {
                         <button
                           key={project._id || idx}
                           onClick={() =>
+                            canGo('/project-module/projects') &&
                             navigate(project._id ? `/project-module/projects/${project._id}` : '/project-module/projects')
                           }
+                          disabled={!canGo('/project-module/projects')}
                           className="flex w-full items-center gap-3.5 px-5 py-3.5 text-left transition hover:bg-slate-50"
                         >
                           <div className={`flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${colors[idx % colors.length]} text-sm font-bold text-white`}>
@@ -568,12 +583,14 @@ export default function Dashboard() {
                     <p className="text-[11px] text-slate-400">{properties.length} units available</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => navigate('/crm-module/lead')}
-                  className="text-xs font-bold text-[#174d36] hover:underline"
-                >
-                  Match Leads →
-                </button>
+                {canGo('/crm-module/lead') && (
+                  <button
+                    onClick={() => navigate('/crm-module/lead')}
+                    className="text-xs font-bold text-[#174d36] hover:underline"
+                  >
+                    Match Leads →
+                  </button>
+                )}
               </div>
 
               <div className="max-h-[220px] overflow-y-auto">
@@ -680,42 +697,50 @@ export default function Dashboard() {
             <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
               <p className="mb-3 text-sm font-bold text-slate-800">Quick Actions</p>
               <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  onClick={() => navigate('/crm-module/lead')}
-                  className="flex items-center gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/50 px-3 py-3 text-left transition hover:bg-emerald-50"
-                >
-                  <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-100 text-[#174d36]">
-                    <Users className="size-4" />
-                  </div>
-                  <span className="text-xs font-semibold text-slate-700">CRM / Leads</span>
-                </button>
-                <button
-                  onClick={() => navigate('/accounts-module/office-expense')}
-                  className="flex items-center gap-2.5 rounded-xl border border-amber-100 bg-amber-50/50 px-3 py-3 text-left transition hover:bg-amber-50"
-                >
-                  <div className="flex size-8 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
-                    <Wallet className="size-4" />
-                  </div>
-                  <span className="text-xs font-semibold text-slate-700">Add Expense</span>
-                </button>
-                <button
-                  onClick={() => navigate('/project-module/projects')}
-                  className="flex items-center gap-2.5 rounded-xl border border-blue-100 bg-blue-50/50 px-3 py-3 text-left transition hover:bg-blue-50"
-                >
-                  <div className="flex size-8 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
-                    <Building2 className="size-4" />
-                  </div>
-                  <span className="text-xs font-semibold text-slate-700">Projects</span>
-                </button>
-                <button
-                  onClick={() => navigate('/dashboard/accounts')}
-                  className="flex items-center gap-2.5 rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-3 text-left transition hover:bg-violet-50"
-                >
-                  <div className="flex size-8 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
-                    <Landmark className="size-4" />
-                  </div>
-                  <span className="text-xs font-semibold text-slate-700">Accounts</span>
-                </button>
+                {canGo('/crm-module/lead') && (
+                  <button
+                    onClick={() => navigate('/crm-module/lead')}
+                    className="flex items-center gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/50 px-3 py-3 text-left transition hover:bg-emerald-50"
+                  >
+                    <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-100 text-[#174d36]">
+                      <Users className="size-4" />
+                    </div>
+                    <span className="text-xs font-semibold text-slate-700">CRM / Leads</span>
+                  </button>
+                )}
+                {canGo('/accounts-module/office-expense') && (
+                  <button
+                    onClick={() => navigate('/accounts-module/office-expense')}
+                    className="flex items-center gap-2.5 rounded-xl border border-amber-100 bg-amber-50/50 px-3 py-3 text-left transition hover:bg-amber-50"
+                  >
+                    <div className="flex size-8 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
+                      <Wallet className="size-4" />
+                    </div>
+                    <span className="text-xs font-semibold text-slate-700">Add Expense</span>
+                  </button>
+                )}
+                {canGo('/project-module/projects') && (
+                  <button
+                    onClick={() => navigate('/project-module/projects')}
+                    className="flex items-center gap-2.5 rounded-xl border border-blue-100 bg-blue-50/50 px-3 py-3 text-left transition hover:bg-blue-50"
+                  >
+                    <div className="flex size-8 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                      <Building2 className="size-4" />
+                    </div>
+                    <span className="text-xs font-semibold text-slate-700">Projects</span>
+                  </button>
+                )}
+                {canGo('/dashboard/accounts') && (
+                  <button
+                    onClick={() => navigate('/dashboard/accounts')}
+                    className="flex items-center gap-2.5 rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-3 text-left transition hover:bg-violet-50"
+                  >
+                    <div className="flex size-8 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
+                      <Landmark className="size-4" />
+                    </div>
+                    <span className="text-xs font-semibold text-slate-700">Accounts</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>

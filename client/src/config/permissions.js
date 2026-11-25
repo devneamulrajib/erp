@@ -92,6 +92,11 @@ export function isAccountantRole(userOrRole) {
 }
 
 const ROUTE_MODULE_MAP = [
+  // Section dashboards follow their section (the main /dashboard stays open).
+  ['/dashboard/accountant', 'accounts'],
+  ['/dashboard/accounts', 'accounts'],
+  ['/dashboard/project', 'project'],
+  ['/dashboard/inventory', 'inventory'],
   ['/hrm-module', 'hrm'],
   ['/crm-module', 'crm'],
   ['/requisition-module', 'requisition'],
@@ -166,8 +171,9 @@ export function canOpenPath(user, pathname) {
     const sections = getSectionsForPath(pathname);
     return !sections || canAccessAnyModule(user, sections);
   }
+  // Role defaults: primary role plus any extra roles (same as the server).
   const moduleKey = getModuleForPath(pathname);
-  return !moduleKey || canAccessModule(user.role, moduleKey);
+  return !moduleKey || canAccessModule(user, moduleKey);
 }
 
 // Where a user lands after login / when a page is not allowed.
@@ -181,4 +187,30 @@ export function canOpenAdminPage(user, sectionKey) {
   if (!user) return false;
   if (['superadmin', 'admin'].includes(user.role)) return true; // unchanged admin check
   return Boolean(sectionKey) && (getExplicitModules(user) || []).includes(sectionKey);
+}
+
+// Pages behind AdminOnlyRoute and the section that can also open them.
+const ADMIN_PAGES = [
+  ['/accounts-module/approval-center', null],
+  ['/settings/users', 'settings'],
+  ['/support-tickets', 'support'],
+];
+
+// Can this user open a link (button, card, quick action) to `path`?
+// Same answer the route guards give, so we can hide what would bounce.
+export function canOpenLink(user, path) {
+  if (!path) return false;
+  const pathname = String(path).split('?')[0];
+  const admin = ADMIN_PAGES.find(([p]) => pathname === p || pathname.startsWith(`${p}/`));
+  if (admin) return canOpenAdminPage(user, admin[1]);
+  return canOpenPath(user, pathname);
+}
+
+// Stored staff user (localStorage), or null.
+export function readStoredUser() {
+  try {
+    return JSON.parse(localStorage.getItem('user') || 'null');
+  } catch {
+    return null;
+  }
 }
