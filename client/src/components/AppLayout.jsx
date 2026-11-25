@@ -5,6 +5,7 @@
 // full width, exactly as before.
 // Because this is a layout route, the sidebar stays mounted while you move
 // between pages, so its open groups and collapsed/expanded state are kept.
+// Mobile: sidebar becomes an overlay drawer (closed by default).
 import { Suspense, useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import AppSidebar from './AppSidebar';
@@ -22,6 +23,7 @@ function readUser() {
 
 export default function AppLayout() {
   const [user, setUser] = useState(readUser);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Access changes made in Team Members reach us through SessionSync.
   useEffect(() => {
@@ -34,12 +36,22 @@ export default function AppLayout() {
     };
   }, []);
 
+  // Mobile sidebar open state (controlled from Topbar via custom event)
+  useEffect(() => {
+    const open = () => setMobileSidebarOpen(true);
+    window.addEventListener('erp:open-sidebar', open);
+    return () => window.removeEventListener('erp:open-sidebar', open);
+  }, []);
+
   // No sidebar (not logged in, admin or superadmin): page only.
   if (!localStorage.getItem('token') || !shouldShowSidebar(user)) return <Outlet />;
 
   return (
-    <div className="flex min-h-screen w-full">
-      <AppSidebar />
+    <div className="flex min-h-screen w-full overflow-x-hidden">
+      <AppSidebar
+        mobileOpen={mobileSidebarOpen}
+        onMobileClose={() => setMobileSidebarOpen(false)}
+      />
       <div className="min-w-0 flex-1">
         <Suspense fallback={<PageLoader />}>
           <Outlet />

@@ -1,0 +1,1 @@
+import{vt as e}from"./index-BjRQZ3m9.js";async function t(){return(await e.get(`/users`)).data}export{t};

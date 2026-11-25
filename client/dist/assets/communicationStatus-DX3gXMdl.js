@@ -1,0 +1,1 @@
+import{vt as e}from"./index-BjRQZ3m9.js";var t=t=>e.get(`/communication-status`,{params:t}),n=t=>e.post(`/communication-status`,t),r=(t,n)=>e.put(`/communication-status/${t}`,n),i=t=>e.delete(`/communication-status/${t}`);export{r as i,i as n,t as r,n as t};

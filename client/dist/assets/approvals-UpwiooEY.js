@@ -1,0 +1,1 @@
+import{vt as e}from"./index-BjRQZ3m9.js";var t=async(t={})=>(await e.get(`/approvals`,{params:t})).data,n=async t=>(await e.post(`/approvals/action`,t)).data,r=async()=>(await e.get(`/approvals/accountant-metrics`)).data;export{t as n,n as r,r as t};

@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  Menu,
   Search,
   Bell,
   ChevronDown,
@@ -10,6 +11,7 @@ import {
   Inbox,
   LifeBuoy,
   ClipboardList,
+  X,
 } from 'lucide-react';
 
 import companyLogo from '../assets/trikon-logo.png';
@@ -95,6 +97,7 @@ export default function Topbar({ hideModuleNav = false }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [notifFilter, setNotifFilter] = useState('all'); // 'all' | 'unread'
   const [notifications, setNotifications] = useState([]);
@@ -239,22 +242,35 @@ export default function Topbar({ hideModuleNav = false }) {
         <div className="relative z-20 h-16 w-full border-b border-slate-200/70 bg-white/85 backdrop-blur-xl shadow-xs transition-all">
           <div className="mx-auto flex h-full w-full max-w-[1560px] items-center justify-between px-3 sm:px-6 lg:px-8">
 
-            {/* BRAND */}
-            <div
-              onClick={() => navigate('/')}
-              className="group flex cursor-pointer select-none items-center gap-3"
-            >
-              <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-b from-white to-slate-50 p-1.5 shadow-xs ring-1 ring-slate-900/10 transition-transform duration-200 group-hover:scale-105">
-                <img src={companyLogo} alt="Trikon Logo" className="h-full w-full object-contain" />
-              </div>
-              <div className="hidden sm:block">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[17px] font-extrabold tracking-tight text-slate-900">TRIKON</span>
-                  <span className="rounded-full bg-slate-900 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-white">ERP</span>
+            {/* BRAND + mobile menu trigger */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-label="Open menu"
+                onClick={() => {
+                  setMobileMenuOpen(true);
+                  window.dispatchEvent(new CustomEvent('erp:open-sidebar'));
+                }}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 md:hidden"
+              >
+                <Menu size={20} />
+              </button>
+              <div
+                onClick={() => navigate('/')}
+                className="group flex cursor-pointer select-none items-center gap-3"
+              >
+                <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-b from-white to-slate-50 p-1.5 shadow-xs ring-1 ring-slate-900/10 transition-transform duration-200 group-hover:scale-105">
+                  <img src={companyLogo} alt="Trikon Logo" className="h-full w-full object-contain" />
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Enterprise OS</p>
+                <div className="hidden sm:block">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[17px] font-extrabold tracking-tight text-slate-900">TRIKON</span>
+                    <span className="rounded-full bg-slate-900 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-white">ERP</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Enterprise OS</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -513,11 +529,41 @@ export default function Topbar({ hideModuleNav = false }) {
           )}
         </div>
 
-        {/* SUB NAVIGATION (ModuleNav) - the workspace page shows its own sidebar instead */}
+        {/* SUB NAVIGATION (ModuleNav) - hidden on mobile, shown in drawer instead */}
         {!hideModuleNav && (
-          <div className="relative z-10 -mt-[1px] flex justify-center px-4">
+          <div className="relative z-10 -mt-[1px] hidden justify-center px-4 md:flex">
             <ModuleNav badgeCounts={moduleCounts} itemBadgeCounts={itemCounts} />
           </div>
+        )}
+
+        {/* MOBILE MODULE NAV DRAWER */}
+        {mobileMenuOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-[10000] bg-black/40 md:hidden"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            <div className="fixed inset-y-0 left-0 z-[10001] w-72 overflow-y-auto bg-white shadow-2xl md:hidden">
+              <div className="flex h-16 items-center justify-between border-b border-slate-200 px-4">
+                <span className="text-sm font-bold text-slate-900">Menu</span>
+                <button
+                  type="button"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="p-2">
+                <ModuleNav
+                  mobile
+                  badgeCounts={moduleCounts}
+                  itemBadgeCounts={itemCounts}
+                  onNavigate={() => setMobileMenuOpen(false)}
+                />
+              </div>
+            </div>
+          </>
         )}
       </header>
 

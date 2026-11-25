@@ -1,0 +1,1 @@
+import{vt as e}from"./index-BjRQZ3m9.js";var t=t=>e.get(`/area`,{params:t}),n=t=>e.post(`/area`,t),r=(t,n)=>e.put(`/area/${t}`,n),i=t=>e.delete(`/area/${t}`);export{r as i,i as n,t as r,n as t};

@@ -11,7 +11,7 @@ function readUser() {
   }
 }
 
-export default function ModuleNav({ badgeCounts = {}, itemBadgeCounts = {} }) {
+export default function ModuleNav({ badgeCounts = {}, itemBadgeCounts = {}, mobile = false, onNavigate }) {
   const [resetKey, setResetKey] = useState(0);
   const [user, setUser] = useState(readUser);
   // Same menu as before, limited to the sections this user may open (see getNavForUser).
@@ -26,9 +26,11 @@ export default function ModuleNav({ badgeCounts = {}, itemBadgeCounts = {} }) {
 
   const closeAll = useCallback(() => {
     setResetKey((key) => key + 1);
-  }, []);
+    onNavigate?.();
+  }, [onNavigate]);
 
   useEffect(() => {
+    if (mobile) return;
     const handleClickOutside = (event) => {
       if (
         wrapperRef.current &&
@@ -51,7 +53,27 @@ export default function ModuleNav({ badgeCounts = {}, itemBadgeCounts = {} }) {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
     };
-  }, [closeAll]);
+  }, [closeAll, mobile]);
+
+  if (mobile) {
+    return (
+      <nav ref={wrapperRef} className="flex w-full flex-col gap-0.5">
+        <div key={resetKey} className="flex flex-col gap-0.5">
+          {modules.map((mod) => (
+            <MenuNode
+              key={mod.key}
+              item={mod}
+              depth={0}
+              onNavigate={closeAll}
+              badgeCount={badgeCounts[mod.key]}
+              itemBadgeCounts={itemBadgeCounts}
+              mobile
+            />
+          ))}
+        </div>
+      </nav>
+    );
+  }
 
   return (
     <nav

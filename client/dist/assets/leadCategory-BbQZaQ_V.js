@@ -1,0 +1,1 @@
+import{vt as e}from"./index-BjRQZ3m9.js";var t=t=>e.get(`/lead-category`,{params:t}),n=()=>e.get(`/lead-category/next-code`),r=t=>e.post(`/lead-category`,t),i=(t,n)=>e.put(`/lead-category/${t}`,n),a=t=>e.delete(`/lead-category/${t}`);export{i as a,n as i,a as n,t as r,r as t};

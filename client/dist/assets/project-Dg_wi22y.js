@@ -1,1 +1,0 @@
-import{gt as e}from"./index-ugk-zmqp.js";var t=()=>e.get(`/projects`);export{t};

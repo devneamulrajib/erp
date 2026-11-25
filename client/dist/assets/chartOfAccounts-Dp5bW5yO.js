@@ -1,1 +1,0 @@
-import{gt as e}from"./index-ugk-zmqp.js";var t=t=>e.get(`/chart-of-accounts`,{params:t}).then(e=>e.data),n=t=>e.post(`/chart-of-accounts`,t).then(e=>e.data),r=(t,n)=>e.put(`/chart-of-accounts/${t}`,n).then(e=>e.data),i=t=>e.delete(`/chart-of-accounts/${t}`).then(e=>e.data);export{r as i,i as n,t as r,n as t};

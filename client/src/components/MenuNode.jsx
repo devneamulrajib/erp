@@ -28,6 +28,7 @@ export default function MenuNode({
   onNavigate,
   badgeCount = 0,
   itemBadgeCounts = {},
+  mobile = false,
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -58,7 +59,7 @@ export default function MenuNode({
 
   // Detect edge collision and flip dropdown to the left if overflowing viewport
   useEffect(() => {
-    if (!isOpen || !panelRef.current) return;
+    if (mobile || !isOpen || !panelRef.current) return;
 
     const checkPosition = () => {
       if (!panelRef.current) return;
@@ -74,7 +75,7 @@ export default function MenuNode({
       window.removeEventListener('resize', checkPosition);
       window.removeEventListener('scroll', checkPosition, true);
     };
-  }, [isOpen, isTopLevel]);
+  }, [isOpen, isTopLevel, mobile]);
 
   const openNow = () => {
     clearTimeout(closeTimer.current);
@@ -157,12 +158,54 @@ export default function MenuNode({
   };
 
   const hoverHandlers =
-    hasChildren && hoverCapable.current
+    !mobile && hasChildren && hoverCapable.current
       ? {
           onMouseEnter: openNow,
           onMouseLeave: scheduleClose,
         }
       : {};
+
+  // Mobile: vertical accordion style
+  if (mobile) {
+    return (
+      <div className="w-full">
+        <button
+          type="button"
+          onClick={handleActivate}
+          className={`
+            flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] font-medium transition-colors
+            ${isActive ? 'bg-black text-white' : 'text-slate-800 hover:bg-slate-100'}
+            ${isHighlight && !isActive ? 'bg-blue-50 text-blue-900' : ''}
+          `}
+        >
+          {Icon && <Icon size={16} className="shrink-0" />}
+          <span className="truncate">{item.label}</span>
+          {count > 0 && (
+            <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white">
+              {count > 9 ? '9+' : count}
+            </span>
+          )}
+          {hasChildren && (
+            <ChevronDown size={14} className={`ml-auto shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          )}
+        </button>
+        {hasChildren && isOpen && (
+          <div className="ml-4 mt-0.5 flex flex-col gap-0.5 border-l border-slate-200 pl-2">
+            {item.children.map((child) => (
+              <MenuNode
+                key={child.key}
+                item={child}
+                depth={depth + 1}
+                onNavigate={onNavigate}
+                itemBadgeCounts={itemBadgeCounts}
+                mobile
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="relative overflow-visible" {...hoverHandlers}>
