@@ -603,6 +603,10 @@ export const getNavForUser = (user) => {
 // - Admins: every module.
 // - Everyone else: modules their roles allow, minus pages the route guard
 //   would refuse (the top menu keeps showing TOP_MODULES as before).
+// Left sidebar only for users with their own section list; admins,
+// superadmins and role-based users (no list) keep the page layout as before.
+export const shouldShowSidebar = (user) => Boolean(user) && hasExplicitModules(user) && !isAdminUser(user);
+
 // Sidebar entries must lead somewhere: drop placeholder items with no page.
 const dropDeadLeaves = (items) =>
   items

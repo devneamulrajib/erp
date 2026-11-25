@@ -1,16 +1,16 @@
 // client/src/components/AppSidebar.jsx
-// Collapsible left sidebar for staff pages, in the ERP's own look (white panel,
-// slate borders, black active item like the top menu). The three-dot button
-// switches between the slim icon rail and the full menu; the choice is saved.
-// It lists only the sections and pages this user may open
+// Collapsible left sidebar, in the ERP's own look (white panel, slate borders,
+// black active item like the top menu). Shown ONLY to users with their own
+// section list (not admins/superadmins, not role-based users). The three-dot
+// button switches between the slim icon rail and the full menu; the choice is
+// saved. It lists only the sections and pages this user may open
 // (getSidebarNavForUser); the floating top menu is unchanged.
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronRight, EllipsisVertical } from 'lucide-react';
 import companyLogo from '../assets/trikon-logo.png';
-import { getSidebarNavForUser } from './navConfig';
+import { getSidebarNavForUser, shouldShowSidebar } from './navConfig';
 import { USER_UPDATED_EVENT } from './SessionSync';
-import { hasExplicitModules, isAdminUser } from '../config/permissions';
 
 const COLLAPSED_KEY = 'erp.sidebar.collapsed';
 const OPEN_KEY = 'erp.sidebar.open';
@@ -31,15 +31,8 @@ function readJson(key, fallback) {
   }
 }
 
-// Users with their own section list start with the sidebar open; everyone
-// else starts with the slim rail so their pages look as before.
-function initialCollapsed() {
-  const saved = localStorage.getItem(COLLAPSED_KEY);
-  if (saved === '1') return true;
-  if (saved === '0') return false;
-  const user = readUser();
-  return !(hasExplicitModules(user) && !isAdminUser(user));
-}
+// Starts open; the three-dot button's choice is remembered.
+const initialCollapsed = () => localStorage.getItem(COLLAPSED_KEY) === '1';
 
 function collectRoutes(items, out = []) {
   items.forEach((item) => {
@@ -162,7 +155,7 @@ export default function AppSidebar() {
     if (route) navigate(route);
   };
 
-  if (!modules.length) return null;
+  if (!shouldShowSidebar(user) || !modules.length) return null;
 
   return (
     <aside
