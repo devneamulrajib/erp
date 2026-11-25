@@ -1,5 +1,6 @@
 // client/src/pages/EmployeeListPage.jsx
 import { useState, useEffect, useCallback } from 'react';
+import { useLocation, useParams } from 'react-router-dom';
 import {
   Plus, Search, Pencil, Trash2, CheckCircle, AlertCircle, XCircle, TrendingDown,
   KeyRound, ShieldCheck, ShieldOff, CalendarDays, CalendarCheck, Save,
@@ -71,8 +72,21 @@ const WIPE_LABELS = {
   attendance: 'attendance records for the selected date',
 };
 
+// Which tab to open from the link: ?tab=leave|advance|attendance|summary
+// (used by notifications and My Workspace), or the HRM menu page it came from.
+const TAB_FROM_QUERY = { employees: 'employees', advance: 'advances', advances: 'advances', summary: 'summary', leave: 'leave', attendance: 'attendance' };
+const TAB_FROM_SUBPAGE = { attendance: 'attendance', 'leave-application': 'leave' };
+const tabFromLocation = (search, subpage) =>
+  TAB_FROM_QUERY[new URLSearchParams(search).get('tab')] || TAB_FROM_SUBPAGE[subpage] || 'employees';
+
 export default function EmployeeListPage() {
-  const [activeTab, setActiveTab] = useState('employees'); // employees | advances | summary | leave | attendance
+  const location = useLocation();
+  const { subpage } = useParams();
+  const [activeTab, setActiveTab] = useState(() => tabFromLocation(location.search, subpage)); // employees | advances | summary | leave | attendance
+  // Follow the link when the user opens another HRM link while on this page.
+  useEffect(() => {
+    setActiveTab(tabFromLocation(location.search, subpage));
+  }, [location.search, subpage]);
   const [employees, setEmployees] = useState([]);
   const [advances, setAdvances] = useState([]);
   const [summary, setSummary] = useState([]);
