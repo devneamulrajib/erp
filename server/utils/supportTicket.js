@@ -83,7 +83,9 @@ const STAFF_ROLES = new Set(
 const isStaff = (actor) => {
   if (!actor) return false;
   const roles = [actor.role, ...(actor.secondaryRoles || [])].filter(Boolean).map((r) => String(r).toLowerCase());
-  return roles.some((r) => STAFF_ROLES.has(r));
+  if (roles.some((r) => STAFF_ROLES.has(r))) return true;
+  // Users explicitly granted the Support section (Settings > Team Members).
+  return Array.isArray(actor.modules) && actor.modules.includes('support');
 };
 
 const isAdmin = (actor) => {
@@ -106,6 +108,7 @@ const loadActor = (req, res, next) => {
     email: req.user.email,
     role: req.user.role,
     secondaryRoles: req.user.secondaryRoles || [],
+    modules: req.user.modules || null,
   };
   next();
 };

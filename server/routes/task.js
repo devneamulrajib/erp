@@ -68,7 +68,9 @@ router.use(auth, async (req, res, next) => {
       if (!Array.isArray(roles) || !roles.length) roles = [u.role];
       actor = { id: u.id, name: u.name || u.username || 'Admin', role: u.role, roles };
     }
-    if (!canAccessModule({ role: actor.role, roles: actor.roles }, 'hrm')) {
+    // HRM holders, or users explicitly granted the Tasks & Work Log section.
+    const access = { role: actor.role, roles: actor.roles, modules: req.user.modules };
+    if (!canAccessModule(access, 'hrm') && !canAccessModule(access, 'tasks')) {
       return res.status(403).json({ message: 'Access denied' });
     }
     actor.canManage = actor.roles.some((r) => MANAGE_ROLES.includes(r));

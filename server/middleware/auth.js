@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { getModulesFor } = require('../utils/userModules');
 
 // Staff (ERP user) auth — only accepts tokens issued by POST /api/auth/login.
 // Portal tokens (customer/supplier/employee/investor, carrying `portal: true`)
@@ -15,8 +16,13 @@ const userCache = new Map(); // id -> { at, user }
 async function loadUser(id) {
   const hit = userCache.get(id);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.user;
-  const row = await User.findByPk(id, { attributes: ['id', 'name', 'email', 'role', 'isActive'] });
+  const row = await User.findByPk(id, { attributes: ['id', 'name', 'email', 'role', 'roles', 'isActive'] });
   const user = row ? row.get({ plain: true }) : null;
+  if (user) {
+    user.roles = Array.isArray(row.roles) ? row.roles : [];
+    // Explicit ERP section list (Settings > Team Members), null = role defaults.
+    user.modules = await getModulesFor(id);
+  }
   userCache.set(id, { at: Date.now(), user });
   if (userCache.size > 5000) userCache.clear();
   return user;
@@ -54,8 +60,17 @@ module.exports = async function (req, res, next) {
   if (user.isActive === false) {
     return res.status(401).json({ message: 'This account has been deactivated' });
   }
-  req.user = { ...decoded, id: user.id, role: user.role, name: user.name, email: user.email };
+  req.user = {
+    ...decoded,
+    id: user.id,
+    role: user.role,
+    roles: user.roles || [],
+    modules: user.modules || null,
+    name: user.name,
+    email: user.email,
+  };
   next();
 };
 
+module.exports.loadUser = loadUser;
 module.exports.clearUserCache = (id) => (id === undefined ? userCache.clear() : userCache.delete(Number(id)));

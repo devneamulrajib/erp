@@ -6,6 +6,7 @@ const auth = require('../middleware/auth');
 const { requireRole } = require('../middleware/permissions');
 const { ROLE_PERMISSIONS } = require('../config/permissions');
 const limiter = require('../utils/attemptLimiter');
+const { getModulesFor } = require('../utils/userModules');
 
 // Creating users requires a logged-in admin/superadmin (the ERP UI uses
 // POST /api/users; this endpoint is kept only for API/script use).
@@ -75,12 +76,28 @@ router.post('/login', async (req, res) => {
 
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        roles: Array.isArray(user.roles) ? user.roles : [],
+        // Explicit ERP sections (null = role-based access, as before).
+        modules: await getModulesFor(user.id),
+      },
     });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
+});
+
+// Current staff user (role, extra roles, section list). The client calls this
+// on load so menus and route guards follow changes made in Team Members
+// without a fresh login.
+router.get('/me', auth, (req, res) => {
+  const { id, name, email, role, roles, modules } = req.user;
+  res.json({ id, name, email, role, roles: roles || [], modules: modules || null });
 });
 
 module.exports = router;

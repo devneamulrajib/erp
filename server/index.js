@@ -34,6 +34,8 @@ sequelize.authenticate()
   });
 
 // Core & authentication
+// Section access for users with an explicit section list (see middleware/moduleGate.js).
+app.use('/api', require('./middleware/moduleGate'));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/dashboard', require('./routes/dashboard'));

@@ -2,10 +2,39 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const auth = require('../middleware/auth');
-const { requireRole } = require('../middleware/permissions');
+const { requireUserManager } = require('../middleware/permissions');
 const User = require('../models/User');
 const sequelize = require('../config/db');
-const { ROLE_PERMISSIONS } = require('../config/permissions');
+const { ROLE_PERMISSIONS, MODULE_KEYS, normalizeModules } = require('../config/permissions');
+const { getModulesMap, setModulesFor } = require('../utils/userModules');
+
+// Team Members can be managed by admins, or by users explicitly granted the
+// Settings section. Those non-admin managers cannot touch admin accounts,
+// cannot hand out admin roles or the Settings section, and cannot change
+// their own access.
+const ADMIN_ROLES = ['superadmin', 'admin'];
+const hasAdminRole = (role, roles) =>
+  ADMIN_ROLES.includes(role) || (Array.isArray(roles) && roles.some((r) => ADMIN_ROLES.includes(r)));
+
+function managerBlock(req, { target = null, role, roles, modules } = {}) {
+  if (ADMIN_ROLES.includes(req.user.role)) return null;
+  if (hasAdminRole(role, roles)) return 'Only an admin can grant admin roles';
+  if (target && hasAdminRole(target.role, target.roles)) return 'Only an admin can change an admin account';
+  if (target && Number(target.id) === Number(req.user.id)) return 'You cannot change your own access';
+  if (Array.isArray(modules) && modules.includes('settings')) return 'Only an admin can grant the Settings section';
+  return null;
+}
+
+// Body `modules`: undefined = leave as is, null/[] = role defaults,
+// array of section keys = explicit list. Returns { value } or { error }.
+function readModules(raw) {
+  if (raw === undefined) return { value: undefined };
+  if (raw === null || (Array.isArray(raw) && raw.length === 0)) return { value: null };
+  if (!Array.isArray(raw)) return { error: 'modules must be a list of section keys' };
+  const bad = raw.filter((k) => !MODULE_KEYS.includes(k));
+  if (bad.length) return { error: `Unknown section(s): ${bad.join(', ')}` };
+  return { value: normalizeModules(raw) };
+}
 
 // ============================================================
 // AUTO-MIGRATION: Self-heal the database on boot
@@ -40,12 +69,15 @@ const { ROLE_PERMISSIONS } = require('../config/permissions');
 // ============================================================
 // GET ALL USERS
 // ============================================================
-router.get('/', auth, requireRole('superadmin', 'admin'), async (req, res) => {
+router.get('/', auth, requireUserManager, async (req, res) => {
   try {
-    const users = await User.findAll({
-      attributes: { exclude: ['password'] },
-      order: [['createdAt', 'ASC']],
-    });
+    const [users, modulesById] = await Promise.all([
+      User.findAll({
+        attributes: { exclude: ['password'] },
+        order: [['createdAt', 'ASC']],
+      }),
+      getModulesMap(),
+    ]);
 
     const formatted = users.map((u) => {
       const data = u.toJSON();
@@ -54,6 +86,7 @@ router.get('/', auth, requireRole('superadmin', 'admin'), async (req, res) => {
       } else {
         data.isActive = data.isActive === null || data.isActive === undefined ? true : Boolean(data.isActive);
       }
+      data.modules = modulesById[data.id] || null; // null = role-based access
       return data;
     });
 
@@ -66,7 +99,7 @@ router.get('/', auth, requireRole('superadmin', 'admin'), async (req, res) => {
 // ============================================================
 // CREATE NEW USER
 // ============================================================
-router.post('/', auth, requireRole('superadmin', 'admin'), async (req, res) => {
+router.post('/', auth, requireUserManager, async (req, res) => {
   try {
     const { name, email, password, role, roles = [] } = req.body;
 
@@ -76,6 +109,10 @@ router.post('/', auth, requireRole('superadmin', 'admin'), async (req, res) => {
     if (role === 'superadmin' && req.user.role !== 'superadmin') {
       return res.status(403).json({ message: 'Only a superadmin can create a superadmin' });
     }
+    const mods = readModules(req.body.modules);
+    if (mods.error) return res.status(400).json({ message: mods.error });
+    const blocked = managerBlock(req, { role, roles, modules: mods.value });
+    if (blocked) return res.status(403).json({ message: blocked });
 
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
@@ -92,12 +129,23 @@ router.post('/', auth, requireRole('superadmin', 'admin'), async (req, res) => {
       isActive: true,
     });
 
+    if (mods.value) {
+      try {
+        await setModulesFor(user.id, mods.value);
+      } catch (e) {
+        // Don't leave a user behind with more access than was asked for.
+        await User.destroy({ where: { id: user.id } });
+        return res.status(e.status || 500).json({ message: e.message });
+      }
+    }
+
     res.status(201).json({
       id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
       roles: user.roles,
+      modules: mods.value || null,
       isActive: true,
     });
   } catch (err) {
@@ -108,7 +156,7 @@ router.post('/', auth, requireRole('superadmin', 'admin'), async (req, res) => {
 // ============================================================
 // UPDATE USER ROLE & PERMISSION ROLES
 // ============================================================
-router.put('/:id/role', auth, requireRole('superadmin', 'admin'), async (req, res) => {
+router.put('/:id/role', auth, requireUserManager, async (req, res) => {
   try {
     const { role, roles } = req.body;
     const user = await User.findByPk(req.params.id);
@@ -118,6 +166,8 @@ router.put('/:id/role', auth, requireRole('superadmin', 'admin'), async (req, re
     if (req.user.role !== 'superadmin' && (role === 'superadmin' || user.role === 'superadmin')) {
       return res.status(403).json({ message: 'Only a superadmin can change superadmin roles' });
     }
+    const blockedRole = managerBlock(req, { target: user, role, roles });
+    if (blockedRole) return res.status(403).json({ message: blockedRole });
 
     const updateFields = {};
     if (role) {
@@ -141,9 +191,29 @@ router.put('/:id/role', auth, requireRole('superadmin', 'admin'), async (req, re
 });
 
 // ============================================================
+// UPDATE SECTION ACCESS (explicit ERP sections, or null = role defaults)
+// ============================================================
+router.put('/:id/access', auth, requireUserManager, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    const mods = readModules(req.body.modules === undefined ? null : req.body.modules);
+    if (mods.error) return res.status(400).json({ message: mods.error });
+    const blocked = managerBlock(req, { target: user, modules: mods.value });
+    if (blocked) return res.status(403).json({ message: blocked });
+
+    await setModulesFor(user.id, mods.value);
+    auth.clearUserCache(user.id); // applies on the user's next request
+    res.json({ id: user.id, modules: mods.value || null });
+  } catch (err) {
+    res.status(err.status || 500).json({ message: err.status ? err.message : 'Server error', error: err.message });
+  }
+});
+
+// ============================================================
 // TOGGLE USER STATUS (ACTIVATE / DEACTIVATE)
 // ============================================================
-router.put('/:id/status', auth, requireRole('superadmin', 'admin'), async (req, res) => {
+router.put('/:id/status', auth, requireUserManager, async (req, res) => {
   try {
     const { isActive } = req.body;
     const user = await User.findByPk(req.params.id);
@@ -152,6 +222,8 @@ router.put('/:id/status', auth, requireRole('superadmin', 'admin'), async (req, 
     if (user.role === 'superadmin') {
       return res.status(400).json({ message: 'Superadmin is always active and cannot be deactivated' });
     }
+    const blockedStatus = managerBlock(req, { target: user });
+    if (blockedStatus) return res.status(403).json({ message: blockedStatus });
 
     await User.update({ isActive: Boolean(isActive) }, { where: { id: req.params.id } });
     auth.clearUserCache(req.params.id); // deactivation logs the user out right away
@@ -164,7 +236,7 @@ router.put('/:id/status', auth, requireRole('superadmin', 'admin'), async (req, 
 // ============================================================
 // DELETE USER
 // ============================================================
-router.delete('/:id', auth, requireRole('superadmin', 'admin'), async (req, res) => {
+router.delete('/:id', auth, requireUserManager, async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -172,6 +244,8 @@ router.delete('/:id', auth, requireRole('superadmin', 'admin'), async (req, res)
     if (user.role === 'superadmin') {
       return res.status(400).json({ message: 'Superadmin cannot be deleted' });
     }
+    const blockedDelete = managerBlock(req, { target: user });
+    if (blockedDelete) return res.status(403).json({ message: blockedDelete });
 
     await User.destroy({ where: { id: req.params.id } });
     auth.clearUserCache(req.params.id);
