@@ -22,8 +22,9 @@ import {
   TrendingUp,
   LineChart,
   ListChecks,
+  Sparkles,
 } from 'lucide-react';
-import { canAccessModule } from '../config/permissions';
+import { canAccessModule, hasExplicitModules, canOpenPath, isAdminUser } from '../config/permissions';
 
 /* ============================================================
    FLOATING ISLAND UI CONFIG & ACCENTS
@@ -110,6 +111,7 @@ const DASHBOARD_SUBPAGES = [
   { key: 'hrm', label: 'HRM', icon: UserRound, route: null },
   { key: 'crm', label: 'CRM', icon: Waypoints, route: null },
   { key: 'all', label: 'All', icon: Grid3x3, route: '/dashboard' },
+  { key: 'workspace', label: 'My Workspace', icon: Sparkles, route: '/workspace' },
 ];
 
 const PROJECT_SUBPAGES = [
@@ -203,6 +205,7 @@ const ACCOUNTING_SUBPAGES = [
     label: 'Approval Center',
     icon: ShieldCheck,
     route: '/accounts-module/approval-center',
+    adminOnly: true, // page is admin-only (AdminOnlyRoute)
   },
   {
     key: 'accountant-requests',
@@ -527,6 +530,108 @@ export const getModulesForRole = (userOrRole) => {
     }
     return canAccessModule(userOrRole, m.key);
   });
+};
+
+/* ============================================================
+   PER-USER NAVIGATION
+   ============================================================ */
+const WORKSPACE_MODULE = {
+  key: 'workspace',
+  label: 'My Workspace',
+  shortLabel: 'Home',
+  icon: Sparkles,
+  route: '/workspace',
+  ui: { priority: 0, accent: 'amber' },
+};
+
+// Drops items the user cannot open (route guard says no, or admin-only) and
+// parents left with no children. Keeps every other item exactly as configured.
+function filterItems(items, user) {
+  const admin = ['superadmin', 'admin'].includes(user?.role);
+  return items
+    .map((item) => {
+      if (item.adminOnly && !admin) return null;
+      if (item.children?.length) {
+        const children = filterItems(item.children, user);
+        if (!children.length) return null;
+        return { ...item, children };
+      }
+      if (item.route && !canOpenPath(user, item.route)) return null;
+      return item;
+    })
+    .filter(Boolean);
+}
+
+// Menu for the logged-in user.
+// - Users WITHOUT an explicit section list (all existing users) and admins get
+//   TOP_MODULES unchanged, same as before.
+// - Users WITH a list (Settings > Team Members) see only their sections, with
+//   "My Workspace" first; Tasks-only users get Tasks & Work Log as its own menu.
+export const getNavForUser = (user) => {
+  if (!user || isAdminUser(user) || !hasExplicitModules(user)) return TOP_MODULES;
+
+  const out = [];
+  if (!canAccessModule(user, 'dashboards')) out.push(WORKSPACE_MODULE);
+  TOP_MODULES.forEach((m) => {
+    if (m.key === 'dashboards') {
+      if (!canAccessModule(user, 'dashboards')) return;
+    } else if (!canAccessModule(user, m.key)) {
+      return;
+    }
+    const children = m.children?.length ? filterItems(m.children, user) : [];
+    if (m.children?.length && !children.length) return;
+    out.push({ ...m, children });
+  });
+
+  if (!canAccessModule(user, 'hrm') && canAccessModule(user, 'tasks')) {
+    const tasks = HRM_SUBPAGES.find((i) => i.key === 'tasks-worklog');
+    out.push({
+      key: 'tasks',
+      label: 'Tasks',
+      shortLabel: 'Tasks',
+      icon: ListChecks,
+      route: null,
+      children: tasks.children,
+      ui: { priority: 7, accent: 'rose' },
+    });
+  }
+  return out;
+};
+
+// Menu for the left sidebar: only what this user may open.
+// - Users with an explicit section list: same as getNavForUser.
+// - Admins: every module.
+// - Everyone else: modules their roles allow, minus pages the route guard
+//   would refuse (the top menu keeps showing TOP_MODULES as before).
+// Sidebar entries must lead somewhere: drop placeholder items with no page.
+const dropDeadLeaves = (items) =>
+  items
+    .map((item) => {
+      if (item.children?.length) {
+        const children = dropDeadLeaves(item.children);
+        if (!children.length) return item.route ? { ...item, children: [] } : null;
+        return { ...item, children };
+      }
+      return item.route ? item : null;
+    })
+    .filter(Boolean);
+
+export const getSidebarNavForUser = (user) => dropDeadLeaves(sidebarModules(user));
+
+const sidebarModules = (user) => {
+  if (!user) return [];
+  if (hasExplicitModules(user) && !isAdminUser(user)) return getNavForUser(user);
+  const role = user.role;
+  return TOP_MODULES.map((m) => {
+    if (!isAdminUser(user)) {
+      if (Array.isArray(m.roles) && role && !m.roles.includes(role)) return null;
+      if (!canAccessModule(user, m.key)) return null;
+    }
+    if (!m.children?.length) return m;
+    const children = filterItems(m.children, user);
+    if (!children.length) return m.route ? { ...m, children: [] } : null;
+    return { ...m, children };
+  }).filter(Boolean);
 };
 
 export default TOP_MODULES;

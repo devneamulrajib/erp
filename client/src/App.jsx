@@ -177,7 +177,10 @@ import TitleManager from './components/TitleManager'
 import { PageLoader } from './components/PageLoader'
 import { lazyPage } from './utils/lazyPage'
 const UserManagementPage = lazyPage(() => import('./pages/UserManagementPage'))
-import { canAccessModule, getModuleForPath } from './config/permissions'
+const WorkspaceDashboard = lazyPage(() => import('./pages/WorkspaceDashboard'))
+import SessionSync from './components/SessionSync'
+import AppLayout from './components/AppLayout'
+import { canOpenPath, homePathFor, canOpenAdminPage } from './config/permissions'
 
 import './App.css'
 
@@ -189,28 +192,38 @@ function ProtectedRoute({ children }) {
     return <Navigate to="/login" replace />;
   }
 
-  const storedUser = localStorage.getItem('user');
-  const user = storedUser ? JSON.parse(storedUser) : null;
-  const moduleKey = getModuleForPath(location.pathname);
+  const user = readStaffUser();
 
-  if (user && moduleKey && !canAccessModule(user.role, moduleKey)) {
-    return <Navigate to="/dashboard" replace />;
+  // Users with an explicit section list only open their sections; everyone
+  // else keeps the old role check (see canOpenPath in config/permissions).
+  if (user && !canOpenPath(user, location.pathname)) {
+    const home = homePathFor(user);
+    if (home !== location.pathname) return <Navigate to={home} replace />;
   }
 
   return children;
 }
 
-function AdminOnlyRoute({ children }) {
+function readStaffUser() {
+  try {
+    return JSON.parse(localStorage.getItem('user') || 'null');
+  } catch {
+    return null;
+  }
+}
+
+// Admin pages. `section` lets a user who was explicitly granted that section
+// (e.g. Settings -> Team Members, Support -> Tickets) open it too.
+function AdminOnlyRoute({ children, section }) {
   const token = localStorage.getItem('token');
   if (!token) {
     return <Navigate to="/login" replace />;
   }
 
-  const storedUser = localStorage.getItem('user');
-  const user = storedUser ? JSON.parse(storedUser) : null;
+  const user = readStaffUser();
 
-  if (!user || !['superadmin', 'admin'].includes(user.role)) {
-    return <Navigate to="/dashboard" replace />;
+  if (!canOpenAdminPage(user, section)) {
+    return <Navigate to={homePathFor(user)} replace />;
   }
 
   return children;
@@ -219,7 +232,7 @@ function AdminOnlyRoute({ children }) {
 function PublicOnlyRoute({ children }) {
   const token = localStorage.getItem('token');
   if (token) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={homePathFor(readStaffUser())} replace />;
   }
   return children;
 }
@@ -250,13 +263,17 @@ function App() {
   return (
     <BrowserRouter>
       <TitleManager />
+      <SessionSync />
       <Suspense fallback={<PageLoader />}>
       <Routes>
         {/* ========================================================
             --- PUBLIC & ERP CORE ROUTES ---
         ======================================================== */}
         <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+        {/* Every staff page shares one layout: collapsible left sidebar + the page (its own top bar stays) */}
+        <Route element={<AppLayout />}>
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/workspace" element={<ProtectedRoute><WorkspaceDashboard /></ProtectedRoute>} />
         <Route path="/dashboard/project" element={<ProtectedRoute><ProjectDashboard /></ProtectedRoute>} />
         <Route path="/dashboard/inventory" element={<ProtectedRoute><InventoryDashboard /></ProtectedRoute>} />
         <Route path="/project-module/projects" element={<ProtectedRoute><Project /></ProtectedRoute>} />
@@ -388,7 +405,7 @@ function App() {
         <Route path="/hrm-module/pay-slip-process" element={<ProtectedRoute><PaySlipProcess /></ProtectedRoute>} />
         <Route path="/hrm-module/pay-slip" element={<ProtectedRoute><PaySlip /></ProtectedRoute>} />
         <Route path="/hrm-module/:subpage" element={<ProtectedRoute><EmployeeListPage /></ProtectedRoute>} />
-        <Route path="/support-tickets" element={<AdminOnlyRoute><SupportTicketsPage /></AdminOnlyRoute>} />
+        <Route path="/support-tickets" element={<AdminOnlyRoute section="support"><SupportTicketsPage /></AdminOnlyRoute>} />
 
         <Route path="/dashboard/accounts" element={<ProtectedRoute><AccountsDashboard /></ProtectedRoute>} />
         <Route path="/inventory-module/reports/purchase-order-receive-details" element={<ProtectedRoute><PurchaseOrderReceiveReportPage /></ProtectedRoute>} />
@@ -424,7 +441,8 @@ function App() {
         <Route path="/investor-reports" element={<ProtectedRoute><InvestorReportsPage /></ProtectedRoute>} />
 
         {/* --- Team / User Settings --- */}
-        <Route path="/settings/users" element={<AdminOnlyRoute><UserManagementPage /></AdminOnlyRoute>} />
+        <Route path="/settings/users" element={<AdminOnlyRoute section="settings"><UserManagementPage /></AdminOnlyRoute>} />
+        </Route>
 
         {/* ========================================================
             --- CLIENT & EMPLOYEE PORTAL ROUTES ---

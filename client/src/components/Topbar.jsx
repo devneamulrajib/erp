@@ -23,6 +23,7 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
 } from '../api/notifications';
+import { canOpenAdminPage } from '../config/permissions';
 
 const RELATED_ROUTES = {
   MaterialRequisitionQuotation: (id) => `/requisition-module/material-requisition-list?reviewId=${id}`,
@@ -89,7 +90,7 @@ const MODULE_TAG_STYLES = {
   default: 'bg-slate-100 text-slate-700 border-slate-200/60',
 };
 
-export default function Topbar() {
+export default function Topbar({ hideModuleNav = false }) {
   const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -113,6 +114,8 @@ export default function Topbar() {
   const userEmail = currentUser?.email || 'user@trikon.erp';
   const initial = (userName.charAt(0) || 'U').toUpperCase();
   const isAdmin = String(userRole).toLowerCase().includes('admin');
+  // Tickets: admins as before, plus users explicitly granted the Support section.
+  const canSeeTickets = isAdmin || canOpenAdminPage(currentUser, 'support');
 
   // Badge role color
   const roleBadgeStyle = useMemo(() => {
@@ -289,8 +292,8 @@ export default function Topbar() {
                 <span>Support</span>
               </button>
 
-              {/* Tickets (Admin only) */}
-              {isAdmin && (
+              {/* Tickets (Admin, or Support section) */}
+              {canSeeTickets && (
                 <button
                   type="button"
                   onClick={() => navigate('/support-tickets')}
@@ -510,10 +513,12 @@ export default function Topbar() {
           )}
         </div>
 
-        {/* SUB NAVIGATION (ModuleNav) */}
-        <div className="relative z-10 -mt-[1px] flex justify-center px-4">
-          <ModuleNav badgeCounts={moduleCounts} itemBadgeCounts={itemCounts} />
-        </div>
+        {/* SUB NAVIGATION (ModuleNav) - the workspace page shows its own sidebar instead */}
+        {!hideModuleNav && (
+          <div className="relative z-10 -mt-[1px] flex justify-center px-4">
+            <ModuleNav badgeCounts={moduleCounts} itemBadgeCounts={itemCounts} />
+          </div>
+        )}
       </header>
 
       <SupportModal open={supportOpen} onClose={() => setSupportOpen(false)} />

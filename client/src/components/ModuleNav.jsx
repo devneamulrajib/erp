@@ -1,9 +1,27 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { TOP_MODULES } from './navConfig';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { getNavForUser } from './navConfig';
 import MenuNode from './MenuNode';
+import { USER_UPDATED_EVENT } from './SessionSync';
+
+function readUser() {
+  try {
+    return JSON.parse(localStorage.getItem('user') || 'null');
+  } catch {
+    return null;
+  }
+}
 
 export default function ModuleNav({ badgeCounts = {}, itemBadgeCounts = {} }) {
   const [resetKey, setResetKey] = useState(0);
+  const [user, setUser] = useState(readUser);
+  // Same menu as before, limited to the sections this user may open (see getNavForUser).
+  const modules = useMemo(() => getNavForUser(user), [user]);
+
+  useEffect(() => {
+    const refresh = () => setUser(readUser());
+    window.addEventListener(USER_UPDATED_EVENT, refresh);
+    return () => window.removeEventListener(USER_UPDATED_EVENT, refresh);
+  }, []);
   const wrapperRef = useRef(null);
 
   const closeAll = useCallback(() => {
@@ -65,7 +83,7 @@ export default function ModuleNav({ badgeCounts = {}, itemBadgeCounts = {} }) {
           overflow-visible
         "
       >
-        {TOP_MODULES.map((mod) => (
+        {modules.map((mod) => (
           <MenuNode
             key={mod.key}
             item={mod}
