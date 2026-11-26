@@ -1,1 +1,0 @@
-import{St as e}from"./index-D7twU_2G.js";var t=t=>e.get(`/service-items`,{params:t}).then(e=>e.data),n=()=>e.get(`/service-items/next-code`).then(e=>e.data),r=t=>e.post(`/service-items`,t).then(e=>e.data),i=(t,n)=>e.put(`/service-items/${t}`,n).then(e=>e.data),a=t=>e.delete(`/service-items/${t}`).then(e=>e.data);export{i as a,t as i,a as n,n as r,r as t};

@@ -1,1 +1,0 @@
-import{St as e}from"./index-D7twU_2G.js";var t=t=>e.get(`/category`,{params:t}).then(e=>e.data),n=()=>e.get(`/category/next-code`).then(e=>e.data),r=t=>e.post(`/category`,t).then(e=>e.data),i=(t,n)=>e.put(`/category/${t}`,n).then(e=>e.data),a=t=>e.delete(`/category/${t}`).then(e=>e.data);export{i as a,n as i,a as n,t as r,r as t};

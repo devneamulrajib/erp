@@ -1,0 +1,1 @@
+import{St as e}from"./index-ChWd2J5a.js";var t=()=>e.get(`/projects`);export{t};

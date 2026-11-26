@@ -85,24 +85,41 @@ export default function Dashboard() {
   const [comments, setComments] = useState([]);
   const [officeOverview, setOfficeOverview] = useState(null);
   const [projectSummary, setProjectSummary] = useState(null);
+  // All-time receipts / expenses from /dashboard/executive (null until loaded).
+  const [totals, setTotals] = useState(null);
   const [range, setRange] = useState('12m');
   const [approvingId, setApprovingId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   async function loadDashboard(showRefresh = false) {
-    if (showRefresh) setRefreshing(true);
+    if (showRefresh) {
+      setRefreshing(true);
+      setReloadKey((k) => k + 1); // re-runs the cash flow / expense mix fetch too
+    }
     setSummaryError('');
     const requests = [
       api.get('/dashboard/summary').then((r) => setSummary(r.data)).catch((e) =>
         setSummaryError(e.response?.data?.message || 'Unable to load dashboard summary.')
       ),
       api.get('/dashboard/projects').then((r) => setProjects(Array.isArray(r.data) ? r.data : [])).catch(() => setProjects([])),
-      api.get('/dashboard/bank-balances').then((r) =>
-        setBanks({ accounts: Array.isArray(r.data?.accounts) ? r.data.accounts : [], total: r.data?.total ?? 0 })
-      ).catch(() => setBanks({ accounts: [], total: 0 })),
-      api.get('/dashboard/unsold-properties').then((r) => setProperties(Array.isArray(r.data) ? r.data : [])).catch(() => setProperties([])),
-      api.get('/dashboard/pending-vouchers').then((r) => setVouchers(Array.isArray(r.data) ? r.data : [])).catch(() => setVouchers([])),
-      api.get('/dashboard/comments').then((r) => setComments(Array.isArray(r.data) ? r.data : [])).catch(() => setComments([])),
+      // Bank list + live balance (opening + receipts - payments) from /bank-accounts/summary.
+      Promise.all([
+        api.get('/dashboard/bank-balances'),
+        api.get('/bank-accounts/summary').catch(() => ({ data: {} })),
+      ]).then(([r, s]) => {
+        const live = s.data || {};
+        const accounts = (Array.isArray(r.data?.accounts) ? r.data.accounts : []).map((a) => ({
+          ...a,
+          balance: live[a.id]?.current ?? a.balance,
+        }));
+        setBanks({ accounts, total: accounts.reduce((t, a) => t + (Number(a.balance) || 0), 0) });
+      }).catch(() => setBanks({ accounts: [], total: 0 })),
+      // Flats / land not sold yet (Inventory > Flat).
+      api.get('/dashboard/unsold-units').then((r) => setProperties(Array.isArray(r.data) ? r.data : [])).catch(() => setProperties([])),
+      // Same queue as the Approval Center (office expenses, vouchers, budgets, payslips).
+      api.get('/approvals', { params: { status: 'pending' } }).then((r) => setVouchers(Array.isArray(r.data) ? r.data : [])).catch(() => setVouchers([])),
+      api.get('/dashboard/recent-activity').then((r) => setComments(Array.isArray(r.data) ? r.data : [])).catch(() => setComments([])),
       api.get('/dashboard/office-overview').then((r) => setOfficeOverview(r.data)).catch(() => setOfficeOverview(null)),
       api.get('/dashboard/project-summary').then((r) => setProjectSummary(r.data)).catch(() => setProjectSummary(null)),
     ];
@@ -117,16 +134,19 @@ export default function Dashboard() {
   useEffect(() => {
     let cancelled = false;
     const months = RANGE_MONTHS[range] || 12;
-    Promise.all([
-      api.get(`/dashboard/expense-chart?months=${months}`).then((r) => {
-        if (!cancelled) setExpenseChart(Array.isArray(r.data) ? r.data : []);
-      }).catch(() => { if (!cancelled) setExpenseChart([]); }),
-      api.get(`/dashboard/inflow-outflow?months=${months}`).then((r) => {
-        if (!cancelled) setFlow(r.data || { labels: [], inflow: [], outflow: [] });
-      }).catch(() => { if (!cancelled) setFlow({ labels: [], inflow: [], outflow: [] }); }),
-    ]);
+    api.get('/dashboard/executive', { params: { months } }).then((r) => {
+      if (cancelled) return;
+      const d = r.data || {};
+      setFlow(d.cashflow || { labels: [], inflow: [], outflow: [] });
+      setExpenseChart(Array.isArray(d.expenseMix) ? d.expenseMix : []);
+      setTotals({ receipts: Number(d.receipts) || 0, expenses: Number(d.expenses) || 0 });
+    }).catch(() => {
+      if (cancelled) return;
+      setFlow({ labels: [], inflow: [], outflow: [] });
+      setExpenseChart([]);
+    });
     return () => { cancelled = true; };
-  }, [range]);
+  }, [range, reloadKey]);
 
   const requisitionsTotal =
     (Number(summary?.materialReq) || 0) + (Number(summary?.serviceReq) || 0) ||
@@ -148,7 +168,12 @@ export default function Dashboard() {
       ? Math.min(100, Math.round((Number(officeTotals.spentAmount) / Number(officeTotals.allocatedAmount)) * 100))
       : 0;
 
-  const netPosition = Number(summary?.receipt || 0) - Number(summary?.expenses || 0);
+  // Prefer /dashboard/executive totals (incl. receipt-voucher and office-expense
+  // modules); fall back to the legacy /dashboard/summary figures.
+  const receiptsAll = totals ? totals.receipts : Number(summary?.receipt || 0);
+  const expensesAll = totals ? totals.expenses : Number(summary?.expenses || 0);
+  const netPosition = receiptsAll - expensesAll;
+  const budgetMonth = new Date().toLocaleDateString('en-GB', { month: 'long' });
   const runningProjects = projectSummary?.runningProject ?? projects.length;
 
 
@@ -157,12 +182,15 @@ export default function Dashboard() {
   const inflowTotal = sumOf(flow.inflow);
   const outflowTotal = sumOf(flow.outflow);
 
-  async function handleApproveVoucher(id) {
-    if (!id) return;
-    setApprovingId(id);
+  // Same action the Approval Center uses (keeps logs, notifications, budgets in sync).
+  async function handleApproveVoucher(item) {
+    if (!item?.id || !item.requestType) return;
+    const key = `${item.requestType}-${item.id}`;
+    if (!window.confirm(`Approve ${item.typeLabel || 'request'} ${item.reference || ''} for ${money(item.amount)}?`)) return;
+    setApprovingId(key);
     try {
-      await api.patch(`/dashboard/pending-vouchers/${id}/approve`);
-      setVouchers((prev) => prev.filter((v) => v._id !== id));
+      await api.post('/approvals/action', { requestType: item.requestType, id: item.id, action: 'approved' });
+      setVouchers((prev) => prev.filter((v) => `${v.requestType}-${v.id}` !== key));
     } catch (error) {
       window.alert(error.response?.data?.message || 'Failed to approve voucher');
     } finally {
@@ -174,9 +202,9 @@ export default function Dashboard() {
     const months = RANGE_MONTHS[range] || 12;
     const rows = [
       ['Metric', 'Value'],
-      ['Net Receipts', summary?.receipt ?? ''],
+      ['Net Receipts', receiptsAll],
       ['Gross Sales', summary?.sales ?? ''],
-      ['Total Expenses', summary?.expenses ?? ''],
+      ['Total Expenses', expensesAll],
       ['Requisitions', requisitionsTotal ?? ''],
       ['Liquid Treasury', banks.total ?? ''],
       [],
@@ -236,7 +264,7 @@ export default function Dashboard() {
   const snapshot = [
     { label: 'Customers', value: officeOverview?.customers != null ? number(officeOverview.customers) : '\u2014', icon: UserCheck },
     { label: 'Vendors', value: officeOverview?.vendors != null ? number(officeOverview.vendors) : '\u2014', icon: Truck },
-    { label: 'Payroll budget', value: officeOverview?.payroll ? money(officeOverview.payroll.allocatedAmount) : '\u2014', icon: Banknote },
+    { label: 'Payroll budget', value: officeOverview?.payroll && Number(officeOverview.payroll.allocatedAmount) > 0 ? money(officeOverview.payroll.allocatedAmount) : 'Not set', icon: Banknote },
     { label: 'Advances', value: officeOverview ? money(officeOverview.disbursedAdvances) : '\u2014', icon: Wallet },
   ];
 
@@ -279,8 +307,8 @@ export default function Dashboard() {
           tile="bg-forest text-lime-200"
           negative={netPosition < 0}
         />
-        <Kpi label="Receipts" value={money(summary.receipt)} sub="All-time collected" icon={ArrowUpRight} tile="bg-lime-100 text-forest" />
-        <Kpi label="Expenses" value={money(summary.expenses)} sub="All-time recorded" icon={ArrowDownRight} tile="bg-orange-50 text-orange-600" />
+        <Kpi label="Receipts" value={money(receiptsAll)} sub="All-time, excl. rejected" icon={ArrowUpRight} tile="bg-lime-100 text-forest" />
+        <Kpi label="Expenses" value={money(expensesAll)} sub="General + office, excl. rejected" icon={ArrowDownRight} tile="bg-orange-50 text-orange-600" />
         <Kpi
           label="Treasury"
           value={money(banks.total)}
@@ -291,10 +319,17 @@ export default function Dashboard() {
         <Kpi
           label="Office budget used"
           value={`${officeSpentPct}%`}
-          sub={`${money(officeTotals.spentAmount)} of ${money(officeTotals.allocatedAmount)}`}
+          sub={
+            Number(officeTotals.allocatedAmount) > 0
+              ? `${money(officeTotals.spentAmount)} of ${money(officeTotals.allocatedAmount)} · ${budgetMonth}`
+              : `No budget set for ${budgetMonth}`
+          }
           icon={Layers}
           tile="bg-stone-100 text-slate-600"
         >
+          {!(Number(officeTotals.allocatedAmount) > 0) && canGo('/accounts-module/office-budget') && (
+            <div className="mt-2"><TextLink onClick={() => navigate('/accounts-module/office-budget')}>Set budget</TextLink></div>
+          )}
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-stone-100">
             <div className={`h-full rounded-full ${officeSpentPct >= 90 ? 'bg-rose-500' : 'bg-forest'}`} style={{ width: `${officeSpentPct}%` }} />
           </div>
@@ -363,7 +398,7 @@ export default function Dashboard() {
         <div className="flex flex-col gap-6 lg:col-span-4">
           <Card
             title="Pending approvals"
-            subtitle="Voucher approvals awaiting review"
+            subtitle="Expenses, vouchers, budgets and payslips"
             action={
               <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${vouchers.length ? 'bg-lime-200 text-forest' : 'bg-stone-100 text-slate-500'}`}>
                 {vouchers.length}
@@ -372,25 +407,34 @@ export default function Dashboard() {
             bodyClassName="max-h-[300px] overflow-y-auto px-6 pb-6"
           >
             {vouchers.length === 0 ? (
-              <EmptyBlock icon={CheckCircle2} title="All clear" text="No pending vouchers right now" />
+              <EmptyBlock
+                icon={CheckCircle2}
+                title="All clear"
+                text="Nothing is waiting for approval"
+                actionLabel={canGo('/accounts-module/approval-center') ? 'Open approval center' : ''}
+                onAction={() => navigate('/accounts-module/approval-center')}
+              />
             ) : (
               <div className="divide-y divide-stone-100">
-                {vouchers.map((voucher) => (
-                  <div key={voucher._id || voucher.code} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                {vouchers.slice(0, 6).map((voucher) => (
+                  <div key={`${voucher.requestType}-${voucher.id}`} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 text-xs">
-                        <span className="rounded bg-stone-100 px-1.5 py-0.5 font-medium text-slate-600">{voucher.code || 'VCH'}</span>
-                        <span className="text-slate-400">{voucher.dueLabel || 'Pending'}</span>
+                        <span className="rounded bg-stone-100 px-1.5 py-0.5 font-medium text-slate-600">{voucher.reference || voucher.typeLabel}</span>
+                        <span className="truncate text-slate-400">
+                          {voucher.typeLabel}
+                          {voucher.date ? ` · ${new Date(voucher.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}
+                        </span>
                       </div>
-                      <p className="mt-1 truncate text-sm text-slate-700">{voucher.description || 'Voucher awaiting approval'}</p>
+                      <p className="mt-1 truncate text-sm text-slate-700">{voucher.title || voucher.category || 'Awaiting approval'}</p>
                       <p className="text-sm font-semibold tabular-nums text-slate-900">{money(voucher.amount)}</p>
                     </div>
                     <button
-                      onClick={() => handleApproveVoucher(voucher._id)}
-                      disabled={!voucher._id || approvingId === voucher._id}
+                      onClick={() => handleApproveVoucher(voucher)}
+                      disabled={!voucher.id || approvingId === `${voucher.requestType}-${voucher.id}`}
                       className={`${btnPrimary} h-8 shrink-0 px-3 text-xs disabled:opacity-50`}
                     >
-                      {approvingId === voucher._id ? 'Approving\u2026' : 'Approve'}
+                      {approvingId === `${voucher.requestType}-${voucher.id}` ? 'Approving\u2026' : 'Approve'}
                     </button>
                   </div>
                 ))}
@@ -405,7 +449,13 @@ export default function Dashboard() {
             action={canGo('/accounts-module/bank-accounts') && <TextLink onClick={() => navigate('/accounts-module/bank-accounts')}>Manage</TextLink>}
           >
             {banks.accounts.length === 0 ? (
-              <EmptyBlock icon={Landmark} title="No bank accounts linked" text="Link an account to see your balances" />
+              <EmptyBlock
+                icon={Landmark}
+                title="No bank accounts yet"
+                text="Add a bank account to track live balances here"
+                actionLabel={canGo('/accounts-module/bank-accounts') ? 'Add bank account' : ''}
+                onAction={() => navigate('/accounts-module/bank-accounts')}
+              />
             ) : (
               <div className="space-y-3">
                 {banks.accounts.slice(0, 4).map((acc, i) => {
@@ -414,10 +464,11 @@ export default function Dashboard() {
                     <div key={acc._id || i}>
                       <div className="flex items-center justify-between gap-3">
                         <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium text-slate-800">{acc.bank || 'Bank Account'}</span>
+                          <span className="block truncate text-sm font-medium text-slate-800">{acc.name || acc.bank || 'Bank account'}</span>
                           <span className="block text-xs text-slate-400">
-                            {acc.type || 'Account'}
-                            {acc.number ? ` \u00b7\u00b7\u00b7${String(acc.number).slice(-4)}` : ''}
+                            {acc.lastUpdated
+                              ? `Opened ${new Date(acc.lastUpdated).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                              : 'Bank account'}
                           </span>
                         </span>
                         <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">{money(acc.balance)}</span>
@@ -443,24 +494,29 @@ export default function Dashboard() {
           bodyClassName="max-h-[320px] overflow-y-auto px-3 pb-4"
         >
           {projects.length === 0 ? (
-            <div className="px-3 pb-2"><EmptyBlock icon={Building2} title="No projects yet" text="Projects will show here with their progress" /></div>
+            <div className="px-3 pb-2">
+              <EmptyBlock
+                icon={Building2}
+                title="No projects yet"
+                text="Create a project to track its task progress here"
+                actionLabel={canGo('/project-module/projects') ? 'Create project' : ''}
+                onAction={() => navigate('/project-module/projects')}
+              />
+            </div>
           ) : (
             projects.slice(0, 6).map((project, idx) => {
-              const progress = Math.max(0, Math.min(100, Number(project.progress || 0)));
+              const progress = Math.max(0, Math.min(100, Number(project.percentComplete ?? project.progress ?? 0)));
               return (
                 <button
                   key={project._id || idx}
-                  onClick={() =>
-                    canGo('/project-module/projects') &&
-                    navigate(project._id ? `/project-module/projects/${project._id}` : '/project-module/projects')
-                  }
+                  onClick={() => canGo('/project-module/projects') && navigate('/project-module/projects')}
                   disabled={!canGo('/project-module/projects')}
                   className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-stone-50"
                 >
                   <ProgressRing value={progress} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium text-slate-800">{project.name || 'Unnamed Project'}</span>
-                    <span className="block truncate text-xs text-slate-400">{project.location || project.subtitle || project.type || '\u2014'}</span>
+                    <span className="block truncate text-xs text-slate-400">{[project.location, project.totalTasks ? `${project.completedTasks || 0}/${project.totalTasks} tasks` : 'No tasks yet'].filter(Boolean).join(' \u00b7 ')}</span>
                   </span>
                   <ChevronRight className="size-4 shrink-0 text-slate-300 transition-colors group-hover:text-forest" />
                 </button>
@@ -476,7 +532,13 @@ export default function Dashboard() {
           bodyClassName="max-h-[320px] overflow-y-auto px-6 pb-6"
         >
           {properties.length === 0 ? (
-            <EmptyBlock icon={PackageCheck} title="No unsold units" text="Available flats and land will show here" />
+            <EmptyBlock
+              icon={PackageCheck}
+              title="No units in inventory"
+              text="Add flats or land under Inventory to see what's unsold"
+              actionLabel={canGo('/inventory-module/flat') ? 'Add flat or land' : ''}
+              onAction={() => navigate('/inventory-module/flat')}
+            />
           ) : (
             <div className="divide-y divide-stone-100">
               {properties.slice(0, 5).map((property, idx) => (
@@ -488,7 +550,7 @@ export default function Dashboard() {
                   <div className="shrink-0 text-right">
                     <p className="text-sm font-semibold tabular-nums text-slate-900">{money(property.price)}</p>
                     {property.status && (
-                      <p className={`text-xs ${property.status === 'In Closing' ? 'text-amber-600' : 'text-forest'}`}>{property.status}</p>
+                      <p className={`text-xs ${property.status === 'Booked' ? 'text-amber-600' : 'text-forest'}`}>{property.status}</p>
                     )}
                   </div>
                 </div>
@@ -499,7 +561,13 @@ export default function Dashboard() {
 
         <Card title="Expense mix" subtitle={`${rangeLabel} \u00b7 total ${money(expenseTotal)}`} className="md:col-span-2 lg:col-span-1">
           {expenseChart.length === 0 || !expenseTotal ? (
-            <EmptyBlock icon={Layers} title="No expense data" text="Nothing recorded for this period" />
+            <EmptyBlock
+              icon={Layers}
+              title="No expenses in this period"
+              text="Try a longer range, or record an office expense"
+              actionLabel={canGo('/accounts-module/office-expense') ? 'Record expense' : ''}
+              onAction={() => navigate('/accounts-module/office-expense')}
+            />
           ) : (
             <>
               <div className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full">
@@ -544,7 +612,7 @@ export default function Dashboard() {
         <Card
           className="lg:col-span-8"
           title="Recent activity"
-          subtitle="Latest business events and comments"
+          subtitle="Latest activity log entries and comments"
           bodyClassName="max-h-[360px] overflow-y-auto px-6 pb-6"
         >
           {comments.length === 0 ? (
@@ -742,7 +810,7 @@ function ProgressRing({ value }) {
   );
 }
 
-function EmptyBlock({ icon: Icon, title, text }) {
+function EmptyBlock({ icon: Icon, title, text, actionLabel, onAction }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-stone-200 px-4 py-8 text-center">
       <span className="flex size-10 items-center justify-center rounded-lg bg-stone-100 text-slate-400">
@@ -750,6 +818,15 @@ function EmptyBlock({ icon: Icon, title, text }) {
       </span>
       <p className="mt-3 text-sm font-medium text-slate-700">{title}</p>
       {text && <p className="mt-0.5 max-w-[240px] text-xs text-slate-400">{text}</p>}
+      {actionLabel && onAction && (
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 text-xs font-medium text-forest transition-colors hover:bg-stone-50"
+        >
+          <Plus className="size-3.5" /> {actionLabel}
+        </button>
+      )}
     </div>
   );
 }

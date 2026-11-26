@@ -400,7 +400,8 @@ router.get('/office-overview', auth, async (req, res) => {
       allocatedTotal += allocatedAmount;
       spentTotal += spentAmount;
 
-      if (cat.name && cat.name.toLowerCase().includes('payroll')) {
+      // "Payroll" or "Salary" top-level category feeds the payroll figure.
+      if (cat.name && /payroll|salary/i.test(cat.name)) {
         payroll = {
           categoryName: cat.name,
           allocatedAmount,
@@ -527,6 +528,181 @@ router.get('/purchase-vs-consumption', auth, async (req, res) => {
       return res.json({ labels: [], purchase: [], consumption: [] });
     }
     res.json({ labels, purchase, consumption });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ===== Executive dashboard (/dashboard) — read-only aggregates =====
+// Added for the admin overview page; existing endpoints above are unchanged
+// because the Accounts / Project / Inventory dashboards still use them.
+const ReceiptVoucher = require('../models/ReceiptVoucher');
+const PaymentVoucher = require('../models/PaymentVoucher');
+const Flat = require('../models/Flat');
+const ActivityLog = require('../models/ActivityLog');
+
+// Rows that still count (pending or approved), i.e. not rejected.
+const notRejected = () => ({
+  [Op.or]: [{ status: null }, { status: { [Op.notIn]: ['rejected', 'Rejected'] } }],
+});
+
+// Chart buckets: 30 daily buckets for a 1-month window, else calendar months.
+function flowBuckets(months) {
+  const now = new Date();
+  const pad = (v) => String(v).padStart(2, '0');
+  const keys = [];
+  const labels = [];
+  if (months <= 1) {
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+    for (let i = 0; i < 30; i += 1) {
+      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      keys.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+      labels.push(`${d.getDate()} ${d.toLocaleString('en-US', { month: 'short' })}`);
+    }
+    return { start, fmt: '%Y-%m-%d', keys, labels };
+  }
+  const start = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+  for (let i = 0; i < months; i += 1) {
+    const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+    keys.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
+    labels.push(`${d.toLocaleString('en-US', { month: 'short' })} '${String(d.getFullYear()).slice(2)}`);
+  }
+  return { start, fmt: '%Y-%m', keys, labels };
+}
+
+async function bucketSums(Model, where, fmt, start) {
+  if (!Model) return {};
+  const rows = await Model.findAll({
+    attributes: [[fn('DATE_FORMAT', col('date'), fmt), 'k'], [fn('SUM', col('amount')), 't']],
+    where: { ...where, date: { [Op.gte]: start } },
+    group: [literal('k')],
+    raw: true,
+  }).catch(() => []);
+  return Object.fromEntries(rows.map((r) => [r.k, Number(r.t) || 0]));
+}
+
+// GET /dashboard/executive?months=1|6|12
+// receipts / expenses: all-time totals (rejected excluded).
+//   receipts = ledger Receipt vouchers + Receipt Voucher module
+//   expenses = general Expense + Office Expense
+// cashflow: every bucket in the window (zeros included), inflow = receipts,
+//   outflow = ledger Payment vouchers + Payment Voucher module.
+// expenseMix: window spend by category (office expenses rolled up to their
+//   top-level budget category, general expenses by their category).
+router.get('/executive', auth, async (req, res) => {
+  try {
+    const months = monthsFromQuery(req.query);
+    const b = flowBuckets(months);
+    const [vIn, rvIn, vOut, pvOut, vReceipts, rvReceipts, expTotal, oeTotal, oeRows, expRows, cats] = await Promise.all([
+      bucketSums(Voucher, { type: 'Receipt', ...notRejected() }, b.fmt, b.start),
+      bucketSums(ReceiptVoucher, notRejected(), b.fmt, b.start),
+      bucketSums(Voucher, { type: 'Payment', ...notRejected() }, b.fmt, b.start),
+      bucketSums(PaymentVoucher, notRejected(), b.fmt, b.start),
+      safeSum(Voucher, 'amount', { where: { type: 'Receipt', ...notRejected() } }),
+      safeSum(ReceiptVoucher, 'amount', { where: notRejected() }),
+      safeSum(Expense, 'amount', { where: notRejected() }),
+      safeSum(OfficeExpense, 'amount', { where: notRejected() }),
+      OfficeExpense.findAll({
+        attributes: ['budgetCategoryId', [fn('SUM', col('amount')), 't']],
+        where: { ...notRejected(), date: { [Op.gte]: b.start } },
+        group: ['budgetCategoryId'],
+        raw: true,
+      }).catch(() => []),
+      Expense.findAll({
+        attributes: ['category', [fn('SUM', col('amount')), 't']],
+        where: { ...notRejected(), date: { [Op.gte]: b.start } },
+        group: ['category'],
+        raw: true,
+      }).catch(() => []),
+      BudgetCategory.findAll({ raw: true }).catch(() => []),
+    ]);
+
+    const catById = Object.fromEntries(cats.map((c) => [c.id, c]));
+    const topName = (id) => {
+      let c = catById[id];
+      for (let i = 0; c && c.parentId && catById[c.parentId] && i < 10; i += 1) c = catById[c.parentId];
+      return (c && c.name) || 'Office budget';
+    };
+    const mix = {};
+    oeRows.forEach((r) => {
+      const name = topName(r.budgetCategoryId);
+      mix[name] = (mix[name] || 0) + (Number(r.t) || 0);
+    });
+    expRows.forEach((r) => {
+      const name = String(r.category || '').trim() || 'General';
+      mix[name] = (mix[name] || 0) + (Number(r.t) || 0);
+    });
+
+    res.json({
+      months,
+      receipts: vReceipts + rvReceipts,
+      expenses: expTotal + oeTotal,
+      cashflow: {
+        labels: b.labels,
+        inflow: b.keys.map((k) => (vIn[k] || 0) + (rvIn[k] || 0)),
+        outflow: b.keys.map((k) => (vOut[k] || 0) + (pvOut[k] || 0)),
+      },
+      expenseMix: Object.entries(mix)
+        .filter(([, v]) => v > 0)
+        .map(([name, value]) => ({ name, value }))
+        .sort((x, y) => y.value - x.value),
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /dashboard/recent-activity — activity log + comments, newest first.
+router.get('/recent-activity', auth, async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 10, 30);
+    const [logs, comments] = await Promise.all([
+      ActivityLog.findAll({ order: [['createdAt', 'DESC']], limit, raw: true }).catch(() => []),
+      Comment.findAll({ order: [['createdAt', 'DESC']], limit, raw: true }).catch(() => []),
+    ]);
+    const items = [
+      ...logs.map((l) => ({
+        _id: `log-${l.id}`,
+        user: l.performedBy || 'System',
+        type: l.action || '',
+        message: l.message || '',
+        module: l.module || '',
+        amount: l.amount ?? null,
+        createdAt: l.createdAt,
+      })),
+      ...comments.map((c) => ({
+        _id: `comment-${c.id}`,
+        user: c.user || 'User',
+        type: 'Comment',
+        message: [c.title, c.comment].filter(Boolean).join(' \u2014 '),
+        module: '',
+        amount: null,
+        createdAt: c.createdAt,
+      })),
+    ]
+      .sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt))
+      .slice(0, limit);
+    res.json(items);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /dashboard/unsold-units — flats / land not sold yet (Inventory > Flat).
+router.get('/unsold-units', auth, async (req, res) => {
+  try {
+    const flats = await Flat.findAll({ where: { status: { [Op.ne]: 'Sold' } }, order: [['id', 'DESC']], raw: true });
+    const ids = [...new Set(flats.map((f) => f.projectId).filter(Boolean))];
+    const projects = ids.length ? await Project.findAll({ where: { id: ids }, attributes: ['id', 'name'], raw: true }) : [];
+    const projectName = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+    res.json(flats.map((f) => ({
+      _id: f.id,
+      unit: f.unit || f.flatLandNo || f.code || `Unit ${f.id}`,
+      project: projectName[f.projectId] || '',
+      type: [f.size ? `${f.size} sft` : '', f.bedroom ? `${f.bedroom} bed` : ''].filter(Boolean).join(' \u00b7 '),
+      price: Number(f.grandTotal) || Number(f.price) || 0,
+      status: f.status || 'Available',
+    })));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

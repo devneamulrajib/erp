@@ -1,1 +1,0 @@
-import{St as e}from"./index-D7twU_2G.js";async function t(t){return(await e.get(`/brand`,{params:t})).data}async function n(t){return(await e.post(`/brand`,t)).data}async function r(t,n){return(await e.put(`/brand/${t}`,n)).data}async function i(t){return(await e.delete(`/brand/${t}`)).data}export{r as i,i as n,t as r,n as t};
