@@ -12,6 +12,8 @@ import {
   LifeBuoy,
   ClipboardList,
   X,
+  LayoutGrid,
+  Users,
 } from 'lucide-react';
 
 import companyLogo from '../assets/trikon-logo.png';
@@ -123,6 +125,33 @@ export default function Topbar({ hideModuleNav = false }) {
   // Role users have the sidebar logo on desktop, so the topbar logo shows
   // only on mobile (sidebar is a closed drawer there). Admins: always.
   const hasSidebar = shouldShowSidebar(currentUser);
+
+  // Admin + floating menu: at the very top of the page the topbar and the
+  // ModuleNav island render as one surface; once scrolled the island floats
+  // as before. Passive scroll listener, one rAF per frame.
+  const mergeNav = isAdmin && !hideModuleNav;
+  const [atTop, setAtTop] = useState(() => typeof window === 'undefined' || window.scrollY <= 4);
+  useEffect(() => {
+    if (!mergeNav) return undefined;
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        setAtTop(window.scrollY <= 4);
+      });
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [mergeNav]);
+  const navMerged = mergeNav && atTop;
+  const roleLabel = /super\s*_?\s*admin/i.test(userRole)
+    ? 'Super Admin'
+    : String(userRole).replace(/[_-]+/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
 
   // Badge role color
   const roleBadgeStyle = useMemo(() => {
@@ -239,11 +268,139 @@ export default function Topbar({ hideModuleNav = false }) {
     return notifications;
   }, [notifications, notifFilter]);
 
+  // Profile menu (avatar + dropdown). Admins / superadmins get it where the
+  // Support and Tickets buttons were, and those two live inside it; everyone
+  // else keeps it at the far right with Support / Tickets as buttons.
+  const profileMenu = (
+    <div className="relative" ref={profileRef}>
+      <button
+        type="button"
+        onClick={() => setProfileOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={profileOpen}
+        className={
+          isAdmin
+            ? `flex h-10 items-center gap-2.5 rounded-xl bg-white pl-1 pr-2.5 ring-1 transition-all hover:bg-slate-50 hover:ring-slate-300 ${
+                profileOpen ? 'bg-slate-50 ring-slate-300' : 'ring-slate-200/80'
+              }`
+            : 'flex items-center gap-2 rounded-xl p-1 transition-all hover:bg-slate-100/80'
+        }
+      >
+        <div className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white shadow-xs ${isAdmin ? 'bg-gradient-to-tr from-navy to-cobalt-700' : 'bg-forest'}`}>
+          {initial}
+          <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" />
+        </div>
+        {isAdmin ? (
+          <div className="hidden min-w-0 flex-col text-left lg:flex">
+            <span className="max-w-[140px] truncate text-[13px] font-semibold leading-4 text-slate-900">{userName}</span>
+            <span className="max-w-[140px] truncate text-[11px] font-medium leading-4 text-slate-500">{roleLabel}</span>
+          </div>
+        ) : (
+          <div className="hidden text-left lg:block">
+            <p className="max-w-[110px] truncate text-xs font-bold text-slate-800 leading-tight">
+              {userName}
+            </p>
+            <span className={`inline-block rounded border px-1 py-0.5 text-[9px] font-bold uppercase ${roleBadgeStyle}`}>
+              {userRole}
+            </span>
+          </div>
+        )}
+        <ChevronDown
+          size={14}
+          className={`shrink-0 text-slate-400 transition-transform duration-200 ${isAdmin ? '' : 'hidden lg:block'} ${
+            profileOpen ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+
+      {profileOpen && (
+        <div className={`absolute right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 ${isAdmin ? 'w-64' : 'w-56'}`} role="menu">
+          {/* User info banner */}
+          <div className="rounded-xl bg-slate-50/80 p-3 mb-1 border border-slate-100">
+            <p className="truncate text-xs font-bold text-slate-900">{userName}</p>
+            <p className="truncate text-[11px] font-medium text-slate-400">{userEmail}</p>
+            {isAdmin && (
+              <span className={`mt-1.5 inline-block rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase ${roleBadgeStyle}`}>
+                {userRole}
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-0.5">
+            {isAdmin && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    navigate('/dashboard');
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                >
+                  <LayoutGrid size={14} className="text-slate-400" />
+                  Executive dashboard
+                </button>
+                {canSeeTickets && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileOpen(false);
+                      navigate('/support-tickets');
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                  >
+                    <ClipboardList size={14} className="text-slate-400" />
+                    Support tickets
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    navigate('/settings/users');
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                >
+                  <Users size={14} className="text-slate-400" />
+                  Team members
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setProfileOpen(false);
+                setSupportOpen(true);
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+            >
+              <LifeBuoy size={14} className="text-slate-400" />
+              Help & Support
+            </button>
+
+            <div className="my-1 border-t border-slate-100" />
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-50"
+            >
+              <LogOut size={14} />
+              Sign out
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <>
       <header className="sticky top-0 z-[9999] w-full">
         {/* Main Bar */}
-        <div className="relative z-20 h-16 w-full border-b border-slate-200/70 bg-white/85 backdrop-blur-xl shadow-xs transition-all">
+        <div className={`relative z-20 h-16 w-full border-b bg-white/85 backdrop-blur-xl transition-[border-color,box-shadow] duration-300 ease-out motion-reduce:transition-none ${
+          navMerged ? 'border-transparent shadow-none' : 'border-slate-200/70 shadow-xs'
+        }`}>
           <div className="mx-auto flex h-full w-full max-w-[1560px] items-center justify-between px-3 sm:px-6 lg:px-8">
 
             {/* BRAND + mobile menu trigger */}
@@ -266,15 +423,16 @@ export default function Topbar({ hideModuleNav = false }) {
                 <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-b from-white to-slate-50 p-1.5 shadow-xs ring-1 ring-slate-900/10 transition-transform duration-200 group-hover:scale-105">
                   <img src={companyLogo} alt="Trikon Logo" className="h-full w-full object-contain" />
                 </div>
-                <div className="hidden sm:block">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[17px] font-extrabold tracking-tight text-slate-900">TRIKON</span>
-                    <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wider ${isAdmin ? 'bg-navy text-gold' : 'bg-lime-200 text-forest'}`}>ERP</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Enterprise OS</p>
-                  </div>
+                {/* Wordmark: spaced TRIKON, hairline divider, quiet two-line caption */}
+                <div className="hidden items-center gap-3 sm:flex">
+                  <span className="pl-[0.24em] text-[15px] font-semibold uppercase leading-none tracking-[0.24em] text-slate-900">
+                    Trikon
+                  </span>
+                  <span className="h-7 w-px bg-stone-300/80" aria-hidden="true" />
+                  <span className="flex flex-col gap-1 leading-none">
+                    <span className="text-[9px] font-medium uppercase tracking-[0.3em] text-stone-500">Holdings</span>
+                    <span className="text-[9px] font-semibold uppercase tracking-[0.3em] text-forest/80">ERP</span>
+                  </span>
                 </div>
               </div>
             </div>
@@ -302,7 +460,10 @@ export default function Topbar({ hideModuleNav = false }) {
                 <Search size={17} />
               </button>
 
+              {/* Admins: profile / super admin menu here (Support + Tickets inside it) */}
+
               {/* Support modal button */}
+              {!isAdmin && (
               <button
                 type="button"
                 onClick={() => setSupportOpen(true)}
@@ -311,9 +472,10 @@ export default function Topbar({ hideModuleNav = false }) {
                 <LifeBuoy size={16} className="text-slate-400 group-hover:text-slate-700" />
                 <span>Support</span>
               </button>
+              )}
 
-              {/* Tickets (Admin, or Support section) */}
-              {canSeeTickets && (
+              {/* Tickets (Support section holders; admins use the profile menu) */}
+              {canSeeTickets && !isAdmin && (
                 <button
                   type="button"
                   onClick={() => navigate('/support-tickets')}
@@ -330,10 +492,10 @@ export default function Topbar({ hideModuleNav = false }) {
                   type="button"
                   aria-label="Notifications"
                   onClick={toggleNotifications}
-                  className={`relative flex h-9 w-9 items-center justify-center rounded-lg transition-all ${
-                    notifOpen
-                      ? 'bg-slate-100 text-slate-900'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  className={`relative flex items-center justify-center transition-all ${
+                    isAdmin
+                      ? `h-10 w-10 rounded-xl bg-white ring-1 ${notifOpen ? 'bg-slate-50 text-slate-900 ring-slate-300' : 'text-slate-600 ring-slate-200/80 hover:bg-slate-50 hover:text-slate-900 hover:ring-slate-300'}`
+                      : `h-9 w-9 rounded-lg ${notifOpen ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`
                   }`}
                 >
                   <Bell size={18} />
@@ -452,71 +614,9 @@ export default function Topbar({ hideModuleNav = false }) {
                 )}
               </div>
 
-              {/* Divider */}
-              <div className="mx-1 h-5 w-px bg-slate-200" />
-
-              {/* USER PROFILE DROPDOWN */}
-              <div className="relative" ref={profileRef}>
-                <button
-                  type="button"
-                  onClick={() => setProfileOpen((v) => !v)}
-                  className="flex items-center gap-2 rounded-xl p-1 transition-all hover:bg-slate-100/80"
-                >
-                  <div className={`relative flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-white shadow-xs ${isAdmin ? 'bg-gradient-to-tr from-navy to-cobalt-700' : 'bg-forest'}`}>
-                    {initial}
-                    <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" />
-                  </div>
-                  <div className="hidden text-left lg:block">
-                    <p className="max-w-[110px] truncate text-xs font-bold text-slate-800 leading-tight">
-                      {userName}
-                    </p>
-                    <span className={`inline-block rounded border px-1 py-0.5 text-[9px] font-bold uppercase ${roleBadgeStyle}`}>
-                      {userRole}
-                    </span>
-                  </div>
-                  <ChevronDown
-                    size={14}
-                    className={`hidden text-slate-400 transition-transform duration-200 lg:block ${
-                      profileOpen ? 'rotate-180' : ''
-                    }`}
-                  />
-                </button>
-
-                {profileOpen && (
-                  <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-56 overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-1.5 shadow-2xl ring-1 ring-black/5">
-                    {/* User info banner */}
-                    <div className="rounded-xl bg-slate-50/80 p-3 mb-1 border border-slate-100">
-                      <p className="truncate text-xs font-bold text-slate-900">{userName}</p>
-                      <p className="truncate text-[11px] font-medium text-slate-400">{userEmail}</p>
-                    </div>
-
-                    <div className="space-y-0.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setProfileOpen(false);
-                          setSupportOpen(true);
-                        }}
-                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
-                      >
-                        <LifeBuoy size={14} className="text-slate-400" />
-                        Help & Support
-                      </button>
-
-                      <div className="my-1 border-t border-slate-100" />
-
-                      <button
-                        type="button"
-                        onClick={handleLogout}
-                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-50"
-                      >
-                        <LogOut size={14} />
-                        Sign out
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Profile menu, right after the bell (admins: no divider, matching 40px controls) */}
+              {isAdmin ? <span className="w-0.5" aria-hidden="true" /> : <div className="mx-1 h-5 w-px bg-slate-200" />}
+              {profileMenu}
             </div>
           </div>
 
@@ -535,8 +635,16 @@ export default function Topbar({ hideModuleNav = false }) {
 
         {/* SUB NAVIGATION (ModuleNav) - hidden on mobile, shown in drawer instead */}
         {!hideModuleNav && (
-          <div className="relative z-10 -mt-[1px] hidden justify-center px-4 md:flex">
-            <ModuleNav badgeCounts={moduleCounts} itemBadgeCounts={itemCounts} />
+          <div
+            className={`relative z-10 -mt-[1px] hidden justify-center px-4 md:flex ${
+              mergeNav
+                ? `border-b pb-2 transition-[background-color,border-color,box-shadow] duration-300 ease-out motion-reduce:transition-none ${
+                    navMerged ? 'border-slate-200/70 bg-white/85 shadow-xs' : 'border-transparent bg-transparent shadow-none'
+                  }`
+                : ''
+            }`}
+          >
+            <ModuleNav badgeCounts={moduleCounts} itemBadgeCounts={itemCounts} merged={navMerged} />
           </div>
         )}
 

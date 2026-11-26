@@ -15,7 +15,9 @@ function readUser() {
   }
 }
 
-export default function ModuleNav({ badgeCounts = {}, itemBadgeCounts = {}, mobile = false, onNavigate }) {
+// merged: Topbar passes true while the page is at the very top (admin only) so
+// the island drops its floating border/shadow and reads as part of the topbar.
+export default function ModuleNav({ badgeCounts = {}, itemBadgeCounts = {}, mobile = false, onNavigate, merged = false }) {
   const [resetKey, setResetKey] = useState(0);
   const [user, setUser] = useState(readUser);
   // Same menu as before, limited to the sections this user may open (see getNavForUser).
@@ -102,22 +104,11 @@ export default function ModuleNav({ badgeCounts = {}, itemBadgeCounts = {}, mobi
     <nav
       ref={wrapperRef}
       role="menubar"
-      className="
-        relative
-        z-[99999]
-        flex
-        w-fit
-        max-w-[calc(100vw-24px)]
-        items-center
-        overflow-visible
-        rounded-[24px]
-        border
-        border-black/[0.08]
-        bg-white
-        px-1.5
-        py-1.5
-        shadow-[0_10px_30px_rgba(0,0,0,0.12)]
-      "
+      className={`relative z-[99999] flex w-fit max-w-[calc(100vw-24px)] items-center overflow-visible rounded-[24px] border px-1.5 py-1.5 transition-[background-color,border-color,box-shadow] duration-300 ease-out motion-reduce:transition-none ${
+        merged
+          ? 'border-stone-200/70 bg-stone-50 shadow-none'
+          : 'border-black/[0.08] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.12)]'
+      }`}
     >
       <div
         key={resetKey}

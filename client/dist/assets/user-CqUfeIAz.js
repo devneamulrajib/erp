@@ -1,1 +1,0 @@
-import{St as e}from"./index-6QilPZtG.js";async function t(){return(await e.get(`/users`)).data}export{t};

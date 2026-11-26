@@ -1,48 +1,74 @@
+// client/src/pages/Dashboard.jsx
+// Executive command center (/dashboard) for admins / superadmins.
+// Light theme only, in the workspace colours (forest green, lime, cream,
+// white cards; tokens in index.css @theme). Layout: slim header row (date on
+// the left, Refresh / Export / New requisition on the right), five KPI cards, an
+// operations strip of four counters, then cards with one shared header style:
+// cash flow, approvals, treasury, projects, inventory, expense mix, recent
+// activity and a business snapshot.
+// Every figure comes from the existing /dashboard/* endpoints; nothing is
+// estimated. Admin navigation stays in the top floating menu (no sidebar).
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import RealEstateBackdrop from '../components/RealEstateBackdrop';
 import {
   AlertCircle,
   ArrowDownRight,
   ArrowUpRight,
+  Banknote,
   Building2,
+  CheckCircle2,
   ChevronRight,
   ClipboardList,
+  Clock3,
   Download,
+  FileText,
   Landmark,
+  Layers,
   PackageCheck,
   Plus,
   RefreshCw,
-  ShieldCheck,
-  Users,
-  Wallet,
-  Clock3,
-  FileText,
-  CheckCircle2,
-  TrendingUp,
-  Layers,
-  Banknote,
-  UserCheck,
   Truck,
+  UserCheck,
+  Wallet,
 } from 'lucide-react';
 import api from '../api/axios';
 import Topbar from '../components/Topbar';
-import InflowOutflowChart from '../components/InflowOutflowChart';
-import { DashboardHero, Skeleton, heroButton, heroButtonSolid } from '../components/dashboard/DashboardKit';
-import { greeting, currentStaffUser } from '../components/dashboard/dashboardUtils';
+import { Skeleton } from '../components/dashboard/DashboardKit';
+import { currentStaffUser } from '../components/dashboard/dashboardUtils';
 import { canOpenLink } from '../config/permissions';
 
 const RANGES = [
-  { key: '30d', label: '30 Days' },
-  { key: '6m', label: '6 Months' },
-  { key: '12m', label: '12 Months' },
+  { key: '30d', label: '30 days' },
+  { key: '6m', label: '6 months' },
+  { key: '12m', label: '12 months' },
 ];
 const RANGE_MONTHS = { '30d': 1, '6m': 6, '12m': 12 };
 
-const EXPENSE_COLORS = ['#174d36', '#2a9d8f', '#e9c46a', '#f4a261', '#e76f51', '#264653'];
+// Forest / lime family plus two warm accents for the expense mix.
+const EXPENSE_COLORS = ['#0f3d33', '#84cc16', '#2f7a63', '#d9f99d', '#f59e0b', '#a8a29e'];
 
 const money = (value) =>
   `৳${Number(value || 0).toLocaleString('en-BD', { maximumFractionDigits: 0 })}`;
 const number = (value) => Number(value || 0).toLocaleString('en-BD');
+
+// Short, readable Taka: 1.80 Cr / 4.25 Lakh / 12.5K.
+function compact(value) {
+  const n = Number(value) || 0;
+  const a = Math.abs(n);
+  const s = n < 0 ? '-' : '';
+  if (a >= 1e7) return `${s}৳${(a / 1e7).toFixed(2)} Cr`;
+  if (a >= 1e5) return `${s}৳${(a / 1e5).toFixed(2)} Lakh`;
+  if (a >= 1e3) return `${s}৳${(a / 1e3).toFixed(1)}K`;
+  return `${s}৳${Math.round(a)}`;
+}
+
+// One card style for the whole page.
+const cardBase = 'rounded-2xl border border-stone-200/80 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]';
+const btnOutline =
+  'inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-stone-200 bg-white px-3.5 text-sm font-medium text-slate-700 transition-colors hover:bg-stone-50 disabled:opacity-60';
+const btnPrimary =
+  'inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-forest px-3.5 text-sm font-medium text-white transition-colors hover:bg-forest-900';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -124,7 +150,12 @@ export default function Dashboard() {
 
   const netPosition = Number(summary?.receipt || 0) - Number(summary?.expenses || 0);
   const runningProjects = projectSummary?.runningProject ?? projects.length;
-  const firstName = (currentStaffUser()?.name || '').split(' ')[0] || 'there';
+
+
+  const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+  const sumOf = (list) => (Array.isArray(list) ? list : []).reduce((s, v) => s + (Number(v) || 0), 0);
+  const inflowTotal = sumOf(flow.inflow);
+  const outflowTotal = sumOf(flow.outflow);
 
   async function handleApproveVoucher(id) {
     if (!id) return;
@@ -167,732 +198,575 @@ export default function Dashboard() {
     URL.revokeObjectURL(url);
   }
 
+  const frame = (content) => (
+    <div className="relative min-h-screen w-full bg-cream text-left text-slate-800">
+      {/* Decorative real-estate line art; delete this line to turn it off */}
+      <RealEstateBackdrop />
+      <Topbar />
+      <div className="relative z-[1]">{content}</div>
+    </div>
+  );
+
   if (!summary) {
-    return (
-      <div className="min-h-screen bg-[#f0f5f2]">
-        <Topbar />
-        <div className={summaryError ? 'flex min-h-[60vh] flex-col items-center justify-center' : ''}>
-          {summaryError ? (
-            <>
-              <div className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-rose-100 text-rose-600">
-                <AlertCircle className="size-7" />
-              </div>
-              <h1 className="text-lg font-bold text-slate-800">Dashboard couldn’t load</h1>
-              <p className="mt-2 max-w-sm text-center text-sm text-slate-500">{summaryError}</p>
-              <button
-                onClick={() => loadDashboard(true)}
-                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#174d36] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#174d36]/25"
-              >
-                <RefreshCw className="size-4" /> Try again
-              </button>
-            </>
-          ) : (
-            <DashboardSkeleton />
-          )}
+    return frame(
+      summaryError ? (
+        <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 text-center">
+          <div className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-rose-100 text-rose-600">
+            <AlertCircle className="size-7" />
+          </div>
+          <h1 className="text-lg font-bold text-slate-800">Dashboard couldn&rsquo;t load</h1>
+          <p className="mt-2 max-w-sm text-sm text-slate-500">{summaryError}</p>
+          <button onClick={() => loadDashboard(true)} className={`${btnPrimary} mt-5`}>
+            <RefreshCw className="size-4" /> Try again
+          </button>
         </div>
-      </div>
+      ) : (
+        <DashboardSkeleton />
+      )
     );
   }
 
-  return (
-    <div className="min-h-screen bg-[#f0f5f2] text-slate-800">
-      <Topbar />
+  const ledger = [
+    { label: 'Running projects', value: runningProjects, hint: 'Projects in progress', icon: Building2, to: '/project-module/projects' },
+    { label: 'Unsold units', value: properties.length, hint: 'Units available', icon: PackageCheck, to: '/inventory-module/flat' },
+    { label: 'Requisitions', value: requisitionsTotal, hint: 'Material and service', icon: ClipboardList, to: '/requisition-module/material-requisition-list' },
+    { label: 'Pending approvals', value: vouchers.length, hint: 'Awaiting review', icon: Clock3, to: '/accounts-module/approval-center' },
+  ];
 
-      <main className="mx-auto max-w-[1500px] space-y-4 p-4">
-        {/* ===== HERO ===== */}
-        <DashboardHero
-          tone="emerald"
-          icon={ShieldCheck}
-          eyebrow={`Executive Command Center · ${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })}`}
-          title={`${greeting()}, ${firstName}`}
-          subtitle="Treasury, cash flow, projects and approvals across Trikon in one place."
-          stats={[
-            { label: 'Treasury', value: money(banks.total) },
-            { label: 'Net Position', value: money(netPosition) },
-            { label: 'Running Projects', value: number(runningProjects) },
-            { label: 'Pending Approvals', value: number(vouchers.length) },
-          ]}
-          actions={
-            <>
-              <div className="flex rounded-xl border border-white/15 bg-white/10 p-1 backdrop-blur-sm">
-                {RANGES.map((item) => (
-                  <button
-                    key={item.key}
-                    onClick={() => setRange(item.key)}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                      range === item.key ? 'bg-white text-[#174d36] shadow-md' : 'text-white/75 hover:text-white'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-              <button onClick={() => loadDashboard(true)} disabled={refreshing} className={heroButton}>
-                <RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-              <button onClick={handleExportReport} className={heroButton}>
-                <Download className="size-3.5" />
-                Export
-              </button>
-              {canGo('/requisition-module/material-requisition-add') && (
-                <button onClick={() => navigate('/requisition-module/material-requisition-add')} className={heroButtonSolid}>
-                  <Plus className="size-3.5" />
-                  New Requisition
-                </button>
-              )}
-            </>
-          }
+  const snapshot = [
+    { label: 'Customers', value: officeOverview?.customers != null ? number(officeOverview.customers) : '\u2014', icon: UserCheck },
+    { label: 'Vendors', value: officeOverview?.vendors != null ? number(officeOverview.vendors) : '\u2014', icon: Truck },
+    { label: 'Payroll budget', value: officeOverview?.payroll ? money(officeOverview.payroll.allocatedAmount) : '\u2014', icon: Banknote },
+    { label: 'Advances', value: officeOverview ? money(officeOverview.disbursedAdvances) : '\u2014', icon: Wallet },
+  ];
+
+  const netMovement = inflowTotal - outflowTotal;
+  const rangeLabel = RANGES.find((r) => r.key === range)?.label;
+
+  return frame(
+    <main className="mx-auto w-full max-w-[1440px] space-y-6 px-4 pb-10 pt-6 sm:px-6 lg:px-8">
+      {/* ===== PAGE HEADER ===== */}
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-medium text-slate-500">{todayLabel}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => loadDashboard(true)}
+            disabled={refreshing}
+            aria-label="Refresh"
+            title="Refresh"
+            className={`${btnOutline} w-9 px-0`}
+          >
+            <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+          <button onClick={handleExportReport} className={btnOutline}>
+            <Download className="size-4" /> Export
+          </button>
+          {canGo('/requisition-module/material-requisition-add') && (
+            <button onClick={() => navigate('/requisition-module/material-requisition-add')} className={btnPrimary}>
+              <Plus className="size-4" /> New requisition
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* ===== KPI CARDS ===== */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <Kpi
+          label="Net position"
+          value={money(netPosition)}
+          sub="Receipts minus expenses, all time"
+          icon={Landmark}
+          tile="bg-forest text-lime-200"
+          negative={netPosition < 0}
         />
+        <Kpi label="Receipts" value={money(summary.receipt)} sub="All-time collected" icon={ArrowUpRight} tile="bg-lime-100 text-forest" />
+        <Kpi label="Expenses" value={money(summary.expenses)} sub="All-time recorded" icon={ArrowDownRight} tile="bg-orange-50 text-orange-600" />
+        <Kpi
+          label="Treasury"
+          value={money(banks.total)}
+          sub={`${number(banks.accounts.length)} linked account${banks.accounts.length === 1 ? '' : 's'}`}
+          icon={Wallet}
+          tile="bg-stone-100 text-slate-600"
+        />
+        <Kpi
+          label="Office budget used"
+          value={`${officeSpentPct}%`}
+          sub={`${money(officeTotals.spentAmount)} of ${money(officeTotals.allocatedAmount)}`}
+          icon={Layers}
+          tile="bg-stone-100 text-slate-600"
+        >
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-stone-100">
+            <div className={`h-full rounded-full ${officeSpentPct >= 90 ? 'bg-rose-500' : 'bg-forest'}`} style={{ width: `${officeSpentPct}%` }} />
+          </div>
+        </Kpi>
+      </div>
 
-        {/* ===== TOP STRIP ===== */}
-        <div className="grid grid-cols-12 gap-4">
+      {/* ===== OPERATIONS STRIP ===== */}
+      <section className={`${cardBase} grid grid-cols-2 overflow-hidden lg:grid-cols-4`}>
+        {ledger.map((s, i) => {
+          const ok = canGo(s.to);
+          return (
+            <button
+              key={s.label}
+              onClick={() => ok && navigate(s.to)}
+              disabled={!ok}
+              className={`group flex items-center gap-4 p-5 text-left transition-colors hover:bg-stone-50 disabled:cursor-default ${
+                i % 2 === 1 ? 'border-l border-stone-200/80' : ''
+              } ${i >= 2 ? 'border-t border-stone-200/80 lg:border-t-0' : ''} ${i === 2 ? 'lg:border-l' : ''}`}
+            >
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-slate-600">
+                <s.icon className="size-[18px]" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-medium text-slate-500">{s.label}</span>
+                <span className="mt-0.5 block text-2xl font-semibold tabular-nums tracking-tight text-slate-900">{number(s.value)}</span>
+                <span className="block truncate text-xs text-slate-400">{s.hint}</span>
+              </span>
+              {ok && <ChevronRight className="size-4 shrink-0 text-slate-300 transition-colors group-hover:text-forest" />}
+            </button>
+          );
+        })}
+      </section>
 
-          {/* ===== LIQUID TREASURY - Completely Redesigned ===== */}
-          <div className="col-span-12 rounded-2xl border border-emerald-200/60 bg-white shadow-sm sm:col-span-5 lg:col-span-4">
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
-              <div className="flex items-center gap-2.5">
-                <div className="flex size-9 items-center justify-center rounded-xl bg-[#174d36] text-white">
-                  <ShieldCheck className="size-4.5" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-800">Liquid Treasury</p>
-                  <p className="text-[11px] text-slate-400">{banks.accounts.length} linked accounts</p>
-                </div>
-              </div>
-              {canGo('/accounts-module/bank-accounts') && (
+      {/* ===== CASH FLOW | APPROVALS + TREASURY ===== */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <Card
+          className="lg:col-span-8"
+          title="Cash flow"
+          subtitle={`Inflow vs outflow \u00b7 ${rangeLabel}`}
+          action={
+            <div className="inline-flex rounded-lg bg-stone-100 p-0.5">
+              {RANGES.map((item) => (
                 <button
-                  onClick={() => navigate('/accounts-module/bank-accounts')}
-                  className="rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-[#174d36] hover:bg-emerald-100"
+                  key={item.key}
+                  onClick={() => setRange(item.key)}
+                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                    range === item.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                  }`}
                 >
-                  Manage →
+                  {item.label}
                 </button>
-              )}
+              ))}
             </div>
-
-            <div className="px-5 py-4">
-              <p className="text-[13px] font-medium text-slate-500">Total Available Balance</p>
-              <p className="mt-1 text-3xl font-extrabold tracking-tight text-[#174d36] tabular-nums">
-                {money(banks.total)}
-              </p>
-            </div>
-
-            <div className="border-t border-slate-100 px-5 py-3">
-              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                Account Breakdown
-              </p>
-              <div className="space-y-2.5">
-                {banks.accounts.length === 0 ? (
-                  <p className="py-3 text-center text-xs text-slate-400">No bank accounts linked</p>
-                ) : (
-                  banks.accounts.slice(0, 4).map((acc, i) => (
-                    <div
-                      key={acc._id || i}
-                      className="flex items-center justify-between rounded-xl bg-slate-50 px-3.5 py-2.5"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-800">
-                          {acc.bank || 'Bank Account'}
-                        </p>
-                        <p className="text-[11px] text-slate-400">
-                          {acc.type || 'Account'} ···{String(acc.number || '').slice(-4)}
-                        </p>
-                      </div>
-                      <p className="shrink-0 text-sm font-bold tabular-nums text-slate-900">
-                        {money(acc.balance)}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+          }
+        >
+          <div className="grid grid-cols-3 divide-x divide-stone-200/80 rounded-xl border border-stone-200/80">
+            <FlowStat label="Inflow" value={money(inflowTotal)} swatch="bg-lime-400" />
+            <FlowStat label="Outflow" value={money(outflowTotal)} swatch="bg-forest" />
+            <FlowStat label="Net movement" value={money(netMovement)} negative={netMovement < 0} />
           </div>
-
-          {/* Period Performance */}
-          <div className="col-span-12 grid grid-cols-2 gap-3 sm:col-span-7 lg:col-span-5">
-            <div className="rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-[#174d36]">
-                  <ArrowUpRight className="size-4" />
-                </div>
-                <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
-                  Receipts
-                </span>
-              </div>
-              <p className="mt-3 text-2xl font-bold tabular-nums text-slate-900">{money(summary.receipt)}</p>
-              <p className="mt-1 text-[11px] text-slate-500">All-time collected</p>
-            </div>
-
-            <div className="rounded-2xl border border-rose-100 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex size-9 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
-                  <ArrowDownRight className="size-4" />
-                </div>
-                <span className="rounded-full bg-rose-50 px-2.5 py-0.5 text-[10px] font-bold text-rose-600">
-                  Expenses
-                </span>
-              </div>
-              <p className="mt-3 text-2xl font-bold tabular-nums text-slate-900">{money(summary.expenses)}</p>
-              <p className="mt-1 text-[11px] text-slate-500">All-time recorded</p>
-            </div>
-
-            <div className="col-span-2 rounded-2xl border border-slate-100 bg-gradient-to-r from-white via-white to-emerald-50/40 p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold text-slate-500">Net Position</p>
-                  <p className={`mt-1 text-2xl font-bold tabular-nums ${netPosition >= 0 ? 'text-[#174d36]' : 'text-rose-600'}`}>
-                    {money(netPosition)}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[11px] text-slate-500">Office Budget Used</p>
-                  <p className="text-sm font-bold tabular-nums text-slate-800">{officeSpentPct}%</p>
-                  <div className="mt-1.5 h-2 w-28 overflow-hidden rounded-full bg-slate-200">
-                    <div
-                      className={`h-full rounded-full ${officeSpentPct >= 90 ? 'bg-rose-500' : 'bg-[#174d36]'}`}
-                      style={{ width: `${officeSpentPct}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div className="mt-6">
+            <CashFlowChart labels={flow.labels || []} inflow={flow.inflow || []} outflow={flow.outflow || []} />
           </div>
+        </Card>
 
-          {/* Quick Stats */}
-          <div className="col-span-12 grid grid-cols-2 gap-3 lg:col-span-3">
-            <button
-              onClick={() => canGo('/project-module/projects') && navigate('/project-module/projects')}
-              disabled={!canGo('/project-module/projects')}
-              className="flex flex-col items-start rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4 text-left shadow-sm transition hover:shadow-md"
-            >
-              <div className="flex size-9 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
-                <Building2 className="size-4" />
-              </div>
-              <p className="mt-3 text-2xl font-bold text-slate-900">{number(runningProjects)}</p>
-              <p className="text-[11px] font-medium text-slate-500">Running Projects</p>
-            </button>
-
-            <button
-              onClick={() => canGo('/inventory-module/flat') && navigate('/inventory-module/flat')}
-              disabled={!canGo('/inventory-module/flat')}
-              className="flex flex-col items-start rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-white p-4 text-left shadow-sm transition hover:shadow-md"
-            >
-              <div className="flex size-9 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
-                <PackageCheck className="size-4" />
-              </div>
-              <p className="mt-3 text-2xl font-bold text-slate-900">{properties.length}</p>
-              <p className="text-[11px] font-medium text-slate-500">Unsold Units</p>
-            </button>
-
-            <button
-              onClick={() => canGo('/requisition-module/material-requisition-list') && navigate('/requisition-module/material-requisition-list')}
-              disabled={!canGo('/requisition-module/material-requisition-list')}
-              className="flex flex-col items-start rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50 to-white p-4 text-left shadow-sm transition hover:shadow-md"
-            >
-              <div className="flex size-9 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
-                <ClipboardList className="size-4" />
-              </div>
-              <p className="mt-3 text-2xl font-bold text-slate-900">{number(requisitionsTotal)}</p>
-              <p className="text-[11px] font-medium text-slate-500">Requisitions</p>
-            </button>
-
-            <button
-              onClick={() => canGo('/accounts-module/approval-center') && navigate('/accounts-module/approval-center')}
-              disabled={!canGo('/accounts-module/approval-center')}
-              className="flex flex-col items-start rounded-2xl border border-rose-100 bg-gradient-to-br from-rose-50 to-white p-4 text-left shadow-sm transition hover:shadow-md"
-            >
-              <div className="flex size-9 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
-                <Clock3 className="size-4" />
-              </div>
-              <p className="mt-3 text-2xl font-bold text-slate-900">{vouchers.length}</p>
-              <p className="text-[11px] font-medium text-slate-500">Pending Approvals</p>
-            </button>
-          </div>
-        </div>
-
-        {/* ===== MAIN GRID ===== */}
-        <div className="grid grid-cols-12 gap-4">
-
-          {/* LEFT */}
-          <div className="col-span-12 space-y-4 lg:col-span-4">
-
-            {/* CASH FLOW - Larger & better proportion */}
-            <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b border-slate-50 px-5 py-3.5">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-[#174d36]">
-                    <TrendingUp className="size-4.5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-800">Cash Flow</p>
-                    <p className="text-[11px] text-slate-400">Inflow vs Outflow · {RANGES.find(r => r.key === range)?.label}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 text-[11px] font-medium">
-                  <span className="flex items-center gap-1.5">
-                    <span className="size-2.5 rounded-full bg-[#174d36]" /> Inflow
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="size-2.5 rounded-full bg-[#e9c46a]" /> Outflow
-                  </span>
-                </div>
-              </div>
-              <div className="h-[260px] p-4">
-                <InflowOutflowChart
-                  labels={flow.labels || []}
-                  inflow={flow.inflow || []}
-                  outflow={flow.outflow || []}
-                />
-              </div>
-            </div>
-
-            {/* EXPENSE MIX - Redesigned to show more data + clear ৳ */}
-            <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b border-slate-50 px-5 py-3.5">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex size-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                    <Layers className="size-4.5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-800">Expense Mix</p>
-                    <p className="text-[11px] text-slate-400">
-                      Total: <span className="font-semibold text-slate-700">{money(expenseTotal)}</span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4">
-                {expenseChart.length === 0 ? (
-                  <p className="py-10 text-center text-sm text-slate-400">No expense data for this period</p>
-                ) : (
-                  <div className="space-y-3">
-                    {expenseChart.slice(0, 8).map((item, index) => {
-                      const value = Number(item.value ?? item.amount ?? item.total ?? 0);
-                      const pct = expenseTotal ? Math.round((value / expenseTotal) * 100) : 0;
-                      const color = item.color ?? EXPENSE_COLORS[index % EXPENSE_COLORS.length];
-                      return (
-                        <div key={item.name ?? item.category ?? index}>
-                          <div className="mb-1 flex items-center justify-between text-xs">
-                            <span className="flex items-center gap-2 font-medium text-slate-700">
-                              <span className="size-2.5 rounded-full" style={{ backgroundColor: color }} />
-                              {item.name ?? item.category ?? 'Category'}
-                            </span>
-                            <span className="font-bold tabular-nums text-slate-900">
-                              {money(value)} <span className="font-normal text-slate-400">({pct}%)</span>
-                            </span>
-                          </div>
-                          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                            <div
-                              className="h-full rounded-full transition-all"
-                              style={{ width: `${pct}%`, backgroundColor: color }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* CENTER */}
-          <div className="col-span-12 space-y-4 lg:col-span-4">
-            {/* Projects */}
-            <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b border-slate-50 px-5 py-3.5">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex size-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                    <Building2 className="size-4.5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-800">Project Health</p>
-                    <p className="text-[11px] text-slate-400">{projects.length} active projects</p>
-                  </div>
-                </div>
-                {canGo('/project-module/projects') && (
-                  <button
-                    onClick={() => navigate('/project-module/projects')}
-                    className="text-xs font-bold text-[#174d36] hover:underline"
-                  >
-                    View All →
-                  </button>
-                )}
-              </div>
-
-              <div className="max-h-[300px] overflow-y-auto">
-                {projects.length === 0 ? (
-                  <p className="py-12 text-center text-sm text-slate-400">No projects yet</p>
-                ) : (
-                  <div className="divide-y divide-slate-50">
-                    {projects.slice(0, 6).map((project, idx) => {
-                      const progress = Math.max(0, Math.min(100, Number(project.progress || 0)));
-                      const colors = [
-                        'from-emerald-500 to-teal-500',
-                        'from-blue-500 to-indigo-500',
-                        'from-violet-500 to-purple-500',
-                        'from-amber-500 to-orange-500',
-                        'from-rose-500 to-pink-500',
-                      ];
-                      return (
-                        <button
-                          key={project._id || idx}
-                          onClick={() =>
-                            canGo('/project-module/projects') &&
-                            navigate(project._id ? `/project-module/projects/${project._id}` : '/project-module/projects')
-                          }
-                          disabled={!canGo('/project-module/projects')}
-                          className="flex w-full items-center gap-3.5 px-5 py-3.5 text-left transition hover:bg-slate-50"
-                        >
-                          <div className={`flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${colors[idx % colors.length]} text-sm font-bold text-white`}>
-                            {progress}%
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-slate-800">
-                              {project.name || 'Unnamed Project'}
-                            </p>
-                            <p className="truncate text-[11px] text-slate-400">
-                              {project.location || project.subtitle || project.type || '—'}
-                            </p>
-                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                              <div
-                                className={`h-full rounded-full bg-gradient-to-r ${colors[idx % colors.length]}`}
-                                style={{ width: `${progress}%` }}
-                              />
-                            </div>
-                          </div>
-                          <ChevronRight className="size-4 shrink-0 text-slate-300" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Unsold Inventory */}
-            <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b border-slate-50 px-5 py-3.5">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex size-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                    <PackageCheck className="size-4.5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-800">Unsold Inventory</p>
-                    <p className="text-[11px] text-slate-400">{properties.length} units available</p>
-                  </div>
-                </div>
-                {canGo('/crm-module/lead') && (
-                  <button
-                    onClick={() => navigate('/crm-module/lead')}
-                    className="text-xs font-bold text-[#174d36] hover:underline"
-                  >
-                    Match Leads →
-                  </button>
-                )}
-              </div>
-
-              <div className="max-h-[220px] overflow-y-auto">
-                {properties.length === 0 ? (
-                  <p className="py-10 text-center text-sm text-slate-400">No unsold units</p>
-                ) : (
-                  <div className="divide-y divide-slate-50">
-                    {properties.slice(0, 5).map((property) => (
-                      <div
-                        key={property._id || property.unit}
-                        className="flex items-center justify-between gap-3 px-5 py-3"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-slate-800">
-                            {property.unit || 'Unit'}
-                          </p>
-                          <p className="truncate text-[11px] text-slate-400">
-                            {[property.project, property.type].filter(Boolean).join(' · ')}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-bold tabular-nums text-slate-900">
-                            {money(property.price)}
-                          </p>
-                          {property.status && (
-                            <span className={`text-[10px] font-semibold ${property.status === 'In Closing' ? 'text-amber-600' : 'text-[#174d36]'}`}>
-                              {property.status}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* RIGHT */}
-          <div className="col-span-12 space-y-4 lg:col-span-4">
-            {/* Action Required */}
-            <div className="overflow-hidden rounded-2xl border-2 border-rose-200 bg-white shadow-md shadow-rose-100">
-              <div className="flex items-center justify-between bg-gradient-to-r from-rose-50 to-orange-50 px-5 py-3.5">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex size-9 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
-                    <Clock3 className="size-4.5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-800">Action Required</p>
-                    <p className="text-[11px] text-slate-500">Pending voucher approvals</p>
-                  </div>
-                </div>
-                {vouchers.length > 0 && (
-                  <span className="flex size-7 items-center justify-center rounded-full bg-rose-500 text-xs font-bold text-white">
-                    {vouchers.length}
-                  </span>
-                )}
-              </div>
-
-              <div className="max-h-[280px] overflow-y-auto">
-                {vouchers.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-14">
-                    <CheckCircle2 className="size-11 text-emerald-300" />
-                    <p className="mt-3 text-sm font-semibold text-slate-600">All clear!</p>
-                    <p className="text-xs text-slate-400">No pending vouchers</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-slate-50">
-                    {vouchers.map((voucher) => (
-                      <div key={voucher._id || voucher.code} className="px-5 py-3.5">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
-                                {voucher.code || 'VCH'}
-                              </span>
-                              <span className="text-[10px] text-slate-400">
-                                {voucher.dueLabel || 'Pending'}
-                              </span>
-                            </div>
-                            <p className="mt-1.5 truncate text-sm font-semibold text-slate-800">
-                              {voucher.description || 'Voucher awaiting approval'}
-                            </p>
-                            <p className="mt-1 text-base font-bold tabular-nums text-slate-900">
-                              {money(voucher.amount)}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => handleApproveVoucher(voucher._id)}
-                            disabled={!voucher._id || approvingId === voucher._id}
-                            className="shrink-0 rounded-xl bg-gradient-to-r from-[#174d36] to-[#2a9d8f] px-3.5 py-1.5 text-xs font-bold text-white shadow-md disabled:opacity-50"
-                          >
-                            {approvingId === voucher._id ? '…' : 'Approve'}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-              <p className="mb-3 text-sm font-bold text-slate-800">Quick Actions</p>
-              <div className="grid grid-cols-2 gap-2.5">
-                {canGo('/crm-module/lead') && (
-                  <button
-                    onClick={() => navigate('/crm-module/lead')}
-                    className="flex items-center gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/50 px-3 py-3 text-left transition hover:bg-emerald-50"
-                  >
-                    <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-100 text-[#174d36]">
-                      <Users className="size-4" />
-                    </div>
-                    <span className="text-xs font-semibold text-slate-700">CRM / Leads</span>
-                  </button>
-                )}
-                {canGo('/accounts-module/office-expense') && (
-                  <button
-                    onClick={() => navigate('/accounts-module/office-expense')}
-                    className="flex items-center gap-2.5 rounded-xl border border-amber-100 bg-amber-50/50 px-3 py-3 text-left transition hover:bg-amber-50"
-                  >
-                    <div className="flex size-8 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
-                      <Wallet className="size-4" />
-                    </div>
-                    <span className="text-xs font-semibold text-slate-700">Add Expense</span>
-                  </button>
-                )}
-                {canGo('/project-module/projects') && (
-                  <button
-                    onClick={() => navigate('/project-module/projects')}
-                    className="flex items-center gap-2.5 rounded-xl border border-blue-100 bg-blue-50/50 px-3 py-3 text-left transition hover:bg-blue-50"
-                  >
-                    <div className="flex size-8 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
-                      <Building2 className="size-4" />
-                    </div>
-                    <span className="text-xs font-semibold text-slate-700">Projects</span>
-                  </button>
-                )}
-                {canGo('/dashboard/accounts') && (
-                  <button
-                    onClick={() => navigate('/dashboard/accounts')}
-                    className="flex items-center gap-2.5 rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-3 text-left transition hover:bg-violet-50"
-                  >
-                    <div className="flex size-8 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
-                      <Landmark className="size-4" />
-                    </div>
-                    <span className="text-xs font-semibold text-slate-700">Accounts</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ===== ELEVATED STATS ROW - Customers, Vendors, Payroll, Advances ===== */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-5 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="flex size-11 items-center justify-center rounded-xl bg-emerald-100 text-[#174d36]">
-                <UserCheck className="size-5" />
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Customers</p>
-                <p className="text-2xl font-extrabold tabular-nums text-slate-900">
-                  {officeOverview?.customers ?? '—'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-5 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="flex size-11 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
-                <Truck className="size-5" />
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">Vendors</p>
-                <p className="text-2xl font-extrabold tabular-nums text-slate-900">
-                  {officeOverview?.vendors ?? '—'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50 to-white p-5 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="flex size-11 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
-                <Banknote className="size-5" />
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-700">Payroll Budget</p>
-                <p className="text-xl font-extrabold tabular-nums text-slate-900">
-                  {officeOverview?.payroll ? money(officeOverview.payroll.allocatedAmount) : '—'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="flex size-11 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
-                <Wallet className="size-5" />
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Advances</p>
-                <p className="text-xl font-extrabold tabular-nums text-slate-900">
-                  {money(officeOverview?.disbursedAdvances)}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ===== RECENT ACTIVITY - Completely New Design ===== */}
-        <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-50 px-5 py-4">
-            <div className="flex items-center gap-2.5">
-              <div className="flex size-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
-                <FileText className="size-4.5" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-slate-800">Recent Activity</p>
-                <p className="text-[11px] text-slate-400">Latest business events & comments</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-4">
-            {comments.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <div className="flex size-14 items-center justify-center rounded-2xl bg-slate-50">
-                  <FileText className="size-6 text-slate-300" />
-                </div>
-                <p className="mt-3 text-sm font-medium text-slate-500">No recent activity</p>
-                <p className="text-xs text-slate-400">Activity will appear here as your team works</p>
-              </div>
+        <div className="flex flex-col gap-6 lg:col-span-4">
+          <Card
+            title="Pending approvals"
+            subtitle="Voucher approvals awaiting review"
+            action={
+              <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${vouchers.length ? 'bg-lime-200 text-forest' : 'bg-stone-100 text-slate-500'}`}>
+                {vouchers.length}
+              </span>
+            }
+            bodyClassName="max-h-[300px] overflow-y-auto px-6 pb-6"
+          >
+            {vouchers.length === 0 ? (
+              <EmptyBlock icon={CheckCircle2} title="All clear" text="No pending vouchers right now" />
             ) : (
-              <div className="space-y-3">
-                {comments.slice(0, 8).map((comment, idx) => (
-                  <div
-                    key={comment._id || idx}
-                    className="flex gap-3.5 rounded-xl border border-slate-100 bg-slate-50/50 p-3.5 transition hover:bg-slate-50"
-                  >
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#174d36]/10 text-[#174d36]">
-                      <span className="text-xs font-bold">
-                        {(comment.userName || comment.author || comment.user || 'U').charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-semibold text-slate-800">
-                          {comment.userName || comment.author || comment.user || 'System'}
-                        </p>
-                        {comment.type && (
-                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                            {comment.type}
-                          </span>
-                        )}
-                        <span className="text-[11px] text-slate-400">
-                          {comment.createdAt
-                            ? new Date(comment.createdAt).toLocaleString('en-GB', {
-                                day: 'numeric',
-                                month: 'short',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                            : comment.time || comment.date || ''}
-                        </span>
+              <div className="divide-y divide-stone-100">
+                {vouchers.map((voucher) => (
+                  <div key={voucher._id || voucher.code} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="rounded bg-stone-100 px-1.5 py-0.5 font-medium text-slate-600">{voucher.code || 'VCH'}</span>
+                        <span className="text-slate-400">{voucher.dueLabel || 'Pending'}</span>
                       </div>
-                      <p className="mt-1 text-sm leading-relaxed text-slate-600">
-                        {comment.message || comment.comment || comment.text || comment.content || '—'}
-                      </p>
-                      {(comment.module || comment.project) && (
-                        <p className="mt-1.5 text-[11px] font-medium text-slate-400">
-                          {comment.module || comment.project}
-                        </p>
-                      )}
+                      <p className="mt-1 truncate text-sm text-slate-700">{voucher.description || 'Voucher awaiting approval'}</p>
+                      <p className="text-sm font-semibold tabular-nums text-slate-900">{money(voucher.amount)}</p>
                     </div>
+                    <button
+                      onClick={() => handleApproveVoucher(voucher._id)}
+                      disabled={!voucher._id || approvingId === voucher._id}
+                      className={`${btnPrimary} h-8 shrink-0 px-3 text-xs disabled:opacity-50`}
+                    >
+                      {approvingId === voucher._id ? 'Approving\u2026' : 'Approve'}
+                    </button>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </Card>
+
+          <Card
+            className="flex-1"
+            title="Liquid treasury"
+            subtitle={`${money(banks.total)} available`}
+            action={canGo('/accounts-module/bank-accounts') && <TextLink onClick={() => navigate('/accounts-module/bank-accounts')}>Manage</TextLink>}
+          >
+            {banks.accounts.length === 0 ? (
+              <EmptyBlock icon={Landmark} title="No bank accounts linked" text="Link an account to see your balances" />
+            ) : (
+              <div className="space-y-3">
+                {banks.accounts.slice(0, 4).map((acc, i) => {
+                  const share = Number(banks.total) > 0 ? Math.max(0, Math.min(100, (Number(acc.balance) / Number(banks.total)) * 100)) : 0;
+                  return (
+                    <div key={acc._id || i}>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium text-slate-800">{acc.bank || 'Bank Account'}</span>
+                          <span className="block text-xs text-slate-400">
+                            {acc.type || 'Account'}
+                            {acc.number ? ` \u00b7\u00b7\u00b7${String(acc.number).slice(-4)}` : ''}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">{money(acc.balance)}</span>
+                      </div>
+                      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-stone-100">
+                        <div className="h-full rounded-full bg-lime-400" style={{ width: `${share}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
         </div>
-      </main>
+      </div>
+
+      {/* ===== PROJECTS | INVENTORY | EXPENSE MIX ===== */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <Card
+          title="Project health"
+          subtitle={`${number(projects.length)} active projects`}
+          action={canGo('/project-module/projects') && <TextLink onClick={() => navigate('/project-module/projects')}>View all</TextLink>}
+          bodyClassName="max-h-[320px] overflow-y-auto px-3 pb-4"
+        >
+          {projects.length === 0 ? (
+            <div className="px-3 pb-2"><EmptyBlock icon={Building2} title="No projects yet" text="Projects will show here with their progress" /></div>
+          ) : (
+            projects.slice(0, 6).map((project, idx) => {
+              const progress = Math.max(0, Math.min(100, Number(project.progress || 0)));
+              return (
+                <button
+                  key={project._id || idx}
+                  onClick={() =>
+                    canGo('/project-module/projects') &&
+                    navigate(project._id ? `/project-module/projects/${project._id}` : '/project-module/projects')
+                  }
+                  disabled={!canGo('/project-module/projects')}
+                  className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-stone-50"
+                >
+                  <ProgressRing value={progress} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-slate-800">{project.name || 'Unnamed Project'}</span>
+                    <span className="block truncate text-xs text-slate-400">{project.location || project.subtitle || project.type || '\u2014'}</span>
+                  </span>
+                  <ChevronRight className="size-4 shrink-0 text-slate-300 transition-colors group-hover:text-forest" />
+                </button>
+              );
+            })
+          )}
+        </Card>
+
+        <Card
+          title="Unsold inventory"
+          subtitle={`${number(properties.length)} units available`}
+          action={canGo('/crm-module/lead') && <TextLink onClick={() => navigate('/crm-module/lead')}>Match leads</TextLink>}
+          bodyClassName="max-h-[320px] overflow-y-auto px-6 pb-6"
+        >
+          {properties.length === 0 ? (
+            <EmptyBlock icon={PackageCheck} title="No unsold units" text="Available flats and land will show here" />
+          ) : (
+            <div className="divide-y divide-stone-100">
+              {properties.slice(0, 5).map((property, idx) => (
+                <div key={property._id || property.unit || idx} className="flex items-center justify-between gap-3 py-2.5 first:pt-0">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-slate-800">{property.unit || 'Unit'}</p>
+                    <p className="truncate text-xs text-slate-400">{[property.project, property.type].filter(Boolean).join(' \u00b7 ')}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-semibold tabular-nums text-slate-900">{money(property.price)}</p>
+                    {property.status && (
+                      <p className={`text-xs ${property.status === 'In Closing' ? 'text-amber-600' : 'text-forest'}`}>{property.status}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card title="Expense mix" subtitle={`${rangeLabel} \u00b7 total ${money(expenseTotal)}`} className="md:col-span-2 lg:col-span-1">
+          {expenseChart.length === 0 || !expenseTotal ? (
+            <EmptyBlock icon={Layers} title="No expense data" text="Nothing recorded for this period" />
+          ) : (
+            <>
+              <div className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full">
+                {expenseChart.slice(0, 6).map((item, index) => {
+                  const value = Number(item.value ?? item.amount ?? item.total ?? 0);
+                  const pct = (value / expenseTotal) * 100;
+                  return pct > 0 ? (
+                    <span
+                      key={item.name ?? item.category ?? index}
+                      title={`${item.name ?? item.category ?? 'Category'}: ${money(value)}`}
+                      className="h-full"
+                      style={{ width: `${pct}%`, backgroundColor: item.color ?? EXPENSE_COLORS[index % EXPENSE_COLORS.length] }}
+                    />
+                  ) : null;
+                })}
+              </div>
+              <div className="mt-4 space-y-2.5">
+                {expenseChart.slice(0, 6).map((item, index) => {
+                  const value = Number(item.value ?? item.amount ?? item.total ?? 0);
+                  const pct = Math.round((value / expenseTotal) * 100);
+                  return (
+                    <div key={item.name ?? item.category ?? index} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="flex min-w-0 items-center gap-2 text-slate-600">
+                        <span className="size-2.5 shrink-0 rounded-sm" style={{ backgroundColor: item.color ?? EXPENSE_COLORS[index % EXPENSE_COLORS.length] }} />
+                        <span className="truncate">{item.name ?? item.category ?? 'Category'}</span>
+                      </span>
+                      <span className="shrink-0 tabular-nums">
+                        <span className="font-medium text-slate-900">{money(value)}</span>
+                        <span className="ml-2 inline-block w-9 text-right text-xs text-slate-400">{pct}%</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </Card>
+      </div>
+
+      {/* ===== RECENT ACTIVITY | SNAPSHOT ===== */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <Card
+          className="lg:col-span-8"
+          title="Recent activity"
+          subtitle="Latest business events and comments"
+          bodyClassName="max-h-[360px] overflow-y-auto px-6 pb-6"
+        >
+          {comments.length === 0 ? (
+            <EmptyBlock icon={FileText} title="No recent activity" text="Activity will appear here as your team works" />
+          ) : (
+            <div className="divide-y divide-stone-100">
+              {comments.slice(0, 8).map((comment, idx) => (
+                <div key={comment._id || idx} className="flex gap-3 py-3 first:pt-0 last:pb-0">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-lime-100 text-xs font-semibold text-forest">
+                    {(comment.userName || comment.author || comment.user || 'U').charAt(0).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <p className="text-sm font-medium text-slate-800">{comment.userName || comment.author || comment.user || 'System'}</p>
+                      {comment.type && <span className="rounded bg-stone-100 px-1.5 py-0.5 text-xs text-slate-600">{comment.type}</span>}
+                      <span className="text-xs text-slate-400">
+                        {comment.createdAt
+                          ? new Date(comment.createdAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                          : comment.time || comment.date || ''}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-sm text-slate-600">
+                      {comment.message || comment.comment || comment.text || comment.content || '\u2014'}
+                    </p>
+                    {(comment.module || comment.project) && <p className="mt-0.5 text-xs text-slate-400">{comment.module || comment.project}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card className="lg:col-span-4" title="Business snapshot" subtitle="Customers, vendors, payroll and advances" bodyClassName="px-6 pb-4">
+          <div className="divide-y divide-stone-100">
+            {snapshot.map((s) => (
+              <div key={s.label} className="flex items-center justify-between gap-3 py-3 first:pt-0">
+                <span className="flex items-center gap-3 text-sm text-slate-600">
+                  <span className="flex size-8 items-center justify-center rounded-lg bg-stone-100 text-slate-500">
+                    <s.icon className="size-4" />
+                  </span>
+                  {s.label}
+                </span>
+                <span className="text-sm font-semibold tabular-nums text-slate-900">{s.value}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </main>
+  );
+}
+
+function Card({ title, subtitle, action, children, className = '', bodyClassName = 'px-6 pb-6' }) {
+  return (
+    <section className={`${cardBase} flex flex-col ${className}`}>
+      <div className="flex items-start justify-between gap-4 px-6 pb-4 pt-5">
+        <div className="min-w-0">
+          <h2 className="truncate text-[15px] font-semibold text-slate-900">{title}</h2>
+          {subtitle && <p className="mt-0.5 truncate text-xs text-slate-500">{subtitle}</p>}
+        </div>
+        {action || null}
+      </div>
+      <div className={bodyClassName}>{children}</div>
+    </section>
+  );
+}
+
+function Kpi({ label, value, sub, icon: Icon, tile, negative = false, children }) {
+  return (
+    <div className={`${cardBase} p-5`}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="truncate text-xs font-medium text-slate-500">{label}</p>
+        <span className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${tile}`}>
+          <Icon className="size-4" />
+        </span>
+      </div>
+      <p className={`mt-3 truncate text-2xl font-semibold tabular-nums tracking-tight ${negative ? 'text-rose-600' : 'text-slate-900'}`}>{value}</p>
+      <p className="mt-1 truncate text-xs text-slate-500">{sub}</p>
+      {children}
     </div>
   );
 }
+
+function TextLink({ onClick, children }) {
+  return (
+    <button onClick={onClick} className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-forest transition-colors hover:text-forest-900">
+      {children} <ChevronRight className="size-3.5" />
+    </button>
+  );
+}
+
+function FlowStat({ label, value, swatch, negative = false }) {
+  return (
+    <div className="min-w-0 px-4 py-3">
+      <p className="flex items-center gap-1.5 text-xs text-slate-500">
+        {swatch && <span className={`size-2 rounded-sm ${swatch}`} />}
+        {label}
+      </p>
+      <p className={`mt-0.5 truncate text-base font-semibold tabular-nums ${negative ? 'text-rose-600' : 'text-slate-900'}`}>{value}</p>
+    </div>
+  );
+}
+
+// Round numbers for the y axis (1, 2, 2.5, 5 x 10^n).
+function niceMax(max) {
+  if (max <= 0) return 1;
+  const p = 10 ** Math.floor(Math.log10(max));
+  const f = max / p;
+  const step = f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10;
+  return step * p;
+}
+
+// Paired lime / forest columns with a hover read-out (no chart library).
+function CashFlowChart({ labels, inflow, outflow }) {
+  const [hover, setHover] = useState(null);
+  const n = labels.length;
+  const values = [...inflow, ...outflow].map((v) => Number(v) || 0);
+  const top = niceMax(Math.max(0, ...values));
+  const hasData = n > 0 && values.some((v) => v > 0);
+  if (!hasData) {
+    return <EmptyBlock icon={Layers} title="No cash movement" text="Receipts and payments for this period will chart here" />;
+  }
+  const step = Math.max(1, Math.ceil(n / 12));
+  const h = (v) => {
+    const x = Number(v) || 0;
+    return x > 0 ? Math.max(1.5, (x / top) * 100) : 0;
+  };
+  return (
+    <div>
+      <div className="relative h-56 pl-14">
+        {[1, 0.5, 0].map((t) => (
+          <div key={t} className="absolute left-14 right-0 border-t border-stone-100" style={{ bottom: `${t * 100}%` }}>
+            <span className="absolute -left-14 -translate-y-1/2 text-[11px] tabular-nums text-slate-400">{compact(top * t)}</span>
+          </div>
+        ))}
+        <div className="relative flex h-full items-end gap-1 sm:gap-2">
+          {labels.map((label, i) => (
+            <div
+              key={`${label}-${i}`}
+              className="relative flex h-full min-w-0 flex-1 items-end justify-center"
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover(null)}
+            >
+              <div className={`absolute inset-0 rounded-md transition-colors ${hover === i ? 'bg-stone-100/70' : ''}`} />
+              <div className="relative flex h-full w-full items-end justify-center gap-0.5">
+                <span className="w-full max-w-[14px] rounded-t bg-lime-400" style={{ height: `${h(inflow[i])}%` }} />
+                <span className="w-full max-w-[14px] rounded-t bg-forest" style={{ height: `${h(outflow[i])}%` }} />
+              </div>
+              {hover === i && (
+                <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs shadow-lg">
+                  <p className="font-medium text-slate-900">{label}</p>
+                  <p className="mt-1 flex items-center gap-1.5 tabular-nums text-slate-600"><span className="size-2 rounded-sm bg-lime-400" /> In {money(inflow[i])}</p>
+                  <p className="flex items-center gap-1.5 tabular-nums text-slate-600"><span className="size-2 rounded-sm bg-forest" /> Out {money(outflow[i])}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-2 flex gap-1 pl-14 sm:gap-2">
+        {labels.map((label, i) => (
+          <span key={`${label}-x-${i}`} className="min-w-0 flex-1 truncate text-center text-[11px] text-slate-400">
+            {i % step === 0 ? label : ''}
+          </span>
+        ))}
+      </div>
+      <div className="mt-4 flex items-center gap-4 text-xs text-slate-500">
+        <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-lime-400" /> Inflow</span>
+        <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-forest" /> Outflow</span>
+      </div>
+    </div>
+  );
+}
+
+function ProgressRing({ value }) {
+  const c = 2 * Math.PI * 16;
+  return (
+    <span className="relative flex size-10 shrink-0 items-center justify-center">
+      <svg viewBox="0 0 40 40" className="absolute inset-0 size-full -rotate-90">
+        <circle cx="20" cy="20" r="16" fill="none" stroke="#f5f5f4" strokeWidth="3.5" />
+        <circle
+          cx="20"
+          cy="20"
+          r="16"
+          fill="none"
+          stroke="#0f3d33"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - value / 100)}
+        />
+      </svg>
+      <span className="relative text-[10px] font-semibold tabular-nums text-slate-700">{value}%</span>
+    </span>
+  );
+}
+
+function EmptyBlock({ icon: Icon, title, text }) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-stone-200 px-4 py-8 text-center">
+      <span className="flex size-10 items-center justify-center rounded-lg bg-stone-100 text-slate-400">
+        <Icon className="size-5" />
+      </span>
+      <p className="mt-3 text-sm font-medium text-slate-700">{title}</p>
+      {text && <p className="mt-0.5 max-w-[240px] text-xs text-slate-400">{text}</p>}
+    </div>
+  );
+}
+
 function DashboardSkeleton() {
   return (
-    <main className="mx-auto max-w-[1500px] space-y-4 p-4" aria-busy="true" aria-label="Loading dashboard">
-      <Skeleton className="h-44 w-full rounded-3xl" />
-      <div className="grid grid-cols-12 gap-4">
-        <Skeleton className="col-span-12 h-64 rounded-2xl sm:col-span-5 lg:col-span-4" />
-        <Skeleton className="col-span-12 h-64 rounded-2xl sm:col-span-7 lg:col-span-5" />
-        <Skeleton className="col-span-12 h-64 rounded-2xl lg:col-span-3" />
-      </div>
-      <div className="grid grid-cols-12 gap-4">
-        {[0, 1, 2].map((i) => (
-          <Skeleton key={i} className="col-span-12 h-80 rounded-2xl lg:col-span-4" />
+    <main className="mx-auto max-w-[1440px] space-y-6 px-4 pb-10 pt-6 sm:px-6 lg:px-8" aria-busy="true" aria-label="Loading dashboard">
+      <Skeleton className="h-16 w-72 rounded-xl" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} className="h-32 rounded-2xl" />
         ))}
+      </div>
+      <Skeleton className="h-24 w-full rounded-2xl" />
+      <div className="grid grid-cols-12 gap-6">
+        <Skeleton className="col-span-12 h-96 rounded-2xl lg:col-span-8" />
+        <Skeleton className="col-span-12 h-96 rounded-2xl lg:col-span-4" />
       </div>
     </main>
   );

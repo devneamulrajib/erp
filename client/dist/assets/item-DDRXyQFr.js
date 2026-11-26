@@ -1,1 +1,0 @@
-import{St as e}from"./index-6QilPZtG.js";var t=async t=>(await e.get(`/item`,{params:t})).data,n=async t=>(await e.post(`/item`,t)).data,r=async(t,n)=>(await e.put(`/item/${t}`,n)).data,i=async t=>(await e.delete(`/item/${t}`)).data;export{r as i,i as n,t as r,n as t};

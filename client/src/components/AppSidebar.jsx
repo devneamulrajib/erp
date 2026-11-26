@@ -267,12 +267,13 @@ export default function AppSidebar({ mobileOpen = false, onMobileClose }) {
               <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white p-1.5 ring-1 ring-stone-200">
                 <img src={companyLogo} alt="Trikon" className="h-full w-full object-contain" />
               </span>
-              <span className="min-w-0">
-                <span className="flex items-center gap-1.5">
-                  <span className="text-[15px] font-extrabold tracking-tight text-slate-900">TRIKON</span>
-                  <span className="rounded-full bg-lime-200 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-forest">ERP</span>
+              <span className="flex min-w-0 items-center gap-2.5">
+                <span className="text-[14px] font-semibold uppercase leading-none tracking-[0.22em] text-slate-900">Trikon</span>
+                <span className="h-6 w-px shrink-0 bg-stone-300/80" aria-hidden="true" />
+                <span className="flex min-w-0 flex-col gap-1 leading-none">
+                  <span className="truncate text-[8.5px] font-medium uppercase tracking-[0.28em] text-stone-500">Holdings</span>
+                  <span className="truncate text-[8.5px] font-semibold uppercase tracking-[0.28em] text-forest/80">ERP</span>
                 </span>
-                <span className="block truncate text-[10px] font-semibold uppercase tracking-wider text-slate-400">Holdings</span>
               </span>
             </button>
           )}
