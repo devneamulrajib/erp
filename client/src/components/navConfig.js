@@ -23,6 +23,9 @@ import {
   LineChart,
   ListChecks,
   Sparkles,
+  Landmark,
+  Receipt,
+  BookOpen,
 } from 'lucide-react';
 import { canAccessModule, hasExplicitModules, canOpenPath, isAdminUser, getAllUserRoles } from '../config/permissions';
 
@@ -207,6 +210,10 @@ const ACCOUNTING_SUBPAGES = [
     route: '/accounts-module/approval-center',
     adminOnly: true, // page is admin-only (AdminOnlyRoute)
   },
+  // Daily entry pages first (also the first items of the left sidebar's Accounting).
+  { key: 'daily-expense-entry', label: 'Daily Expense Entry', icon: Receipt, route: '/accounts-module/office-expense' },
+  { key: 'deposit-withdrawal', label: 'Deposit & Withdrawal', icon: Landmark, route: '/accounts-module/deposit-withdrawal' },
+  { key: 'journal-entry', label: 'Journal Entry', icon: BookOpen, route: '/accounts-module/journal_list_add' },
   {
     key: 'accountant-requests',
     label: 'My Financial Requests',
@@ -400,9 +407,9 @@ const CRM_SUBPAGES = [
     route: null,
     children: [
       { key: 'follow-up', label: 'Follow Up', route: '/crm-module/call-center/follow-up' },
-      { key: 'transfer', label: 'Transfer', route: '/crm-module/call-center/transfer' },
-      { key: 'call-report', label: 'Call Report', route: '/crm-module/call-center/call-report' },
-      { key: 'call-details-report', label: 'Call Details Report', route: '/crm-module/call-center/call-details-report' },
+      { key: 'transfer', label: 'Transfer', route: '/crm-module/call-center/transfer', comingSoon: true },
+      { key: 'call-report', label: 'Call Report', route: '/crm-module/call-center/call-report', comingSoon: true },
+      { key: 'call-details-report', label: 'Call Details Report', route: '/crm-module/call-center/call-details-report', comingSoon: true },
     ],
   },
   {
@@ -411,11 +418,11 @@ const CRM_SUBPAGES = [
     icon: MapPin,
     route: null,
     children: [
-      { key: 'visits-list', label: 'Visits', route: '/crm-module/visits' },
-      { key: 'visit-report', label: 'Visit Report', route: '/crm-module/visits/report' },
+      { key: 'visits-list', label: 'Visits', route: '/crm-module/visits', comingSoon: true },
+      { key: 'visit-report', label: 'Visit Report', route: '/crm-module/visits/report', comingSoon: true },
     ],
   },
-  { key: 'user-wise-report', label: 'User Wise Report', icon: FileBarChart2, route: '/crm-module/user-wise-report' },
+  { key: 'user-wise-report', label: 'User Wise Report', icon: FileBarChart2, route: '/crm-module/user-wise-report', comingSoon: true },
 ];
 
 const SETTINGS_SUBPAGES = [
@@ -625,10 +632,12 @@ export const getNavForUser = (user) => {
 // the full-width layout). It lists the same sections as the top menu.
 export const shouldShowSidebar = (user) => Boolean(user) && !isAdminUser(user);
 
-// Sidebar entries must lead somewhere: drop placeholder items with no page.
+// Sidebar entries must lead somewhere: drop placeholder items with no page,
+// and pages marked comingSoon (menu entries whose page is not built yet).
 const dropDeadLeaves = (items) =>
   items
     .map((item) => {
+      if (item.comingSoon) return null;
       if (item.children?.length) {
         const children = dropDeadLeaves(item.children);
         if (!children.length) return item.route ? { ...item, children: [] } : null;

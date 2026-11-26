@@ -74,6 +74,7 @@ const API_MODULES = {
   '/journal-vouchers': ['accounts'],
   '/contra-vouchers': ['accounts'],
   '/accounting-reports': ['accounts'],
+  '/deposit-withdrawals': ['accounts'],
 
   '/employee': ['hrm', 'inventory', 'tasks'],
   '/payslip': ['accounts', 'hrm'],

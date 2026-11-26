@@ -56,6 +56,39 @@ const money = (val) =>
   });
 
 // Export CSV Report Helper
+// Per-row figures shared by the desktop table and the mobile card list.
+function rowMetrics(row) {
+  const subSpentTotal = (row.subcategories || []).reduce((acc, s) => acc + (Number(s.spentAmount) || 0), 0);
+  const allocated = Number(row.allocatedAmount) || 0;
+  const spent = Number(row.spentAmount) || subSpentTotal || 0;
+  const cashReceived = Number(row.cashReceivedAmount) || 0;
+  const budgetRemaining = allocated - spent;
+  const cashRemaining = cashReceived - spent;
+  const pct = allocated > 0 ? (spent / allocated) * 100 : 0;
+  const overBudget = budgetRemaining < 0;
+  let statusLabel = 'On track';
+  let statusColor = 'text-emerald-600';
+  let barColor = 'bg-emerald-500';
+  if (allocated === 0 && spent === 0) {
+    statusLabel = 'Unallocated';
+    statusColor = 'text-slate-400';
+    barColor = 'bg-slate-200';
+  } else if (spent === 0) {
+    statusLabel = 'Unspent';
+    statusColor = 'text-slate-400';
+    barColor = 'bg-slate-200';
+  } else if (overBudget) {
+    statusLabel = 'Over budget';
+    statusColor = 'text-rose-600';
+    barColor = 'bg-rose-500';
+  } else if (pct > 80) {
+    statusLabel = 'High spend';
+    statusColor = 'text-amber-600';
+    barColor = 'bg-amber-500';
+  }
+  return { allocated, spent, cashReceived, budgetRemaining, cashRemaining, pct, statusLabel, statusColor, barColor };
+}
+
 function exportBudgetReport({ year, month, rows, summaryTotals }) {
   const monthName = MONTH_NAMES[month - 1];
   const dateStr = new Date().toLocaleString('en-GB');
@@ -1295,7 +1328,7 @@ export default function OfficeBudgetPage() {
     <div className="min-h-screen w-full bg-[#f8fafc] text-slate-800 flex flex-col font-sans">
       <Topbar />
 
-      <main className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-5 space-y-3.5">
+      <main className="mx-auto w-full max-w-[1440px] min-w-0 flex-1 px-3 sm:px-6 lg:px-8 py-4 sm:py-5 space-y-3.5">
         <Breadcrumb
           items={[
             { label: 'Home', to: '/dashboard' },
@@ -1315,7 +1348,7 @@ export default function OfficeBudgetPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center [&>button]:justify-center">
             <button
               type="button"
               onClick={() => exportBudgetReport({ year, month, rows, summaryTotals })}
@@ -1371,7 +1404,7 @@ export default function OfficeBudgetPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto">
             <button
               type="button"
               onClick={handlePrevMonth}
@@ -1381,7 +1414,7 @@ export default function OfficeBudgetPage() {
               <ChevronLeft size={14} />
             </button>
 
-            <div className="relative inline-flex items-center border border-slate-200 rounded-md px-2.5 py-1 bg-white shadow-2xs">
+            <div className="relative inline-flex flex-1 items-center border border-slate-200 rounded-md px-2.5 py-1 bg-white shadow-2xs sm:flex-none">
               <select
                 value={`${month}-${year}`}
                 onChange={(e) => {
@@ -1389,7 +1422,7 @@ export default function OfficeBudgetPage() {
                   setMonth(Number(m));
                   setYear(Number(y));
                 }}
-                className="appearance-none bg-transparent text-xs font-semibold text-slate-800 pr-4 focus:outline-none cursor-pointer"
+                className="w-full appearance-none bg-transparent text-xs font-semibold text-slate-800 pr-4 focus:outline-none cursor-pointer"
               >
                 {[-1, 0, 1].map((yearOffset) => {
                   const targetYear = now.getFullYear() + yearOffset;
@@ -1415,7 +1448,7 @@ export default function OfficeBudgetPage() {
             <button
               type="button"
               onClick={() => setIsReceivingCash(true)}
-              className="inline-flex items-center gap-1 px-3 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition ml-1"
+              className="inline-flex flex-1 items-center justify-center gap-1 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition sm:ml-1 sm:flex-none sm:py-1"
             >
               <ArrowDownLeft size={13} />
               Receive Cash
@@ -1424,7 +1457,7 @@ export default function OfficeBudgetPage() {
             <button
               type="button"
               onClick={() => setEditingRow({})}
-              className="inline-flex items-center gap-1 px-3 py-1 rounded-md bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition"
+              className="inline-flex flex-1 items-center justify-center gap-1 px-3 py-1.5 rounded-md bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition sm:flex-none sm:py-1"
             >
               <Plus size={13} />
               Set Budget
@@ -1574,7 +1607,144 @@ export default function OfficeBudgetPage() {
             </div>
           </div>
 
-          <div className="w-full overflow-x-auto">
+          {/* Phones: one card per category (the 8-column table needs ~990px). */}
+          <div className="divide-y divide-slate-100 md:hidden">
+            {loading ? (
+              <p className="py-10 text-center text-xs text-slate-400">Loading budget entries...</p>
+            ) : filteredRows.length === 0 ? (
+              <p className="py-10 text-center text-xs text-slate-400">No categories found matching your search.</p>
+            ) : (
+              filteredRows.map((row) => {
+                const m = rowMetrics(row);
+                const hasSubs = row.subcategories && row.subcategories.length > 0;
+                const isOpen = !!expanded[row.budgetCategoryId];
+                const cell = (label, value, tone = 'text-slate-900') => (
+                  <div className="min-w-0 rounded-lg bg-slate-50 px-2.5 py-1.5">
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+                    <p className={`truncate text-xs font-semibold ${tone}`}>{value}</p>
+                  </div>
+                );
+                return (
+                  <div key={row.budgetCategoryId} className="space-y-2.5 p-3">
+                    <div className="flex items-start gap-2">
+                      <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600">
+                        <Folder size={14} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="truncate text-[13px] font-semibold text-slate-900">{row.name}</p>
+                          {(row.status === 'Pending' || row.status === 'Rejected') && (
+                            <span
+                              className={`rounded border px-1 text-[9px] font-semibold ${
+                                row.status === 'Pending'
+                                  ? 'border-amber-200 bg-amber-50 text-amber-600'
+                                  : 'border-rose-200 bg-rose-50 text-rose-600'
+                              }`}
+                            >
+                              {row.status}
+                            </span>
+                          )}
+                        </div>
+                        <p className="truncate text-[10px] text-slate-400">{row.description || 'General office operations'}</p>
+                      </div>
+                      <span className={`shrink-0 text-[10px] font-semibold ${m.statusColor}`}>{m.statusLabel}</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                      {cell('Budget', `৳${money(m.allocated)}`)}
+                      {cell('Cash Received', m.cashReceived > 0 ? `৳${money(m.cashReceived)}` : '—', 'text-emerald-600')}
+                      {cell('Spent', `৳${money(m.spent)}`, 'text-slate-600')}
+                      {cell(
+                        'Cash Rem.',
+                        m.cashReceived > 0 || m.spent > 0 ? `৳${money(m.cashRemaining)}` : '—',
+                        m.cashRemaining < 0 ? 'text-rose-600' : 'text-emerald-600'
+                      )}
+                      {cell('Budget Rem.', `৳${money(m.budgetRemaining)}`, m.budgetRemaining < 0 ? 'text-rose-600' : 'text-emerald-600')}
+                      {cell('Utilization', `${m.pct.toFixed(m.pct % 1 === 0 ? 0 : 1)}%`)}
+                    </div>
+                    <div className="h-1 w-full overflow-hidden rounded-full bg-slate-100">
+                      <div className={`h-full rounded-full ${m.barColor}`} style={{ width: `${Math.min(100, Math.max(0, m.pct))}%` }} />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {(row.status === 'Pending' || row.status === 'Rejected') && (
+                        <button
+                          type="button"
+                          onClick={() => setReviewingRow(row)}
+                          className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold ${
+                            row.status === 'Pending' ? 'bg-amber-500 text-white' : 'bg-rose-100 text-rose-700'
+                          }`}
+                        >
+                          <ClipboardCheck size={11} />
+                          {row.status === 'Pending' ? 'Review' : 'Reconsider'}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setViewingLogsRow(row)}
+                        className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-1.5 text-[11px] font-medium text-blue-600"
+                      >
+                        <Eye size={11} /> Log
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingRow(row)}
+                        className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 text-[11px] font-medium text-slate-700"
+                      >
+                        <Pencil size={11} /> {row.monthlyBudgetId ? 'Edit' : 'Set'}
+                      </button>
+                      {row.monthlyBudgetId ? (
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(row)}
+                          disabled={deletingId === row.monthlyBudgetId}
+                          className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2.5 py-1.5 text-[11px] font-medium text-rose-600"
+                        >
+                          <Trash2 size={11} /> {deletingId === row.monthlyBudgetId ? '…' : 'Del'}
+                        </button>
+                      ) : null}
+                      {hasSubs && (
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(row.budgetCategoryId)}
+                          className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium text-slate-500 hover:text-slate-800"
+                        >
+                          {row.subcategories.length} sub {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                        </button>
+                      )}
+                    </div>
+
+                    {isOpen && hasSubs && (
+                      <div className="space-y-1 rounded-lg bg-slate-50 p-2">
+                        {row.subcategories.map((sub) => {
+                          const subAlloc = Number(sub.allocatedAmount) || 0;
+                          const subSp = Number(sub.spentAmount) || 0;
+                          return (
+                            <div key={sub.budgetCategoryId} className="flex items-center gap-2 text-[11px]">
+                              <span className="size-1 shrink-0 rounded-full bg-slate-300" />
+                              <span className="min-w-0 flex-1 truncate text-slate-600">{sub.name}</span>
+                              <span className="whitespace-nowrap text-slate-500">
+                                ৳{money(subSp)} / {subAlloc > 0 ? `৳${money(subAlloc)}` : '—'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setEditingRow(sub)}
+                                className="px-1 text-[10px] font-semibold text-blue-600"
+                              >
+                                {sub.monthlyBudgetId ? 'Edit' : 'Set'}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div className="hidden w-full overflow-x-auto md:block">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/70 text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -1603,41 +1773,10 @@ export default function OfficeBudgetPage() {
                   </tr>
                 ) : (
                   filteredRows.map((row) => {
-                    const subSpentTotal = (row.subcategories || []).reduce(
-                      (acc, s) => acc + (Number(s.spentAmount) || 0),
-                      0
-                    );
-                    const allocated = Number(row.allocatedAmount) || 0;
-                    const spent = Number(row.spentAmount) || subSpentTotal || 0;
-                    const cashReceived = Number(row.cashReceivedAmount) || 0;
-                    const budgetRemaining = allocated - spent;
-                    const cashRemaining = cashReceived - spent;
-                    const pct = allocated > 0 ? (spent / allocated) * 100 : 0;
-                    const overBudget = budgetRemaining < 0;
+                    const { allocated, spent, cashReceived, budgetRemaining, cashRemaining, pct, statusLabel, statusColor, barColor } =
+                      rowMetrics(row);
                     const hasSubs = row.subcategories && row.subcategories.length > 0;
                     const isOpen = !!expanded[row.budgetCategoryId];
-
-                    let statusLabel = 'On track';
-                    let statusColor = 'text-emerald-600';
-                    let barColor = 'bg-emerald-500';
-
-                    if (allocated === 0 && spent === 0) {
-                      statusLabel = 'Unallocated';
-                      statusColor = 'text-slate-400';
-                      barColor = 'bg-slate-200';
-                    } else if (spent === 0) {
-                      statusLabel = 'Unspent';
-                      statusColor = 'text-slate-400';
-                      barColor = 'bg-slate-200';
-                    } else if (overBudget) {
-                      statusLabel = 'Over budget';
-                      statusColor = 'text-rose-600';
-                      barColor = 'bg-rose-500';
-                    } else if (pct > 80) {
-                      statusLabel = 'High spend';
-                      statusColor = 'text-amber-600';
-                      barColor = 'bg-amber-500';
-                    }
 
                     return (
                       <Fragment key={row.budgetCategoryId}>
@@ -1790,9 +1929,11 @@ export default function OfficeBudgetPage() {
 
                             return (
                               <tr key={sub.budgetCategoryId} className="bg-slate-50/50">
-                                <td className="py-1.5 px-4 pl-12 text-[11px] text-slate-600 flex items-center gap-1.5">
-                                  <span className="w-1 h-1 rounded-full bg-slate-300" />
-                                  {sub.name}
+                                <td className="py-1.5 px-4 pl-12 text-[11px] text-slate-600">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="w-1 h-1 shrink-0 rounded-full bg-slate-300" />
+                                    {sub.name}
+                                  </div>
                                 </td>
                                 <td className="py-1.5 px-3 text-[11px] text-slate-600 font-medium whitespace-nowrap">
                                   {subAlloc > 0 ? `৳${money(subAlloc)}` : '—'}

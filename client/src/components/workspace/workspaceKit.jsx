@@ -9,7 +9,7 @@ import { Skeleton } from '../dashboard/DashboardKit';
 export const TONES = {
   green: { icon: 'bg-emerald-100 text-emerald-600', text: 'text-emerald-600', pill: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' },
   red: { icon: 'bg-rose-100 text-rose-600', text: 'text-rose-600', pill: 'bg-rose-50 text-rose-700 ring-rose-600/20' },
-  blue: { icon: 'bg-blue-100 text-blue-600', text: 'text-blue-600', pill: 'bg-blue-50 text-blue-700 ring-blue-600/20' },
+  blue: { icon: 'bg-cobalt-100 text-cobalt', text: 'text-cobalt', pill: 'bg-cobalt-50 text-cobalt-700 ring-cobalt/20' },
   purple: { icon: 'bg-violet-100 text-violet-600', text: 'text-violet-600', pill: 'bg-violet-50 text-violet-700 ring-violet-600/20' },
   amber: { icon: 'bg-amber-100 text-amber-600', text: 'text-amber-600', pill: 'bg-amber-50 text-amber-700 ring-amber-600/20' },
   slate: { icon: 'bg-slate-100 text-slate-600', text: 'text-slate-600', pill: 'bg-slate-100 text-slate-700 ring-slate-500/20' },
@@ -19,11 +19,11 @@ export const TONES = {
 export const card = 'rounded-2xl border border-slate-200/70 bg-white shadow-[0_6px_24px_rgba(15,23,42,0.05)]';
 
 export const primaryButton =
-  'inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-slate-800 hover:shadow disabled:opacity-60';
+  'inline-flex items-center justify-center gap-2 rounded-xl bg-gold px-4 py-2.5 text-sm font-semibold text-navy shadow-xs transition hover:bg-gold-600 hover:shadow disabled:opacity-60';
 export const ghostButton =
   'inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50';
 export const selectClass =
-  'h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-900/5';
+  'h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-cobalt-400 focus:ring-4 focus:ring-cobalt/10';
 
 /** Page header: icon tile, title, subtitle, controls on the right. */
 export function WorkspaceHeader({ icon: Icon, title, subtitle, children, tone = 'dark' }) {
@@ -32,7 +32,7 @@ export function WorkspaceHeader({ icon: Icon, title, subtitle, children, tone = 
       <div className="flex items-center gap-3.5">
         <span
           className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${
-            tone === 'dark' ? 'bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.18)]' : TONES[tone]?.icon
+            tone === 'dark' ? 'bg-navy text-gold shadow-[0_4px_12px_rgba(11,31,58,0.22)]' : TONES[tone]?.icon
           }`}
         >
           {Icon && <Icon className="size-6" />}

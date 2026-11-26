@@ -265,7 +265,7 @@ export default function Topbar({ hideModuleNav = false }) {
                 <div className="hidden sm:block">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[17px] font-extrabold tracking-tight text-slate-900">TRIKON</span>
-                    <span className="rounded-full bg-slate-900 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-white">ERP</span>
+                    <span className="rounded-full bg-navy px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-gold">ERP</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -281,7 +281,7 @@ export default function Topbar({ hideModuleNav = false }) {
                 ref={searchInputRef}
                 showShortcut
                 placeholder="Search modules, documents, vouchers, inventory..."
-                inputClassName="h-9.5 w-full rounded-xl border border-slate-200/80 bg-slate-100/60 pl-10 pr-14 text-[13px] font-medium text-slate-800 placeholder-slate-400 outline-none transition-all duration-200 hover:bg-slate-100/90 focus:border-slate-300 focus:bg-white focus:ring-4 focus:ring-slate-900/5 shadow-inner"
+                inputClassName="h-9.5 w-full rounded-xl border border-slate-200/80 bg-slate-100/60 pl-10 pr-14 text-[13px] font-medium text-slate-800 placeholder-slate-400 outline-none transition-all duration-200 hover:bg-slate-100/90 focus:border-cobalt-300 focus:bg-white focus:ring-4 focus:ring-cobalt/10 shadow-inner"
               />
             </div>
 
@@ -313,7 +313,7 @@ export default function Topbar({ hideModuleNav = false }) {
                 <button
                   type="button"
                   onClick={() => navigate('/support-tickets')}
-                  className="flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white shadow-xs transition-all hover:bg-slate-800 hover:shadow"
+                  className="flex h-9 items-center gap-1.5 rounded-lg bg-gold px-3 text-xs font-semibold text-navy shadow-xs transition-all hover:bg-gold-600 hover:shadow"
                 >
                   <ClipboardList size={15} />
                   <span className="hidden sm:inline">Tickets</span>
@@ -416,7 +416,7 @@ export default function Topbar({ hideModuleNav = false }) {
                               <div className="pt-0.5">
                                 <span
                                   className={`block h-2 w-2 rounded-full ${
-                                    !n.read ? 'bg-blue-600 ring-2 ring-blue-100' : 'bg-transparent'
+                                    !n.read ? 'bg-cobalt ring-2 ring-cobalt-100' : 'bg-transparent'
                                   }`}
                                 />
                               </div>
@@ -458,7 +458,7 @@ export default function Topbar({ hideModuleNav = false }) {
                   onClick={() => setProfileOpen((v) => !v)}
                   className="flex items-center gap-2 rounded-xl p-1 transition-all hover:bg-slate-100/80"
                 >
-                  <div className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-slate-900 to-slate-700 text-xs font-bold text-white shadow-xs">
+                  <div className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-navy to-cobalt-700 text-xs font-bold text-white shadow-xs">
                     {initial}
                     <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" />
                   </div>
@@ -523,7 +523,7 @@ export default function Topbar({ hideModuleNav = false }) {
                 autoFocus
                 placeholder="Search anything..."
                 onDone={() => setMobileSearchOpen(false)}
-                inputClassName="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-9 text-xs font-medium outline-none focus:border-slate-400 focus:bg-white"
+                inputClassName="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-9 text-xs font-medium outline-none focus:border-cobalt-400 focus:bg-white"
               />
             </div>
           )}

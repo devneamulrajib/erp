@@ -47,7 +47,7 @@ export default function AppLayout() {
   if (!localStorage.getItem('token') || !shouldShowSidebar(user)) return <Outlet />;
 
   return (
-    <div className="flex min-h-screen w-full overflow-x-hidden">
+    <div className="flex min-h-screen w-full overflow-x-clip">
       <AppSidebar
         mobileOpen={mobileSidebarOpen}
         onMobileClose={() => setMobileSidebarOpen(false)}

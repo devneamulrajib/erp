@@ -1,14 +1,55 @@
 @import "tailwindcss";
 
+/* Cobalt Sky theme: the one set of ERP brand colours. Tailwind v4 turns each
+   --color-* below into utilities (bg-navy, text-cobalt, ring-cobalt/10,
+   bg-gold, hover:bg-gold-600 ...) and CSS variables (var(--color-navy)).
+   navy  = primary dark (sidebar, active menu items, dark tiles)
+   cobalt = links, focus rings, secondary accents, info badges
+   gold  = Trikon logo amber: primary buttons + active sidebar item (navy text)
+   Green/red stay Tailwind's emerald/rose/green/red for money in/out + status. */
+@theme {
+  --color-navy: #0b1f3a;
+  --color-navy-50: #eef2f8;
+  --color-navy-100: #d6deea;
+  --color-navy-200: #cbd5e1;
+  --color-navy-300: #94a3b8;
+  --color-navy-600: #2b4468;
+  --color-navy-700: #1e3354;
+  --color-navy-800: #13294b;
+  --color-navy-900: #0b1f3a;
+  --color-navy-950: #050b16; /* near-black: sidebar sub-menu panels */
+
+  --color-cobalt: #1d4ed8;
+  --color-cobalt-50: #eef3ff;
+  --color-cobalt-100: #dce6fe;
+  --color-cobalt-200: #bacdfc;
+  --color-cobalt-300: #8aa9f7;
+  --color-cobalt-400: #5a82ee;
+  --color-cobalt-500: #3563e3;
+  --color-cobalt-600: #1d4ed8;
+  --color-cobalt-700: #1a40b0;
+  --color-cobalt-800: #17358c;
+  --color-cobalt-900: #142c6e;
+
+  --color-gold: #f2a92e;
+  --color-gold-50: #fef7ea;
+  --color-gold-100: #fcebcb;
+  --color-gold-200: #f9d9a0;
+  --color-gold-300: #f6c56c;
+  --color-gold-500: #f2a92e;
+  --color-gold-600: #db9216;
+  --color-gold-700: #b47510;
+}
+
 :root {
   --text: #6b6375;
   --text-h: #08060d;
   --bg: #fff;
   --border: #e5e4e7;
   --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
+  --accent: var(--color-cobalt);
+  --accent-bg: rgba(29, 78, 216, 0.1);
+  --accent-border: rgba(29, 78, 216, 0.5);
   --social-bg: rgba(244, 243, 236, 0.5);
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
@@ -48,9 +89,9 @@
     --bg: #16171d;
     --border: #2e303a;
     --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
+    --accent: var(--color-cobalt-300);
+    --accent-bg: rgba(138, 169, 247, 0.15);
+    --accent-border: rgba(138, 169, 247, 0.5);
     --social-bg: rgba(47, 48, 58, 0.5);
     --shadow:
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;

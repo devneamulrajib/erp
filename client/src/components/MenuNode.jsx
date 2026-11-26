@@ -174,8 +174,8 @@ export default function MenuNode({
           onClick={handleActivate}
           className={`
             flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] font-medium transition-colors
-            ${isActive ? 'bg-black text-white' : 'text-slate-800 hover:bg-slate-100'}
-            ${isHighlight && !isActive ? 'bg-blue-50 text-blue-900' : ''}
+            ${isActive ? 'bg-navy text-white' : 'text-slate-800 hover:bg-slate-100'}
+            ${isHighlight && !isActive ? 'bg-cobalt-50 text-cobalt-900' : ''}
           `}
         >
           {Icon && <Icon size={16} className="shrink-0" />}
@@ -240,18 +240,18 @@ export default function MenuNode({
           ${
             isTopLevel
               ? isOpen || isActive
-                ? 'bg-black text-white shadow-[0_4px_12px_rgba(0,0,0,0.18)]'
+                ? 'bg-navy text-white shadow-[0_4px_12px_rgba(11,31,58,0.22)]'
                 : 'bg-transparent text-[#202020] hover:bg-[#f2f2f2]'
               : isActive
-              ? 'bg-black text-white font-semibold'
+              ? 'bg-navy text-white font-semibold'
               : isHighlight
               ? `
-                  bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-blue-50/40
-                  text-blue-900 font-bold
-                  border border-blue-200/80
-                  shadow-[0_2px_8px_rgba(37,99,235,0.06)]
-                  hover:from-blue-100 hover:to-indigo-100
-                  hover:border-blue-300
+                  bg-gradient-to-r from-cobalt-50/90 via-cobalt-50/70 to-cobalt-50/40
+                  text-cobalt-900 font-bold
+                  border border-cobalt-200/80
+                  shadow-[0_2px_8px_rgba(29,78,216,0.08)]
+                  hover:from-cobalt-100 hover:to-cobalt-100
+                  hover:border-cobalt-300
                 `
               : count > 0
               ? 'bg-rose-50/70 text-[#252525] font-semibold hover:bg-rose-50'
@@ -269,7 +269,7 @@ export default function MenuNode({
               transition-transform
               duration-200
 
-              ${isHighlight && !isActive ? 'text-blue-600' : ''}
+              ${isHighlight && !isActive ? 'text-cobalt' : ''}
               ${isOpen ? 'scale-105' : 'group-hover:scale-105'}
             `}
           />
@@ -307,7 +307,7 @@ export default function MenuNode({
 
         {/* HIGHLIGHT PILL BADGE FOR SUBMENU */}
         {!isTopLevel && isHighlight && !isActive && (
-          <span className="ml-1 rounded-md bg-blue-600 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-xs">
+          <span className="ml-1 rounded-md bg-cobalt px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-xs">
             HUB
           </span>
         )}
@@ -330,7 +330,7 @@ export default function MenuNode({
                 size={14}
                 strokeWidth={isHighlight ? 2.2 : 1.8}
                 className={`
-                  ${isHighlight && !isActive ? 'text-blue-600' : 'text-current opacity-50'}
+                  ${isHighlight && !isActive ? 'text-cobalt' : 'text-current opacity-50'}
                 `}
               />
             )}

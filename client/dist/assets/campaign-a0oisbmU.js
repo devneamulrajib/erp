@@ -1,1 +1,0 @@
-import{vt as e}from"./index-BjRQZ3m9.js";var t=t=>e.get(`/campaign`,{params:t}),n=t=>e.post(`/campaign`,t),r=(t,n)=>e.put(`/campaign/${t}`,n),i=t=>e.delete(`/campaign/${t}`);export{r as i,i as n,t as r,n as t};

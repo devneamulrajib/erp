@@ -1,0 +1,1 @@
+import{xt as e}from"./index-CS4Co4Dw.js";var t=()=>e.get(`/projects`);export{t};

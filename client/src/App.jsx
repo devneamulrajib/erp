@@ -76,6 +76,7 @@ const AdjustmentBillList = lazyPage(() => import('./pages/AdjustmentBillList'))
 const ExpenseListPage = lazyPage(() => import('./pages/ExpenseListPage'))
 const ExpensePage = lazyPage(() => import('./pages/ExpensePage'))
 const ReceiptVoucherPage = lazyPage(() => import('./pages/ReceiptVoucherPage'))
+const DepositWithdrawalPage = lazyPage(() => import('./pages/DepositWithdrawalPage'))
 const DayBookPage = lazyPage(() => import('./pages/DayBookPage'))
 const PayableReportPage = lazyPage(() => import('./pages/PayableReportPage'))
 const ExpenseReportPage = lazyPage(() => import('./pages/ExpenseReportPage'))
@@ -368,6 +369,7 @@ function App() {
         <Route path="/accounts-module/expense_list" element={<ProtectedRoute><ExpenseListPage /></ProtectedRoute>} />
         <Route path="/accounts-module/expense" element={<ProtectedRoute><ExpensePage /></ProtectedRoute>} />
         <Route path="/accounts-module/expense/:id" element={<ProtectedRoute><ExpensePage /></ProtectedRoute>} />
+        <Route path="/accounts-module/deposit-withdrawal" element={<ProtectedRoute><DepositWithdrawalPage /></ProtectedRoute>} />
         <Route path="/accounts-module/receipt-list" element={<ProtectedRoute><ReceiptVoucherPage /></ProtectedRoute>} />
         <Route path="/accounts-module/receipt-list/add" element={<ProtectedRoute><ReceiptVoucherPage /></ProtectedRoute>} />
         <Route path="/accounts-module/reports/payable-report" element={<ProtectedRoute><PayableReportPage /></ProtectedRoute>} />

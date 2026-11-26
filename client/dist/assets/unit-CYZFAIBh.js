@@ -1,0 +1,1 @@
+import{xt as e}from"./index-CS4Co4Dw.js";async function t(t){return(await e.get(`/unit`,{params:t})).data}async function n(t){return(await e.post(`/unit`,t)).data}async function r(t,n){return(await e.put(`/unit/${t}`,n)).data}export{t as n,r,n as t};

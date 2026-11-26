@@ -1,1 +1,0 @@
-import{vt as e}from"./index-BjRQZ3m9.js";var t=()=>e.get(`/sites`);export{t};

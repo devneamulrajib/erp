@@ -1,0 +1,1 @@
+import{xt as e}from"./index-CS4Co4Dw.js";async function t(){return(await e.get(`/users`)).data}export{t};
