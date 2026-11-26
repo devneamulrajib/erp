@@ -1,1 +1,0 @@
-import{xt as e}from"./index-CS4Co4Dw.js";var t=async(t={})=>(await e.get(`/approvals`,{params:t})).data,n=async t=>(await e.post(`/approvals/action`,t)).data,r=async()=>(await e.get(`/approvals/accountant-metrics`)).data;export{t as n,n as r,r as t};

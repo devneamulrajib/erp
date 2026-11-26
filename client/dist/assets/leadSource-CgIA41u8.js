@@ -1,1 +1,0 @@
-import{xt as e}from"./index-CS4Co4Dw.js";var t=t=>e.get(`/lead-source`,{params:t}),n=t=>e.post(`/lead-source`,t),r=(t,n)=>e.put(`/lead-source/${t}`,n),i=t=>e.delete(`/lead-source/${t}`);export{r as i,i as n,t as r,n as t};
