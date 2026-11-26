@@ -1,0 +1,1 @@
+import{St as e}from"./index-6QilPZtG.js";var t=()=>e.get(`/sites`);export{t};

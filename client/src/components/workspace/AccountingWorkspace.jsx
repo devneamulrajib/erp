@@ -7,6 +7,7 @@
 // Budget categories (and "Receive Cash") as transaction types. Other voucher
 // types are still one click away under "New Transaction".
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowDownLeft,
@@ -29,6 +30,8 @@ import DepositWithdrawalForm from '../DepositWithdrawalForm';
 import { formatTaka } from '../dashboard/dashboardUtils';
 import { EmptyState, ErrorState } from '../dashboard/DashboardKit';
 import {
+  card,
+  eyebrowClass,
   SummaryCard,
   WCard,
   StatusPill,
@@ -48,7 +51,9 @@ const isCashAccount = (name) => /cash/i.test(String(name || ''));
 
 const STATUS_TONE = { approved: ['green', 'Posted'], pending: ['amber', 'Pending'], rejected: ['red', 'Rejected'] };
 
-export default function AccountingWorkspace() {
+// actionsEl: header slot from WorkspaceDashboard; the filters and "New
+// transaction" render there (portal), or above the cards when it is absent.
+export default function AccountingWorkspace({ actionsEl = null }) {
   const navigate = useNavigate();
   const [rangeKey, setRangeKey] = useState('month');
   const [accountType, setAccountType] = useState('all');
@@ -156,65 +161,78 @@ export default function AccountingWorkspace() {
   const jvLines = jv ? jv.JournalVoucherLines || jv.lines || [] : [];
   const accountName = (a) => journal.names[String(a)] || a || '—';
 
-  return (
-    <div className="space-y-6">
-      {/* Filters + New Transaction (no title card) */}
-      <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-        <label className="relative">
-          <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-          <select value={rangeKey} onChange={(e) => setRangeKey(e.target.value)} className={`${selectClass} w-full pl-9 sm:w-auto`} aria-label="Date range">
-            {RANGE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-        </label>
-        <select value={accountType} onChange={(e) => setAccountType(e.target.value)} className={`${selectClass} w-full sm:w-auto`} aria-label="Account type">
-          <option value="all">All accounts</option>
-          <option value="cash">Cash accounts</option>
-          <option value="bank">Bank accounts</option>
+  const toolbar = (
+    <>
+      <label className="relative w-full sm:w-auto">
+        <CalendarDays className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+        <select value={rangeKey} onChange={(e) => setRangeKey(e.target.value)} className={`${selectClass} w-full pl-9 sm:w-auto`} aria-label="Date range">
+          {RANGE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
         </select>
-        <div className="relative">
-          <button type="button" className={`${primaryButton} w-full sm:w-auto`} onClick={() => setNewOpen((v) => !v)} aria-expanded={newOpen}>
-            <Plus className="size-4" /> New Transaction
-          </button>
-          {newOpen && (
-            <button type="button" aria-label="Close" tabIndex={-1} className="fixed inset-0 z-20 cursor-default" onClick={() => setNewOpen(false)} />
-          )}
-          {newOpen && (
-            <div className="absolute right-0 z-30 mt-2 w-full sm:w-60 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
+      </label>
+      <select value={accountType} onChange={(e) => setAccountType(e.target.value)} className={`${selectClass} w-full sm:w-auto`} aria-label="Account type">
+        <option value="all">All accounts</option>
+        <option value="cash">Cash accounts</option>
+        <option value="bank">Bank accounts</option>
+      </select>
+      <div className="relative w-full sm:w-auto">
+        <button type="button" className={`${primaryButton} w-full sm:w-auto`} onClick={() => setNewOpen((v) => !v)} aria-expanded={newOpen}>
+          <Plus className="size-4" /> New transaction
+        </button>
+        {newOpen && (
+          <button type="button" aria-label="Close" tabIndex={-1} className="fixed inset-0 z-20 cursor-default" onClick={() => setNewOpen(false)} />
+        )}
+        {newOpen && (
+          <div className="absolute right-0 z-30 mt-2 w-full rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg sm:w-64">
+            <button
+              type="button"
+              onClick={() => {
+                setNewOpen(false);
+                setNewSignal((n) => n + 1);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-900 hover:bg-stone-50"
+            >
+              <span className="flex size-7 items-center justify-center rounded-md bg-lime-200 text-forest">
+                <Wallet className="size-3.5" />
+              </span>
+              Deposit / Withdrawal
+            </button>
+            <div className="my-1 h-px bg-stone-100" />
+            {[
+              { label: 'Receipt Voucher (deposit)', to: '/accounts-module/receipt-list/add', icon: ArrowDownLeft },
+              { label: 'Payment Voucher (withdrawal)', to: '/accounts-module/payment-list/add', icon: ArrowUpRight },
+              { label: 'Contra Voucher', to: '/accounts-module/contra_list_add', icon: ArrowLeftRight },
+              { label: 'Journal Entry', to: '/accounts-module/journal_list_add', icon: BookOpen },
+              { label: 'Office Expense', to: '/accounts-module/office-expense', icon: Receipt },
+            ].map((o) => (
               <button
+                key={o.to}
                 type="button"
-                onClick={() => {
-                  setNewOpen(false);
-                  setNewSignal((n) => n + 1);
-                }}
-                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                onClick={() => navigate(o.to)}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-stone-50"
               >
-                <Wallet className="size-4 text-emerald-600" /> Deposit / Withdrawal
+                <o.icon className="size-4 text-slate-400" /> {o.label}
               </button>
-              <div className="my-1 h-px bg-slate-100" />
-              {[
-                { label: 'Receipt Voucher (deposit)', to: '/accounts-module/receipt-list/add', icon: ArrowDownLeft },
-                { label: 'Payment Voucher (withdrawal)', to: '/accounts-module/payment-list/add', icon: ArrowUpRight },
-                { label: 'Contra Voucher', to: '/accounts-module/contra_list_add', icon: ArrowLeftRight },
-                { label: 'Journal Entry', to: '/accounts-module/journal_list_add', icon: BookOpen },
-                { label: 'Office Expense', to: '/accounts-module/office-expense', icon: Receipt },
-              ].map((o) => (
-                <button
-                  key={o.to}
-                  type="button"
-                  onClick={() => navigate(o.to)}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-                >
-                  <o.icon className="size-4 text-slate-400" /> {o.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
+    </>
+  );
 
-      {/* Summary cards */}
+  const thRow = 'border-y border-stone-100 bg-stone-50/70 text-left text-[10.5px] font-semibold uppercase tracking-[0.1em] text-slate-400';
+
+  return (
+    <div className="space-y-5">
+      {/* Filters + New transaction: in the page header when it gives us a slot */}
+      {actionsEl ? (
+        createPortal(toolbar, actionsEl)
+      ) : (
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">{toolbar}</div>
+      )}
+
+      {/* KPI cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           label="Total Deposit"
@@ -230,7 +248,7 @@ export default function AccountingWorkspace() {
           label="Total Withdrawal"
           value={formatTaka(totals.withdrawal)}
           icon={ArrowUpRight}
-          tone="red"
+          tone="orange"
           change={books.loading ? undefined : pctChange(totals.withdrawal, totals.withdrawalPrev)}
           hint="vs previous period"
           loading={books.loading}
@@ -249,7 +267,7 @@ export default function AccountingWorkspace() {
           label="Bank Balance"
           value={formatTaka(totals.bank)}
           icon={Landmark}
-          tone="purple"
+          tone="lime"
           hint="All banks"
           loading={books.loading}
           to="/accounts-module/bank-accounts"
@@ -261,9 +279,9 @@ export default function AccountingWorkspace() {
         </WCard>
       )}
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
-        {/* Quick entry */}
-        <WCard title="New Deposit / Withdrawal" subtitle="Posts a receipt or payment voucher to the ledger" className="xl:col-span-2">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        {/* Create transaction (posts a receipt / payment voucher) */}
+        <WCard eyebrow="Quick action" title="Create transaction" subtitle="Posts a receipt or payment voucher to the ledger" className="xl:col-span-7">
           <DepositWithdrawalForm
             newSignal={newSignal}
             onPosted={() => {
@@ -273,9 +291,9 @@ export default function AccountingWorkspace() {
           />
         </WCard>
 
-        {/* Recent transactions + tip */}
-        <div className="space-y-6 xl:col-span-3">
-          <WCard title="Recent Transactions" right={<ViewAll to="/accounts-module/reports/day-book" />} bodyClassName="">
+        {/* Recent transactions, tip, latest journal */}
+        <div className="space-y-5 xl:col-span-5">
+          <WCard eyebrow="Activity" title="Recent transactions" right={<ViewAll to="/accounts-module/reports/day-book" />} bodyClassName="">
             {recent.loading ? (
               <TableSkeleton rows={5} />
             ) : recent.error ? (
@@ -284,36 +302,36 @@ export default function AccountingWorkspace() {
               <EmptyState icon={Receipt} title="No receipts or payments yet" />
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-[13px]">
                   <thead>
-                    <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                      <th className="px-5 py-2.5">Date</th>
-                      <th className="px-3 py-2.5">Type</th>
-                      <th className="px-3 py-2.5 text-right">Amount</th>
-                      <th className="px-3 py-2.5">Account</th>
-                      <th className="px-5 py-2.5 text-right">Status</th>
+                    <tr className={thRow}>
+                      <th className="px-5 py-2">Date</th>
+                      <th className="px-3 py-2">Type</th>
+                      <th className="px-3 py-2 text-right">Amount</th>
+                      <th className="px-3 py-2">Account</th>
+                      <th className="px-5 py-2 text-right">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-stone-100">
                     {recent.rows.map((v) => {
                       const deposit = v.type === 'Receipt';
-                      const [tone, label] = STATUS_TONE[v.status] || ['slate', v.status || '—'];
+                      const [tone, label] = STATUS_TONE[v.status] || ['slate', v.status || '-'];
                       return (
                         <tr
                           key={v.id}
                           onClick={() => navigate(deposit ? '/accounts-module/receipt-list' : '/accounts-module/payment-list')}
-                          className="cursor-pointer hover:bg-slate-50/70"
+                          className="cursor-pointer transition hover:bg-stone-50/80"
                           title={`Open ${deposit ? 'receipt' : 'payment'} vouchers`}
                         >
-                          <td className="whitespace-nowrap px-5 py-3 text-slate-600">{shortDate(v.date)}</td>
+                          <td className="whitespace-nowrap px-5 py-3 text-slate-500">{shortDate(v.date)}</td>
                           <td className="whitespace-nowrap px-3 py-3">
-                            <span className={`inline-flex items-center gap-1 font-semibold ${deposit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            <span className={`inline-flex items-center gap-1 font-semibold ${deposit ? 'text-emerald-600' : 'text-orange-600'}`}>
                               {deposit ? <ArrowDownLeft className="size-3.5" /> : <ArrowUpRight className="size-3.5" />}
                               {deposit ? 'Deposit' : 'Withdrawal'}
                             </span>
                           </td>
-                          <td className="whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums text-slate-900">{formatTaka(v.amount)}</td>
-                          <td className="max-w-[180px] truncate px-3 py-3 text-slate-600" title={v.narration || ''}>
+                          <td className="whitespace-nowrap px-3 py-3 text-right font-bold tabular-nums text-slate-900">{formatTaka(v.amount)}</td>
+                          <td className="max-w-[140px] truncate px-3 py-3 text-slate-500" title={v.narration || ''}>
                             {bankNames[String(v.bankId)] || v.paymentMethod || v.voucherNo}
                           </td>
                           <td className="whitespace-nowrap px-5 py-3 text-right">
@@ -328,62 +346,121 @@ export default function AccountingWorkspace() {
             )}
           </WCard>
 
-          <div className="flex items-start gap-3 rounded-2xl border border-emerald-200/70 bg-emerald-50/60 p-4">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+          <div className={`${card} flex items-start gap-3 p-4`}>
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-lime-200 text-forest">
               <Lightbulb className="size-4" />
             </span>
-            <div className="text-[13px] leading-relaxed text-emerald-900">
-              <p className="font-bold">Tip</p>
+            <div className="text-[13px] leading-relaxed text-slate-600">
+              <p className="font-bold text-slate-900">Tip</p>
               <p>
                 Every receipt or payment posts its own journal automatically. Reconcile cheques in{' '}
-                <Link className="font-semibold underline" to="/accounts-module/bank-reconciliation">Bank Reconciliation</Link> to keep bank
+                <Link className="font-semibold text-forest underline underline-offset-2" to="/accounts-module/bank-reconciliation">Bank Reconciliation</Link> to keep bank
                 balances exact.
               </p>
             </div>
           </div>
+
+          {/* Latest journal entry */}
+          <WCard
+            eyebrow="Ledger"
+            title="Latest Journal Entry"
+            subtitle={jv ? `${jv.voucherNo || 'Journal'} \u00b7 ${shortDate(jv.date)}` : 'Auto-generated and manual journals'}
+            right={jv ? <StatusPill tone={jv.status === 'approved' ? 'green' : jv.status === 'rejected' ? 'red' : 'amber'}>{jv.status === 'approved' ? 'Posted' : jv.status || 'pending'}</StatusPill> : null}
+          >
+            {journal.loading ? (
+              <TableSkeleton rows={3} />
+            ) : journal.error ? (
+              <ErrorState message={journal.error} onRetry={loadJournal} />
+            ) : !jv ? (
+              <EmptyState icon={BookOpen} title="No journal entries yet" />
+            ) : (
+              <>
+                <div className="overflow-hidden rounded-lg border border-stone-100">
+                  <table className="w-full text-[13px]">
+                    <thead>
+                      <tr className="bg-stone-50/70 text-left text-[10.5px] font-semibold uppercase tracking-[0.1em] text-slate-400">
+                        <th className="px-3 py-2">Account</th>
+                        <th className="px-3 py-2 text-right">Debit</th>
+                        <th className="px-3 py-2 text-right">Credit</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100">
+                      {jvLines.map((l, i) => (
+                        <tr key={l.id || i}>
+                          <td className="max-w-[160px] truncate px-3 py-2.5 text-slate-700">{accountName(l.account)}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">{Number(l.debit) ? formatTaka(l.debit) : '-'}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">{Number(l.credit) ? formatTaka(l.credit) : '-'}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-stone-50/70 font-bold">
+                        <td className="px-3 py-2.5 text-slate-800">Total</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{formatTaka(jv.totalDebit)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{formatTaka(jv.totalCredit)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                {Math.abs((Number(jv.totalDebit) || 0) - (Number(jv.totalCredit) || 0)) < 0.01 && (
+                  <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+                    <CheckCircle2 className="size-4" /> Debits equal credits &mdash; this entry is balanced.
+                  </p>
+                )}
+                <Link to="/accounts-module/journal_list" className={`${ghostButton} mt-4 w-full`}>
+                  <BookOpen className="size-4 text-slate-400" /> View Journal
+                </Link>
+              </>
+            )}
+          </WCard>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
         {/* Account balances */}
-        <WCard title="Account Balances" subtitle={`Closing balance on ${shortDate(range.to)}`} right={<ViewAll to="/accounts-module/reports/cash-bank-books" />} className="xl:col-span-3" bodyClassName="">
+        <WCard
+          eyebrow="Accounts"
+          title="Account Balances"
+          subtitle={`Closing balance on ${shortDate(range.to)}`}
+          right={<ViewAll to="/accounts-module/reports/cash-bank-books" />}
+          className="xl:col-span-7"
+          bodyClassName=""
+        >
           {books.loading ? (
             <TableSkeleton rows={4} />
           ) : balances.length === 0 ? (
             <EmptyState icon={Landmark} title="No cash or bank accounts" description="Add them under Accounting → Configuration → Bank Accounts." />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-[13px]">
                 <thead>
-                  <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    <th className="px-5 py-2.5">Account Name</th>
-                    <th className="px-3 py-2.5">Type</th>
-                    <th className="px-3 py-2.5 text-right">Balance</th>
-                    <th className="px-5 py-2.5 text-right">Last Updated</th>
+                  <tr className={thRow}>
+                    <th className="px-5 py-2">Account Name</th>
+                    <th className="px-3 py-2">Type</th>
+                    <th className="px-3 py-2 text-right">Balance</th>
+                    <th className="px-5 py-2 text-right">Last Updated</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-stone-100">
                   {balances.map((b) => (
                     <tr
                       key={b.id}
                       onClick={() => navigate('/accounts-module/reports/cash-bank-books')}
-                      className="cursor-pointer hover:bg-slate-50/70"
+                      className="cursor-pointer transition hover:bg-stone-50/80"
                       title="Open Cash/Bank Books"
                     >
                       <td className="px-5 py-3">
                         <span className="inline-flex items-center gap-2.5 font-medium text-slate-800">
-                          <span className={`flex size-8 items-center justify-center rounded-full ${b.type === 'Cash' ? 'bg-cobalt-100 text-cobalt' : 'bg-violet-100 text-violet-600'}`}>
+                          <span className={`flex size-8 items-center justify-center rounded-lg ${b.type === 'Cash' ? 'bg-cobalt-100 text-cobalt' : 'bg-lime-200 text-forest'}`}>
                             {b.type === 'Cash' ? <Banknote className="size-4" /> : <Landmark className="size-4" />}
                           </span>
                           {b.name}
                         </span>
                       </td>
                       <td className="px-3 py-3 text-slate-500">{b.type}</td>
-                      <td className={`px-3 py-3 text-right font-semibold tabular-nums ${b.balance < 0 ? 'text-rose-600' : 'text-slate-900'}`}>{formatTaka(b.balance)}</td>
+                      <td className={`px-3 py-3 text-right font-bold tabular-nums ${b.balance < 0 ? 'text-rose-600' : 'text-slate-900'}`}>{formatTaka(b.balance)}</td>
                       <td className="whitespace-nowrap px-5 py-3 text-right text-slate-500">{shortDate(b.last)}</td>
                     </tr>
                   ))}
-                  <tr className="bg-slate-50/80 font-bold">
+                  <tr className="bg-stone-50/70 font-bold">
                     <td className="px-5 py-3 text-slate-800" colSpan={2}>Total</td>
                     <td className="px-3 py-3 text-right tabular-nums text-slate-900">{formatTaka(balanceTotal)}</td>
                     <td />
@@ -394,78 +471,31 @@ export default function AccountingWorkspace() {
           )}
         </WCard>
 
-        {/* Latest journal entry */}
-        <WCard
-          title="Latest Journal Entry"
-          subtitle={jv ? `${jv.voucherNo || 'Journal'} · ${shortDate(jv.date)}` : 'Auto-generated and manual journals'}
-          right={jv ? <StatusPill tone={jv.status === 'approved' ? 'green' : jv.status === 'rejected' ? 'red' : 'amber'}>{jv.status === 'approved' ? 'Posted' : jv.status || 'pending'}</StatusPill> : null}
-          className="xl:col-span-2"
-        >
-          {journal.loading ? (
-            <TableSkeleton rows={3} />
-          ) : journal.error ? (
-            <ErrorState message={journal.error} onRetry={loadJournal} />
-          ) : !jv ? (
-            <EmptyState icon={BookOpen} title="No journal entries yet" />
-          ) : (
-            <>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    <th className="pb-2">Account</th>
-                    <th className="pb-2 text-right">Debit</th>
-                    <th className="pb-2 text-right">Credit</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {jvLines.map((l, i) => (
-                    <tr key={l.id || i}>
-                      <td className="max-w-[160px] truncate py-2.5 pr-2 text-slate-700">{accountName(l.account)}</td>
-                      <td className="py-2.5 text-right tabular-nums text-slate-900">{Number(l.debit) ? formatTaka(l.debit) : '—'}</td>
-                      <td className="py-2.5 text-right tabular-nums text-slate-900">{Number(l.credit) ? formatTaka(l.credit) : '—'}</td>
-                    </tr>
-                  ))}
-                  <tr className="font-bold">
-                    <td className="py-2.5 text-slate-800">Total</td>
-                    <td className="py-2.5 text-right tabular-nums">{formatTaka(jv.totalDebit)}</td>
-                    <td className="py-2.5 text-right tabular-nums">{formatTaka(jv.totalCredit)}</td>
-                  </tr>
-                </tbody>
-              </table>
-              {Math.abs((Number(jv.totalDebit) || 0) - (Number(jv.totalCredit) || 0)) < 0.01 && (
-                <p className="mt-3 flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
-                  <CheckCircle2 className="size-4" /> Debits equal credits — this entry is balanced.
-                </p>
-              )}
-              <Link to="/accounts-module/journal_list" className={`${ghostButton} mt-4 w-full`}>
-                <BookOpen className="size-4 text-slate-400" /> View Journal
+        {/* Shortcuts to the main accounting pages */}
+        <div className="xl:col-span-5">
+          <p className={`mb-3 ${eyebrowClass}`}>Shortcuts</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {[
+              { label: 'Daily Expense Entry', to: '/accounts-module/office-expense-list', icon: Receipt },
+              { label: 'Journal Entry', to: '/accounts-module/journal_list', icon: BookOpen },
+              { label: 'General Ledger', to: '/accounts-module/reports/general-ledger', icon: FileBarChart2 },
+              { label: 'Trial Balance', to: '/accounts-module/reports/trial-balance', icon: Scale },
+              { label: 'Income Statement', to: '/accounts-module/reports/income-statement', icon: FileBarChart2 },
+              { label: 'Balance Sheet', to: '/accounts-module/reports/balance-sheet', icon: Landmark },
+            ].map((q) => (
+              <Link
+                key={q.to}
+                to={q.to}
+                className={`${card} group flex flex-col gap-3 p-4 transition hover:border-stone-300 hover:shadow-sm`}
+              >
+                <span className="flex size-9 items-center justify-center rounded-lg bg-stone-100 text-slate-600 transition group-hover:bg-lime-200 group-hover:text-forest">
+                  <q.icon className="size-4" />
+                </span>
+                <span className="text-[13px] font-semibold leading-snug text-slate-800">{q.label}</span>
               </Link>
-            </>
-          )}
-        </WCard>
-      </div>
-
-      {/* Shortcuts like the demo sidebar's Accounting group */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {[
-          { label: 'Daily Expense Entry', to: '/accounts-module/office-expense-list', icon: Receipt },
-          { label: 'Journal Entry', to: '/accounts-module/journal_list', icon: BookOpen },
-          { label: 'General Ledger', to: '/accounts-module/reports/general-ledger', icon: FileBarChart2 },
-          { label: 'Trial Balance', to: '/accounts-module/reports/trial-balance', icon: Scale },
-          { label: 'Income Statement', to: '/accounts-module/reports/income-statement', icon: FileBarChart2 },
-          { label: 'Balance Sheet', to: '/accounts-module/reports/balance-sheet', icon: Landmark },
-        ].map((q) => (
-          <Link
-            key={q.to}
-            to={q.to}
-            className="group flex items-center gap-2.5 rounded-2xl border border-slate-200/70 bg-white px-3.5 py-3 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
-          >
-            <span className="flex size-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
-              <q.icon className="size-4" />
-            </span>
-            <span className="truncate text-xs font-semibold text-slate-700 group-hover:text-slate-900">{q.label}</span>
-          </Link>
-        ))}
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

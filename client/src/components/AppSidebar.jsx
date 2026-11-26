@@ -1,9 +1,9 @@
 // client/src/components/AppSidebar.jsx
-// Collapsible left sidebar in the Trikon navy theme: deep navy panel, one
-// accordion row per ERP section the user can open (only the section name is
-// shown; clicking it expands its pages below in a near-black panel shaped like the
-// floating top-menu dropdown), amber-yellow active section and the company
-// footer. Shown to
+// Collapsible left sidebar in the light workspace theme: white panel, a small
+// WORKSPACE label, one accordion row per ERP section the user can open
+// (clicking it expands its pages below as an indented tree), forest-green
+// active item with lime icon, and a grey user / company card at the bottom.
+// (Navy version: AppSidebar.jsx.bak-ui2.) Shown to
 // every staff user except admins and superadmins (role defaults or selected
 // sections). The three-dot button switches between the slim icon rail and the
 // full menu; the choice is saved. It lists only the sections and pages this
@@ -85,10 +85,11 @@ const ICON_RULES = [
 ];
 const iconFor = (item) => item.icon || ICON_RULES.find(([re]) => re.test(`${item.key} ${item.label}`))?.[1] || CircleDot;
 
-// Navy row: plain top items (e.g. My Workspace) and the section headers.
+// Top-level row: plain items (e.g. My Workspace) and the section headers.
+// The current page is filled forest green; its section is just bolded.
 function NavyRow({ item, active, inside, expanded, onClick }) {
   const Icon = iconFor(item);
-  const lit = active || inside;
+  const lit = active;
   return (
     <button
       type="button"
@@ -97,20 +98,22 @@ function NavyRow({ item, active, inside, expanded, onClick }) {
       aria-expanded={expanded === undefined ? undefined : expanded}
       className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-colors ${
         lit
-          ? 'bg-gold font-semibold text-navy shadow-[0_4px_12px_rgba(242,169,46,0.3)]'
-          : 'text-navy-200 hover:bg-navy-800 hover:text-white'
+          ? 'bg-forest font-semibold text-white shadow-sm'
+          : inside
+          ? 'font-semibold text-slate-900 hover:bg-stone-100'
+          : 'font-medium text-slate-600 hover:bg-stone-100 hover:text-slate-900'
       }`}
     >
-      <Icon size={16} strokeWidth={1.9} className={`shrink-0 ${lit ? 'text-navy' : 'text-navy-300'}`} />
+      <Icon size={16} strokeWidth={1.9} className={`shrink-0 ${lit ? 'text-lime-200' : inside ? 'text-forest' : 'text-slate-400'}`} />
       <span className="truncate">{item.label}</span>
       {expanded !== undefined && (
-        <ChevronDown size={14} className={`ml-auto shrink-0 transition-transform ${expanded ? 'rotate-180' : ''} ${lit ? 'text-navy' : 'text-navy-300'}`} />
+        <ChevronDown size={14} className={`ml-auto shrink-0 transition-transform ${expanded ? 'rotate-180' : ''} ${lit ? 'text-white/80' : 'text-slate-400'}`} />
       )}
     </button>
   );
 }
 
-// Inside the near-black (navy-950) panel: light text, gold active item.
+// Pages inside an open section: slate text, forest-green active item.
 function PanelLeaf({ item, active, onGo, nested }) {
   const Icon = nested ? null : iconFor(item);
   return (
@@ -120,12 +123,12 @@ function PanelLeaf({ item, active, onGo, nested }) {
       aria-current={active ? 'page' : undefined}
       className={`flex w-full items-center gap-2.5 rounded-[12px] text-left transition-colors ${
         nested ? 'px-2.5 py-1.5 text-[12.5px]' : 'px-3 py-2 text-[13px]'
-      } ${active ? 'bg-gold font-semibold text-navy shadow-[0_4px_12px_rgba(242,169,46,0.3)]' : 'font-medium text-navy-200 hover:bg-navy-800 hover:text-white'}`}
+      } ${active ? 'bg-forest font-semibold text-white shadow-sm' : 'font-medium text-slate-600 hover:bg-stone-100 hover:text-slate-900'}`}
     >
       {Icon ? (
-        <Icon size={15} strokeWidth={1.8} className={`shrink-0 ${active ? 'text-navy' : 'text-navy-300'}`} />
+        <Icon size={15} strokeWidth={1.8} className={`shrink-0 ${active ? 'text-lime-200' : 'text-slate-400'}`} />
       ) : (
-        <span className={`size-1.5 shrink-0 rounded-full ${active ? 'bg-navy' : 'bg-navy-600'}`} />
+        <span className={`size-1.5 shrink-0 rounded-full ${active ? 'bg-lime-300' : 'bg-slate-300'}`} />
       )}
       <span className="truncate">{item.label}</span>
     </button>
@@ -143,20 +146,20 @@ function PanelGroup({ item, path, open, toggle, activeRoute, onGo, nested }) {
         type="button"
         onClick={() => toggle(key)}
         aria-expanded={isOpen}
-        className={`flex w-full items-center gap-2.5 rounded-[12px] text-left transition-colors hover:bg-navy-800 hover:text-white ${
+        className={`flex w-full items-center gap-2.5 rounded-[12px] text-left transition-colors hover:bg-stone-100 hover:text-slate-900 ${
           nested ? 'px-2.5 py-1.5 text-[12.5px]' : 'px-3 py-2 text-[13px]'
-        } ${inside || isOpen ? 'bg-navy-800 font-semibold text-white' : 'font-medium text-navy-200'}`}
+        } ${inside || isOpen ? 'font-semibold text-slate-900' : 'font-medium text-slate-600'}`}
       >
         {Icon ? (
-          <Icon size={15} strokeWidth={1.8} className="shrink-0 text-navy-300" />
+          <Icon size={15} strokeWidth={1.8} className={`shrink-0 ${inside ? 'text-forest' : 'text-slate-400'}`} />
         ) : (
-          <span className={`size-1.5 shrink-0 rounded-full ${inside ? 'bg-gold' : 'bg-navy-600'}`} />
+          <span className={`size-1.5 shrink-0 rounded-full ${inside ? 'bg-forest' : 'bg-slate-300'}`} />
         )}
         <span className="truncate">{item.label}</span>
-        <ChevronDown size={13} className={`ml-auto shrink-0 text-navy-300 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown size={13} className={`ml-auto shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && (
-        <div className="mt-0.5 space-y-0.5 rounded-[14px] bg-navy-900 p-[7px]">
+        <div className="mb-1 ml-3 mt-0.5 space-y-0.5 border-l border-stone-200 pl-2">
           <PanelItems items={item.children} path={`${key}/`} open={open} toggle={toggle} activeRoute={activeRoute} onGo={onGo} nested />
         </div>
       )}
@@ -249,7 +252,7 @@ export default function AppSidebar({ mobileOpen = false, onMobileClose }) {
 
       <aside
         className={`
-          fixed inset-y-0 left-0 z-50 flex h-dvh w-64 flex-col overflow-hidden border-r border-navy-700 bg-navy text-white shadow-xl transition-transform duration-200
+          fixed inset-y-0 left-0 z-50 flex h-dvh w-64 flex-col overflow-hidden border-r border-stone-200 bg-white text-slate-800 shadow-xl transition-transform duration-200
           md:z-30 md:shadow-none md:transition-[width]
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
           ${collapsed ? 'md:w-[68px]' : 'md:w-64'}
@@ -258,18 +261,18 @@ export default function AppSidebar({ mobileOpen = false, onMobileClose }) {
         aria-label="Sidebar"
       >
         {/* Header: logo + three-dot expand/collapse toggle + mobile close */}
-        <div className={`flex h-16 shrink-0 items-center border-b border-navy-700 ${collapsed ? 'flex-col justify-center gap-1 px-2 md:flex' : 'gap-2.5 px-4'}`}>
+        <div className={`flex h-16 shrink-0 items-center border-b border-stone-100 ${collapsed ? 'flex-col justify-center gap-1 px-2 md:flex' : 'gap-2.5 px-4'}`}>
           {!collapsed && (
             <button type="button" onClick={() => navigate('/')} className="flex min-w-0 items-center gap-2.5 text-left">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white p-1.5 shadow-sm">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white p-1.5 ring-1 ring-stone-200">
                 <img src={companyLogo} alt="Trikon" className="h-full w-full object-contain" />
               </span>
               <span className="min-w-0">
                 <span className="flex items-center gap-1.5">
-                  <span className="text-[15px] font-extrabold tracking-tight text-white">TRIKON</span>
-                  <span className="rounded-full bg-gold px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-navy">ERP</span>
+                  <span className="text-[15px] font-extrabold tracking-tight text-slate-900">TRIKON</span>
+                  <span className="rounded-full bg-lime-200 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-forest">ERP</span>
                 </span>
-                <span className="block truncate text-[10px] font-semibold uppercase tracking-wider text-navy-300">Holdings</span>
+                <span className="block truncate text-[10px] font-semibold uppercase tracking-wider text-slate-400">Holdings</span>
               </span>
             </button>
           )}
@@ -280,7 +283,7 @@ export default function AppSidebar({ mobileOpen = false, onMobileClose }) {
               aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               aria-expanded={!collapsed}
               title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              className="hidden size-9 shrink-0 items-center justify-center rounded-xl text-navy-300 transition-colors hover:bg-navy-800 hover:text-white md:flex"
+              className="hidden size-9 shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-stone-100 hover:text-slate-700 md:flex"
             >
               <EllipsisVertical size={18} />
             </button>
@@ -288,14 +291,14 @@ export default function AppSidebar({ mobileOpen = false, onMobileClose }) {
               type="button"
               onClick={onMobileClose}
               aria-label="Close menu"
-              className="flex size-9 items-center justify-center rounded-xl text-navy-300 hover:bg-navy-800 hover:text-white md:hidden"
+              className="flex size-9 items-center justify-center rounded-xl text-slate-400 hover:bg-stone-100 hover:text-slate-700 md:hidden"
             >
               <X size={18} />
             </button>
           </div>
         </div>
 
-        <nav className={`min-h-0 flex-1 overflow-y-auto overscroll-contain py-3 [scrollbar-color:#1E3354_transparent] [scrollbar-width:thin] ${collapsed ? 'px-2' : 'px-3'}`}>
+        <nav className={`min-h-0 flex-1 overflow-y-auto overscroll-contain py-4 [scrollbar-color:#d6d3d1_transparent] [scrollbar-width:thin] ${collapsed ? 'px-2' : 'px-3'}`}>
           {collapsed ? (
             <div className="flex flex-col items-center gap-1">
               {modules.map((m) => {
@@ -316,7 +319,7 @@ export default function AppSidebar({ mobileOpen = false, onMobileClose }) {
                       }
                     }}
                     className={`flex size-11 items-center justify-center rounded-xl transition-colors ${
-                      inside ? 'bg-gold text-navy shadow-[0_4px_12px_rgba(242,169,46,0.3)]' : 'text-navy-200 hover:bg-navy-800 hover:text-white'
+                      inside ? 'bg-forest text-lime-200 shadow-sm' : 'text-slate-500 hover:bg-stone-100 hover:text-slate-900'
                     }`}
                   >
                     {Icon ? <Icon size={18} strokeWidth={1.9} /> : <span className="text-xs font-bold">{m.label.charAt(0)}</span>}
@@ -326,6 +329,7 @@ export default function AppSidebar({ mobileOpen = false, onMobileClose }) {
             </div>
           ) : (
             <div className="space-y-1">
+              <p className="px-3 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-slate-400">Workspace</p>
               {modules.map((m) => {
                 if (!m.children?.length) {
                   return m.route ? (
@@ -337,7 +341,7 @@ export default function AppSidebar({ mobileOpen = false, onMobileClose }) {
                   <div key={m.key}>
                     <NavyRow item={m} inside={contains(m, activeRoute)} expanded={isOpen} onClick={() => toggle(m.key)} />
                     {isOpen && (
-                      <div className="mb-1.5 mt-1 space-y-0.5 rounded-[16px] border border-navy-700/70 bg-navy-950 p-1.5 shadow-[0_10px_28px_rgba(0,0,0,0.35)]">
+                      <div className="mb-1.5 ml-[22px] mt-0.5 space-y-0.5 border-l border-stone-200 pl-2">
                         <PanelItems items={withOverview(m)} path={`${m.key}/`} open={open} toggle={toggle} activeRoute={activeRoute} onGo={go} />
                       </div>
                     )}
@@ -349,14 +353,22 @@ export default function AppSidebar({ mobileOpen = false, onMobileClose }) {
         </nav>
 
         {!collapsed && (
-          <div className="shrink-0 border-t border-navy-700 px-4 py-3">
-            <p className="truncate text-[11px] text-navy-300">
-              <span className="font-semibold text-navy-200">{user?.name || 'ERP User'}</span>
-              <span className="mx-1.5">·</span>
-              <span className="uppercase tracking-wider">{user?.role || 'user'}</span>
-            </p>
-            <p className="mt-2 truncate text-xs font-semibold text-white">Trikon Holdings Limited</p>
-            <p className="truncate text-[10px] text-navy-300">Real Estate | Development | Investment</p>
+          <div className="shrink-0 p-3">
+            <div className="rounded-xl bg-stone-100 p-3">
+              <div className="flex items-center gap-2.5">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-lime-200 text-sm font-bold text-forest">
+                  {(user?.name || 'U').charAt(0).toUpperCase()}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-semibold text-slate-900">{user?.name || 'ERP User'}</p>
+                  <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-500">{user?.role || 'user'}</p>
+                </div>
+              </div>
+              <div className="mt-2.5 border-t border-stone-200 pt-2.5">
+                <p className="truncate text-xs font-semibold text-slate-800">Trikon Holdings Limited</p>
+                <p className="truncate text-[10px] text-slate-500">Real Estate &middot; Development &middot; Investment</p>
+              </div>
+            </div>
           </div>
         )}
       </aside>

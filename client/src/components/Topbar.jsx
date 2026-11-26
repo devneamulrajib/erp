@@ -26,6 +26,7 @@ import {
   markAllNotificationsRead,
 } from '../api/notifications';
 import { canOpenAdminPage } from '../config/permissions';
+import { shouldShowSidebar } from './navConfig';
 
 const RELATED_ROUTES = {
   MaterialRequisitionQuotation: (id) => `/requisition-module/material-requisition-list?reviewId=${id}`,
@@ -119,6 +120,9 @@ export default function Topbar({ hideModuleNav = false }) {
   const isAdmin = String(userRole).toLowerCase().includes('admin');
   // Tickets: admins as before, plus users explicitly granted the Support section.
   const canSeeTickets = isAdmin || canOpenAdminPage(currentUser, 'support');
+  // Role users have the sidebar logo on desktop, so the topbar logo shows
+  // only on mobile (sidebar is a closed drawer there). Admins: always.
+  const hasSidebar = shouldShowSidebar(currentUser);
 
   // Badge role color
   const roleBadgeStyle = useMemo(() => {
@@ -257,7 +261,7 @@ export default function Topbar({ hideModuleNav = false }) {
               </button>
               <div
                 onClick={() => navigate('/')}
-                className="group flex cursor-pointer select-none items-center gap-3"
+                className={`group flex cursor-pointer select-none items-center gap-3 ${hasSidebar ? 'md:hidden' : ''}`}
               >
                 <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-b from-white to-slate-50 p-1.5 shadow-xs ring-1 ring-slate-900/10 transition-transform duration-200 group-hover:scale-105">
                   <img src={companyLogo} alt="Trikon Logo" className="h-full w-full object-contain" />
@@ -265,7 +269,7 @@ export default function Topbar({ hideModuleNav = false }) {
                 <div className="hidden sm:block">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[17px] font-extrabold tracking-tight text-slate-900">TRIKON</span>
-                    <span className="rounded-full bg-navy px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-gold">ERP</span>
+                    <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wider ${isAdmin ? 'bg-navy text-gold' : 'bg-lime-200 text-forest'}`}>ERP</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -458,7 +462,7 @@ export default function Topbar({ hideModuleNav = false }) {
                   onClick={() => setProfileOpen((v) => !v)}
                   className="flex items-center gap-2 rounded-xl p-1 transition-all hover:bg-slate-100/80"
                 >
-                  <div className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-navy to-cobalt-700 text-xs font-bold text-white shadow-xs">
+                  <div className={`relative flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-white shadow-xs ${isAdmin ? 'bg-gradient-to-tr from-navy to-cobalt-700' : 'bg-forest'}`}>
                     {initial}
                     <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" />
                   </div>

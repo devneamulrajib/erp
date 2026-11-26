@@ -29,12 +29,13 @@ const PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'Cheque', 'Card', 'Mobile Bank
 const MAX_FILE = 5 * 1024 * 1024;
 const FILE_OK = /\.(jpe?g|png|pdf)$/i;
 
-// One Cobalt Sky look everywhere (tokens live in index.css @theme).
+// Workspace look (forest/lime tokens in index.css @theme): grey-filled
+// inputs, white pill on a grey track for the selected tab, forest primary.
 const THEME = {
-  input: 'focus:border-cobalt-400 focus:ring-4 focus:ring-cobalt/10',
-  tabOn: 'bg-navy text-white shadow-sm',
-  primary: 'bg-gold text-navy hover:bg-gold-600',
-  drop: 'hover:border-cobalt-300 hover:bg-cobalt-50',
+  input: 'focus:border-forest/30 focus:bg-white focus:ring-4 focus:ring-forest/10',
+  tabOn: 'bg-white text-slate-900 shadow-sm ring-1 ring-black/5',
+  primary: 'bg-forest text-white hover:bg-forest-900',
+  drop: 'hover:border-forest/40 hover:bg-lime-50',
 };
 
 const todayStr = () => {
@@ -91,7 +92,7 @@ function Field({ label, required, children, className = '' }) {
 
 export default function DepositWithdrawalForm({ newSignal = 0, onPosted }) {
   const a = THEME;
-  const inputClass = `w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition ${a.input}`;
+  const inputClass = `w-full rounded-xl border border-transparent bg-slate-100/80 px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition ${a.input}`;
   const user = useMemo(readUser, []);
   const draftKey = `erp.depositWithdrawal.draft.${user?.id ?? 'me'}`;
   const rootRef = useRef(null);
@@ -253,7 +254,7 @@ export default function DepositWithdrawalForm({ newSignal = 0, onPosted }) {
 
   return (
     <form ref={rootRef} onSubmit={handleSubmit} className="scroll-mt-24 space-y-4" noValidate>
-      <div className="inline-flex rounded-xl bg-slate-100 p-1">
+      <div className="inline-flex rounded-full bg-slate-100 p-1">
         {[
           { value: 'deposit', label: 'Deposit', icon: ArrowDownLeft },
           { value: 'withdrawal', label: 'Withdrawal', icon: ArrowUpRight },
@@ -262,7 +263,7 @@ export default function DepositWithdrawalForm({ newSignal = 0, onPosted }) {
             key={o.value}
             type="button"
             onClick={() => switchKind(o.value)}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition ${
+            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition ${
               form.kind === o.value ? a.tabOn : 'text-slate-500 hover:text-slate-800'
             }`}
           >
@@ -371,7 +372,7 @@ export default function DepositWithdrawalForm({ newSignal = 0, onPosted }) {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Field label="Voucher ID">
-          <input value={voucherNo || 'Auto generated'} readOnly className={`${inputClass} cursor-not-allowed bg-slate-50 font-mono text-slate-500`} />
+          <input value={voucherNo || 'Auto generated'} readOnly className={`${inputClass} cursor-not-allowed font-mono text-slate-500`} />
         </Field>
         <Field label="Amount (৳)" required>
           <input
@@ -397,7 +398,7 @@ export default function DepositWithdrawalForm({ newSignal = 0, onPosted }) {
 
       <Field label="Attachment (Optional)">
         <label
-          className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/60 px-4 py-5 text-center transition-colors ${a.drop}`}
+          className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-stone-300 bg-white px-4 py-5 text-center transition-colors ${a.drop}`}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); pickFile(e.dataTransfer.files?.[0]); }}
         >
@@ -425,16 +426,16 @@ export default function DepositWithdrawalForm({ newSignal = 0, onPosted }) {
       </Field>
 
       <div className="flex flex-col-reverse gap-2.5 border-t border-slate-100 pt-4 sm:flex-row sm:justify-end">
-        <button type="button" onClick={() => resetForm()} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+        <button type="button" onClick={() => resetForm()} className="inline-flex items-center justify-center gap-1.5 rounded-full border border-stone-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-stone-50">
           <RotateCcw size={15} /> Reset
         </button>
-        <button type="button" onClick={saveDraft} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+        <button type="button" onClick={saveDraft} className="inline-flex items-center justify-center gap-1.5 rounded-full border border-stone-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-stone-50">
           <FileText size={15} /> Save Draft
         </button>
         <button
           type="submit"
           disabled={saving}
-          className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-5 py-2.5 text-sm font-semibold shadow-sm disabled:opacity-60 ${a.primary}`}
+          className={`inline-flex items-center justify-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-60 ${a.primary}`}
         >
           {saving ? <LoaderCircle size={15} className="animate-spin" /> : <Save size={15} />}
           {saving ? 'Posting...' : 'Save & Post'}

@@ -1,1 +1,0 @@
-import{xt as e}from"./index-DGRSOIfF.js";var t=()=>e.get(`/projects`);export{t};

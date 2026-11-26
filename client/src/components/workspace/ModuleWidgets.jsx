@@ -44,7 +44,7 @@ function Widget({ title, icon: Icon, tone = 'slate', state, stats, links }) {
   return (
     <section className={`${card} flex flex-col p-5`}>
       <div className="flex items-center gap-3">
-        <span className={`flex size-11 items-center justify-center rounded-full ${t.icon}`}>
+        <span className={`flex size-10 items-center justify-center rounded-lg ${t.icon}`}>
           <Icon className="size-5" />
         </span>
         <h3 className="text-[15px] font-bold text-slate-900">{title}</h3>
@@ -77,7 +77,7 @@ function Widget({ title, icon: Icon, tone = 'slate', state, stats, links }) {
           <Link
             key={l.to}
             to={l.to}
-            className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-50 hover:text-slate-900 hover:ring-slate-300"
+            className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-[11.5px] font-semibold text-slate-600 ring-1 ring-stone-200 transition hover:bg-stone-50 hover:text-slate-900 hover:ring-stone-300"
           >
             {l.label} <ArrowUpRight className="size-3" />
           </Link>

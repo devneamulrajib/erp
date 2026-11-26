@@ -1,1 +1,0 @@
-import{xt as e}from"./index-DGRSOIfF.js";async function t(){return(await e.get(`/users`)).data}export{t};

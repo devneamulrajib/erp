@@ -1,1 +1,0 @@
-import{xt as e}from"./index-DGRSOIfF.js";async function t(t={}){return(await e.get(`/party`,{params:t})).data}async function n(){return(await e.get(`/party/next-code`)).data.code}async function r(t){return(await e.post(`/party`,t)).data}export{n,t as r,r as t};

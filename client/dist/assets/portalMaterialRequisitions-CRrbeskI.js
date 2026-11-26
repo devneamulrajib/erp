@@ -1,1 +1,0 @@
-import{F as e}from"./index-DGRSOIfF.js";async function t(t={}){return(await e.get(`/material-requisitions`,{params:t})).data}async function n(t){return(await e.get(`/material-requisitions/${t}`)).data}async function r(t,n){return(await e.post(`/material-requisitions/${t}/quotation`,n)).data}export{t as n,r,n as t};

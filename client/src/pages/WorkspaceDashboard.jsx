@@ -8,10 +8,10 @@
 //   sections their roles allow.
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Sparkles } from 'lucide-react';
 import Topbar from '../components/Topbar';
 import { SECTION_WIDGETS } from '../components/workspace/ModuleWidgets';
-import { DashboardHero, Skeleton } from '../components/dashboard/DashboardKit';
+import { eyebrowClass } from '../components/workspace/workspaceKit';
+import { Skeleton } from '../components/dashboard/DashboardKit';
 import { greeting, currentStaffUser } from '../components/dashboard/dashboardUtils';
 import { USER_UPDATED_EVENT } from '../components/SessionSync';
 import { ACCESS_MODULES, MODULE_LABELS, canAccessModule, hasExplicitModules } from '../config/permissions';
@@ -57,24 +57,32 @@ export default function WorkspaceDashboard() {
     setParams(next, { replace: true });
   };
   const firstName = (user?.name || 'there').split(' ')[0];
+  // The open workspace puts its filters / "New transaction" in the header.
+  const [actionsEl, setActionsEl] = useState(null);
+  const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   return (
-    <div className="min-h-screen w-full bg-slate-50 text-left">
+    <div className="min-h-screen w-full bg-cream text-left">
       <Topbar />
 
       <main className="mx-auto w-full max-w-[1440px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-        <DashboardHero
-          tone="emerald"
-          icon={Sparkles}
-          eyebrow="My Workspace"
-          title={`${greeting()}, ${firstName}`}
-          subtitle={
-            (hasExplicitModules(user) ? 'Your sections: ' : 'Sections your role can open: ') +
-            (sections.length ? sections.map((k) => MODULE_LABELS[k]).join(' · ') : 'none yet — ask an admin for access')
-          }
-          actions={
-            bigTabs.length > 1 ? (
-              <div className="inline-flex rounded-xl border border-white/20 bg-white/10 p-1 backdrop-blur-sm" role="tablist">
+        <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <p className={eyebrowClass}>
+              {greeting()}, {firstName}
+            </p>
+            <h1 className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900 sm:text-[28px]">
+              {activeTab ? `${MODULE_LABELS[activeTab]} workspace` : 'My workspace'}
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              {todayLabel} &middot;{' '}
+              {(hasExplicitModules(user) ? 'Your sections: ' : 'Sections your role can open: ') +
+                (sections.length ? sections.map((k) => MODULE_LABELS[k]).join(' \u00b7 ') : 'none yet \u2014 ask an admin for access')}
+            </p>
+          </div>
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
+            {bigTabs.length > 1 && (
+              <div className="inline-flex self-start rounded-full bg-stone-200/70 p-1 sm:self-auto" role="tablist">
                 {bigTabs.map((k) => (
                   <button
                     key={k}
@@ -82,27 +90,28 @@ export default function WorkspaceDashboard() {
                     role="tab"
                     aria-selected={activeTab === k}
                     onClick={() => selectTab(k)}
-                    className={`rounded-lg px-4 py-1.5 text-xs font-bold transition ${
-                      activeTab === k ? 'bg-white text-slate-900 shadow' : 'text-white/80 hover:text-white'
+                    className={`rounded-full px-4 py-1.5 text-xs font-bold transition ${
+                      activeTab === k ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
                     {MODULE_LABELS[k]}
                   </button>
                 ))}
               </div>
-            ) : null
-          }
-        />
+            )}
+            <div ref={setActionsEl} className="contents" />
+          </div>
+        </header>
 
         {activeTab && (
           <Suspense fallback={<SectionFallback />}>
-            {activeTab === 'accounts' ? <AccountingWorkspace /> : <HrmWorkspace />}
+            {activeTab === 'accounts' ? <AccountingWorkspace actionsEl={actionsEl} /> : <HrmWorkspace />}
           </Suspense>
         )}
 
         {widgets.length > 0 && (
           <section className="space-y-3">
-            {activeTab && <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400">Your other sections</h2>}
+            {activeTab && <h2 className={eyebrowClass}>Your other sections</h2>}
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
               {widgets.map(([key, W]) => (
                 <W key={key} />
